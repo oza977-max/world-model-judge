@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>World Model Judge — Requirements</title>
+  <style>
+/* ── Reset & Base ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+
+body {
+  font-family: "ET Book", Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  color: #111;
+  background: #fffff8;
+  line-height: 1.6;
+  padding: 2rem 1rem 6rem;
+  max-width: 1480px;
+  margin: 0 auto;
+}
+
+/* ── Typography ── */
+h1 {
+  font-size: 2.4rem;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.4rem;
+  color: #111;
+}
+
+h2 {
+  font-size: 1.5rem;
+  font-weight: 400;
+  font-style: italic;
+  margin-top: 3rem;
+  margin-bottom: 1rem;
+  color: #111;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 0.3rem;
+}
+
+h3 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin-top: 2rem;
+  margin-bottom: 0.6rem;
+  color: #333;
+}
+
+p, li {
+  font-size: 1rem;
+  line-height: 1.7;
+  margin-bottom: 0.8rem;
+  max-width: 640px;
+}
+
+ul, ol { padding-left: 1.4rem; margin-bottom: 1.2rem; }
+li { margin-bottom: 0.4rem; }
+
+.subtitle {
+  font-size: 1.1rem;
+  font-style: italic;
+  color: #555;
+  margin-bottom: 2.5rem;
+  max-width: 640px;
+}
+
+.date {
+  font-size: 0.9rem;
+  color: #888;
+  margin-bottom: 0.2rem;
+}
+
+/* ── Floating TOC (Left Side) ── */
+nav.toc {
+  position: fixed;
+  top: 2rem;
+  left: 2rem;
+  width: 220px;
+  max-height: calc(100vh - 4rem);
+  overflow-y: auto;
+  background: #fffff8;
+  border-right: 2px solid #ddd;
+  padding: 1rem 1rem 1rem 0;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  z-index: 100;
+}
+
+nav.toc .toc-title {
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #999;
+  margin-bottom: 0.6rem;
+}
+
+nav.toc a {
+  color: #555;
+  text-decoration: none;
+  display: block;
+  padding: 0.15rem 0;
+  transition: color 0.15s;
+}
+
+nav.toc a:hover { color: #111; }
+nav.toc a.active { color: #111; font-weight: 600; }
+nav.toc .toc-h3 { padding-left: 0.8rem; font-size: 0.78rem; color: #888; }
+nav.toc .toc-h3:hover { color: #555; }
+
+/* Offset main content for left TOC */
+main {
+  margin-left: 260px;
+}
+
+/* ── Sidenotes (Right Margin) ── */
+.sidenote {
+  float: right;
+  clear: right;
+  width: 220px;
+  margin-right: -260px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: #666;
+  padding-left: 1rem;
+  border-left: 2px solid #e0e0e0;
+}
+
+/* ── Tables (Few's principles) ── */
+table {
+  border-collapse: collapse;
+  margin: 1.5rem 0 2rem;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  width: auto;
+  min-width: 480px;
+  overflow-x: auto;
+}
+
+thead th {
+  text-align: left;
+  font-weight: 600;
+  padding: 0.5rem 1rem 0.5rem 0;
+  border-bottom: 2px solid #333;
+  color: #111;
+}
+
+tbody td {
+  padding: 0.45rem 1rem 0.45rem 0;
+  border-bottom: 1px solid #e8e8e8;
+  vertical-align: top;
+}
+
+tbody tr:last-child td { border-bottom: 2px solid #333; }
+tbody tr:nth-child(even) { background: #f9f9f4; }
+
+caption {
+  font-style: italic;
+  font-size: 0.88rem;
+  color: #666;
+  text-align: left;
+  margin-bottom: 0.4rem;
+}
+
+/* ── Requirement Blocks ── */
+.req {
+  background: #f7f7f0;
+  border-left: 3px solid #999;
+  padding: 0.8rem 1rem;
+  margin: 1rem 0 1.2rem;
+  max-width: 640px;
+}
+
+.req-id {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.2rem;
+}
+
+.req p { margin-bottom: 0.3rem; }
+
+/* ── Plain Words Gloss ── */
+.req-gloss {
+  font-size: 1rem;
+  color: #444;
+  margin: 0.6rem 0 0;
+  padding: 0.6rem 0 0 0;
+  border-top: 1px solid #e8e8e0;
+  font-style: italic;
+}
+
+.req-gloss-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #999;
+  display: block;
+  margin-bottom: 0.3rem;
+}
+
+/* ── Priority Chips (MoSCoW) ── */
+.priority {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.45rem;
+  border-radius: 2px;
+  vertical-align: middle;
+  margin-left: 0.4rem;
+}
+
+.priority.must { background: #111; color: #fff; }
+.priority.should { background: #bbb; color: #fff; }
+.priority.could { background: #e8e8e0; color: #666; }
+.priority.wont { background: #fff; color: #999; border: 1px solid #ccc; }
+
+/* ── Open Questions ── */
+.open-question {
+  background: #fff8f0;
+  border-left: 3px solid #e8a850;
+  padding: 0.8rem 1rem;
+  margin: 1rem 0 1.2rem;
+  max-width: 640px;
+}
+
+.oq-context {
+  font-size: 0.88rem;
+  color: #888;
+  font-style: italic;
+}
+
+/* ── Inline Code ── */
+code {
+  font-family: "Menlo", "Consolas", "Monaco", monospace;
+  font-size: 0.88rem;
+  background: #f0f0e8;
+  padding: 0.1rem 0.35rem;
+  border-radius: 2px;
+}
+
+/* ── GVM Attribution ── */
+.gvm-attribution {
+  font-size: 0.75rem;
+  color: #999;
+  font-style: italic;
+  text-align: center;
+  margin-top: 3rem;
+  margin-bottom: 0;
+  max-width: none;
+}
+
+/* ── Responsive ── */
+@media (max-width: 1200px) {
+  nav.toc {
+    position: static;
+    width: 100%;
+    max-height: none;
+    border-right: none;
+    border-bottom: 1px solid #ddd;
+    padding: 1rem 0;
+    margin-bottom: 2rem;
+  }
+  main { margin-left: 0; }
+  .sidenote {
+    float: none;
+    width: 100%;
+    margin: 0.8rem 0;
+    padding: 0.6rem 0 0.6rem 1rem;
+  }
+  table {
+    min-width: 100%;
+  }
+}
+  </style>
+</head>
+<body>
+  <nav class="toc" id="toc">
+    <div class="toc-title">Contents</div>
+  </nav>
+
+  <main>
+    <p class="date">August 2026</p>
+    <h1>World Model Judge</h1>
+    <p class="subtitle">A governance harness for learned simulators, at toy scale.</p>
+    <p class="date">Version 1.0 · 18 August 2026 · Derived from the essay <em>Words Are a Menu. The World Is Not.</em> (draft v2.1)</p>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ccc; max-width: 640px;">
+
+    <h2 id="how-to-read">How to read this document</h2>
+    <p>Every numbered item below is a <strong>requirement</strong> — one thing the finished project must do. Each one has three parts:</p>
+    <ul>
+      <li><strong>The requirement itself</strong>, written precisely, because later stages of the build read these and turn them into tests.</li>
+      <li><strong>In plain words</strong> — the same thing said simply. If the precise version and the plain version ever disagree, the plain version is what was meant.</li>
+      <li><strong>Why</strong> — a short note explaining the reasoning, usually naming the person or field the idea came from.</li>
+    </ul>
+    <p>Each requirement is tagged <strong>Must</strong>, <strong>Should</strong>, or <strong>Won't</strong>:</p>
+    <ul>
+      <li><strong>Must</strong> — if this is missing, the project has failed at its purpose.</li>
+      <li><strong>Should</strong> — genuinely wanted, but the project still works without it.</li>
+      <li><strong>Won't</strong> — deliberately excluded. Written down so the exclusion is a decision, not an oversight.</li>
+    </ul>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ccc; max-width: 640px;">
+
+    <h2 id="what-we-are-building">What we are building, in one page</h2>
+    <p>Imagine a machine that has never been told how foxes and rabbits work, but has watched them for a while and now tries to guess what happens next — including what happens <em>if you interfere</em>, say by removing some rabbits.</p>
+    <p>That guessing machine is a miniature version of what the AI field calls a <strong>world model</strong>: something that predicts what the world does next, rather than predicting the next word in a sentence.</p>
+    <p>Now the important part. It is easy to check whether one guess was right. It is much harder to check what happens when the machine feeds its own guesses back into itself — guessing tomorrow from today's guess, then the day after from tomorrow's guess — because small errors pile up. Ten steps out it can be confidently describing a world that does not exist.</p>
+    <p><strong>This project builds the checker, not the guessing machine.</strong> The checker — we call it the judge — asks four questions:</p>
+    <ol>
+      <li>Is this machine better than doing nothing at all?</li>
+      <li>How fast does it go wrong as it predicts further ahead — and is that worse than the world's own natural unpredictability?</li>
+      <li>When it says it is confident, is it actually right that often?</li>
+      <li>At what point should you stop believing it — and stop believing it <em>for which purpose</em>?</li>
+    </ol>
+    <p>Banks have asked exactly these questions about their own models for decades, because confident models once lost them enormous amounts of money. They have independent teams who check, they count the times a model was wrong when it claimed to be sure, and they have limits that force action when the count gets too high. Weather forecasters built the measuring techniques. Nobody has pointed either discipline at world models.</p>
+    <p>That gap is what this project fills, at the smallest honest scale we could find.</p>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ccc; max-width: 640px;">
+
+    <h2 id="expert-panel">Expert Panel</h2>
+    <p>The requirements below are grounded in published work rather than invented. This table records whose ideas shaped which parts.</p>
+    <div style="overflow-x: auto;">
+      <table>
+        <thead>
+          <tr><th>Expert</th><th>Work</th><th>What they contribute here</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Karl Wiegers</td><td><em>Software Requirements</em> (3rd ed.)</td><td>How to write a requirement so it can actually be tested</td></tr>
+          <tr><td>Gause &amp; Weinberg</td><td><em>Exploring Requirements</em></td><td>Forcing vague words to become specific ones</td></tr>
+          <tr><td>Alan Cooper</td><td><em>About Face</em> (4th ed.)</td><td>Deciding who the verdict is written for</td></tr>
+          <tr><td>Clayton Christensen</td><td><em>Competing Against Luck</em></td><td>Framing what job this project is hired to do</td></tr>
+          <tr><td>Robertson &amp; Robertson</td><td><em>Mastering the Requirements Process</em></td><td>Making "it must be reproducible" into something measurable</td></tr>
+          <tr><td>Federal Reserve / OCC</td><td><em>SR 11-7</em></td><td>The governance shape being copied: independent checking, ongoing monitoring, and the phrase "effective challenge"</td></tr>
+          <tr><td>Prudential Regulation Authority</td><td><em>SS1/23</em></td><td>Stating in advance how much model risk is acceptable, rather than reacting later</td></tr>
+          <tr><td>Emanuel Derman</td><td><em>Models.Behaving.Badly</em></td><td>A model is an analogy, not the truth; the dangerous simplifications are the ones you didn't notice</td></tr>
+          <tr><td>Riccardo Rebonato</td><td><em>Plight of the Fortune Tellers</em></td><td>The objection to our own method: this kind of checking tests the ordinary cases, not the disasters</td></tr>
+          <tr><td>Nassim Nicholas Taleb</td><td><em>The Black Swan</em></td><td>The risks that matter most are the ones the model doesn't represent at all</td></tr>
+          <tr><td>Tilmann Gneiting &amp; Adrian Raftery</td><td><em>Strictly Proper Scoring Rules</em> (JASA 2007)</td><td>How to score a confident prediction so the model can't cheat by lying about its confidence</td></tr>
+          <tr><td>Gneiting, Balabdaoui &amp; Raftery</td><td><em>Probabilistic forecasts, calibration and sharpness</em></td><td>Being honest isn't enough — a useless "anything could happen" forecast is perfectly honest</td></tr>
+          <tr><td>Allan Murphy</td><td><em>What is a good forecast?</em> (1993)</td><td>Forecast quality is multi-dimensional and depends on who's using it; one number won't do</td></tr>
+          <tr><td>Edward Lorenz</td><td><em>Deterministic Nonperiodic Flow</em> (1963)</td><td>Some error is the world's fault, not the model's — grade against that, not against perfection</td></tr>
+          <tr><td>A. Philip Dawid</td><td>The prequential principle (1984)</td><td>Judge a forecaster only on what it predicted and what happened, never on how it works inside</td></tr>
+          <tr><td>Jolliffe &amp; Stephenson</td><td><em>Forecast Verification</em></td><td>The practitioner's catalogue of verification measures and their traps</td></tr>
+          <tr><td>Deborah Raji</td><td><em>Closing the AI Accountability Gap</em> (2020)</td><td>The closest existing relative to this thesis — auditing as an institution, not a metric</td></tr>
+          <tr><td>Margaret Mitchell et al.</td><td><em>Model Cards for Model Reporting</em> (2019)</td><td>Stating a model's intended limits matters more than stating its score</td></tr>
+          <tr><td>Percy Liang et al.</td><td><em>HELM</em></td><td>A single headline number misleads; report coverage honestly</td></tr>
+          <tr><td>Kapoor &amp; Narayanan</td><td><em>Leakage and the Reproducibility Crisis</em></td><td>How evaluations quietly cheat by testing on training data</td></tr>
+          <tr><td>Zheng et al.</td><td><em>Judging LLM-as-a-Judge</em> (2023)</td><td>Automated judges have their own documented biases — a reason ours is plain arithmetic</td></tr>
+          <tr><td>David Ha &amp; Jürgen Schmidhuber</td><td><em>World Models</em> (2018)</td><td>The paper that fixed the term</td></tr>
+          <tr><td>Yann LeCun</td><td><em>A Path Towards Autonomous Machine Intelligence</em> (2022)</td><td>The predict-in-abstract-space position</td></tr>
+          <tr><td>Danijar Hafner et al.</td><td>The Dreamer line</td><td>Measured how prediction error grows with rollout length — prior art for the core measurement</td></tr>
+          <tr><td>Sutton &amp; Barto</td><td><em>Reinforcement Learning: An Introduction</em></td><td>Why practitioners keep imagined rollouts short</td></tr>
+          <tr><td>Daniel Wolpert</td><td>Internal models for motor control</td><td>The brain runs forward models predicting the consequences of its own actions</td></tr>
+          <tr><td>Elizabeth Spelke</td><td>Core knowledge</td><td>Infants arrive expecting objects to persist — the pre-wiring case</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <span class="sidenote"><strong>Honesty note on this table.</strong> These experts were scored against the methodology's rubric in a single pass, not the full two-reviewer cross-check. The scores are good enough to ground design decisions and not strong enough to cite as settled authority rankings.</span>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ccc; max-width: 640px;">
+
+    <h2 id="purpose-vision">Purpose &amp; Vision</h2>
+    <p><strong>The job statement.</strong> <em>When I have a learned simulator and someone is about to make a decision based on what it predicts, I want an independent, repeatable check on how far ahead it can be believed, so I can say plainly where trust ends instead of guessing.</em></p>
+    <p>The essay this comes from makes one narrow claim: the measurements exist, scattered across research papers and separate fields, but the <strong>institution</strong> does not. No independent body owns the number, has to report it, or can force a stop when it crosses a line.</p>
+    <p>This project does not try to build a world model, invent a new measurement, or advance the state of the art. It builds the smallest honest version of the judge.</p>
+    <p><strong>In plain words:</strong> the models here are deliberately simple, because the checking is the part nobody has built.</p>
+    <span class="sidenote"><strong>Scope honesty (Derman).</strong> A toy world proves the checker works. It proves nothing about whether any real world model is trustworthy. Every requirement below treats that limit as something to state clearly, not something to hide.</span>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ccc; max-width: 640px;">
+
+    <h2 id="target-user">Target User</h2>
+    <p><strong>Dev, the essay's reader.</strong> Works somewhere near AI — engineer, researcher, or risk professional. Read the essay, followed the link, has about ten minutes, will look at one or two charts and will not read the source code. Wants to leave able to explain the idea to someone else. Hates projects that hide a thin result behind heavy machinery.</p>
+    <p><strong>Mor, the validator.</strong> Has a learned simulator of their own and wants to know whether this checker could be pointed at it. Will read the model interface and the verdict format, and will judge the project on whether adapting it looks like an afternoon or a rewrite.</p>
+    <p>Every requirement traces to one of two goals: <strong>Dev must understand the verdict without a risk background</strong>, and <strong>Mor must be able to adapt it without rewriting the judge.</strong></p>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ccc; max-width: 640px;">
+
+    <h2 id="domain-1-worlds">Domain 1 — The Worlds</h2>
+    <p>We need pretend worlds where we already know every correct answer, so "was the model right" is never a matter of opinion.</p>
+    <p>Two worlds are in scope, chosen because they differ in the one property that matters most here: how quickly two almost-identical starting points drift apart.</p>
+    <p><strong>Foxes and rabbits</strong> (the Lotka–Volterra equations) is predictable and repeating — populations rise and fall in a steady cycle, and two near-identical starts stay close for a long time. <strong>A double pendulum</strong> — a pendulum with a second one swinging off its end — is chaotic. Release it twice from almost the same position and within seconds the two swings look nothing alike.</p>
+    <p>Having both is what forces the judge to tell apart <em>the model is wrong</em> from <em>the world is genuinely unpredictable</em>. It also stops the judge being secretly built around one world.</p>
+
+    <div class="req">
+      <div class="req-id">WD-1 <span class="priority must">Must</span></div>
+      <p>The harness shall provide two reference worlds — a Lotka–Volterra predator–prey system and a double pendulum — each computing exact ground-truth trajectories from known equations.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>build two toy worlds where we can always work out the true answer.</p>
+      </div>
+    </div>
+    <span class="sidenote">Both are standard textbook systems. Neither is novel and neither is meant to be.</span>
+
+    <div class="req">
+      <div class="req-id">WD-2 <span class="priority must">Must</span></div>
+      <p>Every world shall expose a single common interface in which a transition takes a state and an action and returns the next state.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>every world has a lever you can pull, so we're always asking "what happens <em>if I do this</em>", not just "what happens next".</p>
+      </div>
+    </div>
+    <span class="sidenote">Without the lever this is ordinary forecasting, which plenty of tools already check. The lever is what makes it a world model at all.<br><br>For foxes and rabbits, the lever removes or adds animals. For the pendulum, it's a push at the pivot.</span>
+
+    <div class="req">
+      <div class="req-id">WD-3 <span class="priority must">Must</span></div>
+      <p>Ground truth and every model under test shall be advanced using the same numerical integrator and the same step size, enforced by an automated test rather than by convention.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>the true world and the model being tested must use the same maths engine and the same size time-step — and a test has to check it, not a promise.</p>
+      </div>
+    </div>
+    <span class="sidenote">This is the trap named in the essay. If the two differ, every chart secretly measures the difference between two maths engines instead of the quality of the model. The results still look completely plausible, which is exactly why a written convention isn't enough protection.</span>
+
+    <div class="req">
+      <div class="req-id">WD-4 <span class="priority must">Must</span></div>
+      <p>Every world shall report its own intrinsic divergence rate — how quickly two trajectories starting a small distance apart separate under exact dynamics.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>each world measures how fast it drifts away from itself, so we know how much error is nobody's fault.</p>
+      </div>
+    </div>
+    <span class="sidenote">Lorenz's argument: past a certain point even a perfect model loses the trajectory, because the world amplifies tiny differences. Grading against zero error would condemn a flawless model. This number is the fair yardstick.</span>
+
+    <div class="req">
+      <div class="req-id">WD-5 <span class="priority must">Must</span></div>
+      <p>Every world shall declare a training region and at least one starting region outside it.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>each world marks out a "familiar" area and an "unfamiliar" area, so we can test whether a model admits it's out of its depth.</p>
+      </div>
+    </div>
+    <span class="sidenote">"Does it know when it doesn't know" can only be answered somewhere the model has never been. Without a declared outside, we'd only ever test the easy case.</span>
+
+    <div class="req">
+      <div class="req-id">WD-6 <span class="priority must">Must</span></div>
+      <p>Every world shall declare at least two evaluation tasks with different error tolerances: a tight-tolerance control task and a loose-tolerance planning task.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>each world names two jobs — a fussy one and a rough one — because "trustworthy for 14 steps" is meaningless until you say what for.</p>
+      </div>
+    </div>
+    <span class="sidenote">Foxes and rabbits: hold the rabbit population inside a target band by working the lever (fussy), versus will the rabbits crash below a danger line within N steps (rough). Pendulum: hold the tip near a target angle (fussy), versus will it flip over within N steps (rough).<br><br>Tasks belong to the world, not to the judge. That keeps the judge general, and makes it impossible to quote a trust number without naming its job.</span>
+
+    <div class="req">
+      <div class="req-id">WD-7 <span class="priority must">Must</span></div>
+      <p>Given the same seed, every world shall produce byte-identical trajectories across runs and across processes.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>run it twice with the same starting settings and you get exactly the same numbers, down to the last digit.</p>
+      </div>
+    </div>
+
+    <div class="req">
+      <div class="req-id">WD-8 <span class="priority wont">Won't</span></div>
+      <p>Worlds with randomness, hidden state, or high-dimensional input such as video or images are out of scope for this round.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>no randomness, nothing hidden, nothing picture-shaped.</p>
+      </div>
+    </div>
+    <span class="sidenote">All three are real features of the systems the essay is ultimately about. All three would also make "the true answer" ambiguous — which is precisely what this round trades away in return for a checker we can actually verify.</span>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ccc; max-width: 640px;">
+
+    <h2 id="domain-2-models">Domain 2 — The Models Under Test</h2>
+    <p>The models here are deliberately unimpressive. Their only job is to give the judge something to grade.</p>
+    <p>Two distinctions carry most of this project's honesty. First, the difference between a model that is <strong>wrong</strong> and one that is <strong>overconfident</strong> — the second is far more dangerous, and ordinary accuracy scores cannot see it at all. Second, the difference between a <strong>test fixture</strong> and a <strong>finding</strong>: a failure we deliberately built and then detected is a passing test, not a discovery.</p>
+
+    <div class="req">
+      <div class="req-id">MU-1 <span class="priority must">Must</span></div>
+      <p>All models under test shall implement one interface: given a state and an action, return a predicted next state together with a stated uncertainty.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>every model plugs into the same socket, and must say not just what it predicts but how sure it is.</p>
+      </div>
+    </div>
+    <span class="sidenote">The confidence is not decoration. A model that only ever says "12.4", and never "12.4, give or take 3", cannot be asked the one question this whole project exists to ask.</span>
+
+    <div class="req">
+      <div class="req-id">MU-2 <span class="priority must">Must</span></div>
+      <p>The harness shall provide two reference baselines — persistence and linear extrapolation — and no verdict shall be issued without comparing the model against them.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>every model has to be measured against two stupid ones — "nothing changes" and "carry on in a straight line" — and no verdict is allowed without that comparison.</p>
+      </div>
+    </div>
+    <span class="sidenote">Taken straight from weather forecasting: a score with nothing to compare it to is uninterpretable. A model that can't beat "nothing changes" hasn't earned anything, no matter how small its error looks.</span>
+
+    <div class="req">
+      <div class="req-id">MU-3 <span class="priority must">Must</span></div>
+      <p>The harness shall provide fixture models failing in specified ways, covering at minimum: accurate but overconfident; less accurate but honestly uncertain; and accurate inside the training region but catastrophically wrong outside it.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>we build three broken models on purpose — one that's right but cocky, one that's rougher but honest, and one that's excellent at home and disastrous away from home.</p>
+      </div>
+    </div>
+    <span class="sidenote">These are the judge's own test suite. The cocky one matters most: it's the case where ranking models by average error actively misleads you.</span>
+
+    <div class="req">
+      <div class="req-id">MU-4 <span class="priority must">Must</span></div>
+      <p>Fixture models shall be labelled as test fixtures wherever they appear — in code, documentation, and any published output — and never presented as findings.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>the deliberately broken models get labelled as test equipment everywhere, never dressed up as discoveries.</p>
+      </div>
+    </div>
+    <span class="sidenote">Catching a fault you planted yourself proves your instrument works. It proves nothing about the world. Blurring those two would be the fastest way to lose the credibility this project is trying to build.</span>
+
+    <div class="req">
+      <div class="req-id">MU-5 <span class="priority must">Must</span></div>
+      <p>The harness shall include at least two models whose behaviour is not engineered, matched as closely as practicable on accuracy and differing instead in how they derive their stated uncertainty: at minimum, one network predicting its own error bar directly, and one small ensemble whose disagreement supplies the error bar.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>at least two genuine models that we haven't rigged — roughly as accurate as each other, but working out their confidence in different ways. One guesses its own error bar; the other is a small group of models whose disagreement <em>is</em> the error bar.</p>
+      </div>
+    </div>
+    <span class="sidenote">Varying accuracy proves nothing — everyone accepts a worse model is worse. Varying only the confidence machinery is what makes the interesting comparison possible: ordinary error scores can't separate these two, and the judge is designed to.</span>
+
+    <div class="req">
+      <div class="req-id">MU-6 <span class="priority must">Must</span></div>
+      <p>The architecture, training recipe, stopping rule, and an explicit written prediction of how the unrigged models will rank shall be recorded in the repository before the judge is first run against them; the resulting verdicts shall be published unchanged whether or not the prediction holds.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>write down how the honest models are built <em>and</em> which one we expect to win — before running the judge. Then publish the result either way.</p>
+      </div>
+    </div>
+    <span class="sidenote">This is the only place a genuine surprise is possible, and writing it down first is what protects it. A model tuned until its verdict looks good is a rigged model in disguise, and a prediction written afterwards isn't a prediction. Being wrong here is a better result than being right.</span>
+
+    <div class="req">
+      <div class="req-id">MU-7 <span class="priority must">Must</span></div>
+      <p>Models shall be trained and evaluated on disjoint data.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>no model is ever tested on the data it learned from.</p>
+      </div>
+    </div>
+    <span class="sidenote">Kapoor and Narayanan document this kind of leakage as the biggest cause of overstated results across machine-learning research. A judge whose subject was trained on the test set measures nothing at all.</span>
+
+    <div class="req">
+      <div class="req-id">MU-8 <span class="priority must">Must</span></div>
+      <p>Model training shall be seeded and reproducible, such that re-training from the same seed produces the same model and therefore the same verdict.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>training the model again from the same starting point gives you the identical model, and so the identical verdict.</p>
+      </div>
+    </div>
+
+    <div class="req">
+      <div class="req-id">MU-9 <span class="priority should">Should</span></div>
+      <p>Adding a new model shall require implementing the MU-1 interface and nothing else — no changes to the judge, the worlds, or the reporting layer.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>plugging in someone else's model should mean writing one small adapter and touching nothing else.</p>
+      </div>
+    </div>
+    <span class="sidenote">This is what turns "reusable checker" from a claim into something the code can be held to — and it's what Mor will judge the project on.</span>
+
+    <div class="req">
+      <div class="req-id">MU-10 <span class="priority wont">Won't</span></div>
+      <p>Large pretrained models, foundation models, and anything requiring specialised hardware are out of scope.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>no big AI models. We make no attempt to judge a serious world model.</p>
+      </div>
+    </div>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ccc; max-width: 640px;">
+
+    <h2 id="domain-3-judge">Domain 3 — The Judge</h2>
+    <p>This is the product. Everything else exists to give it something to grade.</p>
+    <p>The judge takes what a model predicted and what actually happened, and returns a verdict: how far ahead this model can be believed, for which job, measured against what, and with an explicit list of what was never tested. It never looks inside the model.</p>
+
+    <div class="req">
+      <div class="req-id">JU-1 <span class="priority must">Must</span></div>
+      <p>The judge shall receive only a model's stated predictions and uncertainties, the outcomes that followed, and the world's declared divergence rate and tasks. It shall not receive the model's identity, internals, architecture, or training history.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>the judge only ever sees what the model predicted and what actually happened. It is never told whose model it is or how it works inside.</p>
+      </div>
+    </div>
+    <span class="sidenote">Dawid's prequential principle. It's also what makes the judge independent in the banking sense — someone objective checking the work, rather than the builder marking their own homework.</span>
+
+    <div class="req">
+      <div class="req-id">JU-2 <span class="priority must">Must</span></div>
+      <p>The judge shall report one-step accuracy as a skill score relative to the persistence and linear baselines, never as an absolute error alone.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>never report "the error was 0.03". Report "it beat doing-nothing by this much".</p>
+      </div>
+    </div>
+    <span class="sidenote">Murphy's framework: 0.03 means nothing until you know that doing nothing scores 0.04.</span>
+
+    <div class="req">
+      <div class="req-id">JU-3 <span class="priority must">Must</span></div>
+      <p>The judge shall report prediction error as a function of rollout length, benchmarked against the world's own divergence rate rather than against zero.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>show how wrong it gets the further ahead it guesses — and compare that against how fast the world becomes unguessable anyway.</p>
+      </div>
+    </div>
+    <span class="sidenote">The question is never "is there error". It's "is there more error than the world itself produces".</span>
+
+    <div class="req">
+      <div class="req-id">JU-4 <span class="priority must">Must</span></div>
+      <p>The judge shall assess calibration using a strictly proper scoring rule, reported separately for starts inside and outside the training region.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>check whether "I'm 90% sure" turns out to be right about 90% of the time — and check it separately on familiar and unfamiliar ground. The scoring maths must be the kind a model cannot cheat.</p>
+      </div>
+    </div>
+    <span class="sidenote">Gneiting and Raftery: the wrong choice of scoring rule can be gamed by a model that misstates its own confidence. Picking a cheatable rule would let the overconfident model score well by being confident — the exact failure this project exists to catch.</span>
+
+    <div class="req">
+      <div class="req-id">JU-5 <span class="priority must">Must</span></div>
+      <p>The judge shall report sharpness alongside calibration, and shall not treat calibration alone as sufficient.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>also check the model isn't just hedging. "Somewhere between zero and a million" is technically always right and completely useless.</p>
+      </div>
+    </div>
+    <span class="sidenote">Without this the judge would reward cowardice, and the vaguest model would win.</span>
+
+    <div class="req">
+      <div class="req-id">JU-6 <span class="priority must">Must</span></div>
+      <p>Beyond the point where the world's own divergence exceeds the task tolerance, the judge shall stop grading individual trajectories and grade statistical agreement instead.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>past the point where nobody could predict the details, stop marking the exact path and start marking whether the general pattern is right.</p>
+      </div>
+    </div>
+    <span class="sidenote">This is weather versus climate. Nobody grades a forecast for a specific day nine months out; they check whether the predicted climate is right. The judge must switch the same way — and must say where it switched.</span>
+
+    <div class="req">
+      <div class="req-id">JU-7 <span class="priority must">Must</span></div>
+      <p>The judge shall compute a trust horizon for every combination of model, world, and task, and shall never report one without naming the task and tolerance it belongs to.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>every "trust it for N steps" comes stapled to the job it applies to. There is no single trust number.</p>
+      </div>
+    </div>
+
+    <div class="req">
+      <div class="req-id">JU-8 <span class="priority must">Must</span></div>
+      <p>The judge shall count exceptions — outcomes falling outside the model's stated confidence — compare the count against the rate the model's own confidence implies, and assign a status from a fixed set of bands using thresholds declared in advance.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>count how often reality landed outside the model's stated confidence. A model claiming 95% confidence should be caught out about one time in twenty. Far more than that means its confidence was fiction — however good its average looked.</p>
+      </div>
+    </div>
+    <span class="sidenote">This is the banking mechanism, imported directly.</span>
+
+    <div class="req">
+      <div class="req-id">JU-9 <span class="priority must">Must</span></div>
+      <p>Every verdict shall be one structured record containing: skill scores against both baselines, error against horizon with the divergence benchmark, calibration and sharpness inside and outside the training region, exception counts against thresholds, per-task trust horizons, and an explicit list of what was not tested.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>the verdict is one tidy record with everything in it — including a list of what we never checked.</p>
+      </div>
+    </div>
+    <span class="sidenote">Mitchell's model cards: stating what wasn't evaluated matters more than the headline score. A verdict reporting only what was measured invites the reader to assume everything else was fine.</span>
+
+    <div class="req">
+      <div class="req-id">JU-10 <span class="priority must">Must</span></div>
+      <p>Every verdict shall carry a statement of the judge's own limitations, including that this method validates the middle of the distribution rather than the extremes, and that a toy world validates the harness rather than the field.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>every verdict says what the judge itself can't see — mainly that this kind of checking is weakest on rare disasters, which is exactly where the damage happens.</p>
+      </div>
+    </div>
+    <span class="sidenote">Rebonato's objection turned on ourselves: a model can pass every backtest and still be structurally wrong. Derman's rule — know what you're ignoring — makes saying so mandatory.</span>
+
+    <div class="req">
+      <div class="req-id">JU-11 <span class="priority must">Must</span></div>
+      <p>All thresholds, band definitions, and metric choices shall be fixed and recorded before the judge is run against the unrigged models.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>decide where the pass/fail lines sit before seeing any results, so nobody can move the goalposts once the answers are in.</p>
+      </div>
+    </div>
+    <span class="sidenote">The judge has exactly one subjective part: where its thresholds sit. Fixing them in advance is what stops them being nudged until the answer looks interesting.</span>
+
+    <div class="req">
+      <div class="req-id">JU-12 <span class="priority should">Should</span></div>
+      <p>The judge shall be a pure function of its inputs, with no file, network, clock, or random-number access anywhere in its call graph.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>the judge does arithmetic on what it's handed and nothing else — it never reads files, checks the time, or rolls dice.</p>
+      </div>
+    </div>
+
+    <div class="req">
+      <div class="req-id">JU-13 <span class="priority wont">Won't</span></div>
+      <p>The judge will not use a language model or any learned component.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>the judge is plain arithmetic, not an AI. Its only judgement calls are the thresholds, which are written down.</p>
+      </div>
+    </div>
+    <span class="sidenote">Automated judges built on language models have documented biases — favouring longer answers, favouring whatever came first, favouring their own outputs. Ours avoids that entire class of problem by not being one.</span>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ccc; max-width: 640px;">
+
+    <h2 id="domain-4-reporting">Domain 4 — Showing the Result</h2>
+    <p>A verdict nobody can read is not a verdict. This domain covers what comes out of the judge and how it is presented.</p>
+    <p>The audience test is simple: Dev has ten minutes, no risk background, and will look at two charts. If the point does not land in that time, the project has failed regardless of how correct the arithmetic is.</p>
+
+    <div class="req">
+      <div class="req-id">RP-1 <span class="priority must">Must</span></div>
+      <p>The primary chart shall be a backtesting exception plot: predictions with their stated confidence range, actual outcomes drawn over them, and every outcome falling outside its range marked.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>the main picture shows what the model expected, what actually happened, and circles every time reality landed outside what the model said was likely.</p>
+      </div>
+    </div>
+    <span class="sidenote">Anyone from a risk background recognises this chart instantly, which is the point — it is the visual proof that the banking method has been transplanted. Everyone else gets it from the caption.</span>
+
+    <div class="req">
+      <div class="req-id">RP-2 <span class="priority must">Must</span></div>
+      <p>A second chart shall show error growing with prediction distance, with the world's own divergence rate drawn on the same axes as a reference line.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>a picture of how wrong the model gets the further ahead it guesses — with a second line showing how fast the world becomes unguessable anyway.</p>
+      </div>
+    </div>
+    <span class="sidenote">The gap between the two lines is the model's fault. Everything under the reference line is nobody's fault. Drawing them together is what makes that distinction visible rather than argued.</span>
+
+    <div class="req">
+      <div class="req-id">RP-3 <span class="priority must">Must</span></div>
+      <p>A third chart shall show calibration — stated confidence against how often that confidence was justified — plotted separately for familiar and unfamiliar starting points.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>a picture answering "when it said 90% sure, was it right 90% of the time?" — shown separately for familiar and unfamiliar territory.</p>
+      </div>
+    </div>
+
+    <div class="req">
+      <div class="req-id">RP-4 <span class="priority must">Must</span></div>
+      <p>The results shall include a comparison table showing, for every model, its ranking by ordinary error alongside its trust horizon for each task.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>one table putting the usual accuracy score next to the trust horizon, so you can see where they disagree.</p>
+      </div>
+    </div>
+    <span class="sidenote">This table is the actual result of the project. If ordinary error ranks two models the same and the judge separates them, that difference is the entire argument, and it needs to be visible in one glance rather than reconstructed from three charts.</span>
+
+    <div class="req">
+      <div class="req-id">RP-5 <span class="priority must">Must</span></div>
+      <p>Every chart shall carry a one-sentence plain-language caption stating what it shows and what a reader should conclude.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>every picture comes with one ordinary sentence saying what it means.</p>
+      </div>
+    </div>
+
+    <div class="req">
+      <div class="req-id">RP-6 <span class="priority must">Must</span></div>
+      <p>Every verdict shall also be written in a structured machine-readable form, not only as charts.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>the verdict is saved as data as well as pictures, so it can be checked, compared, and re-read by other tools.</p>
+      </div>
+    </div>
+
+    <div class="req">
+      <div class="req-id">RP-7 <span class="priority must">Must</span></div>
+      <p>The complete result set shall be reproducible from a single documented command on an ordinary laptop.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>one command rebuilds every number and every chart from scratch.</p>
+      </div>
+    </div>
+    <span class="sidenote">A governance claim that cannot be re-run by a sceptic is a claim on trust, which is precisely what this project says should not be accepted.</span>
+
+    <div class="req">
+      <div class="req-id">RP-8 <span class="priority must">Must</span></div>
+      <p>Output involving fixture models shall visibly mark them as fixtures at the point of display, not only in surrounding documentation.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>the deliberately broken models are labelled as such right on the chart, not just in the notes underneath.</p>
+      </div>
+    </div>
+    <span class="sidenote">Charts get screenshotted and pasted somewhere else without their context. The label has to travel with the image.</span>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ccc; max-width: 640px;">
+
+    <h2 id="non-functional-requirements">Non-Functional Requirements</h2>
+    <p>These describe how the whole system must behave rather than what it must do.</p>
+
+    <div class="req">
+      <div class="req-id">NF-1 <span class="priority must">Must</span></div>
+      <p>Given identical inputs and seeds, the judge shall produce a byte-identical verdict across runs, across processes, and across machines of the same platform.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>the same inputs always produce exactly the same verdict, character for character — not merely a very similar one.</p>
+      </div>
+    </div>
+    <span class="sidenote"><strong>How this gets checked:</strong> serialise the entire verdict and compare it across ten consecutive runs, byte for byte. Comparing the whole record rather than selected fields means any new field is covered automatically, and anything non-deterministic added later fails loudly instead of quietly.<br><br>This is not tidiness. A checker whose answer wobbles between runs cannot be the basis of a decision, and everything this project claims about governance rests on it.</span>
+
+    <div class="req">
+      <div class="req-id">NF-2 <span class="priority must">Must</span></div>
+      <p>The full result set shall run to completion on an ordinary laptop with no specialised hardware, in minutes rather than hours.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>it runs on a normal laptop in a few minutes.</p>
+      </div>
+    </div>
+
+    <div class="req">
+      <div class="req-id">NF-3 <span class="priority must">Must</span></div>
+      <p>The judge shall depend only on the standard library and a small, named set of well-established scientific packages.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>almost no external code, and every piece of it common and long-established.</p>
+      </div>
+    </div>
+
+    <div class="req">
+      <div class="req-id">NF-4 <span class="priority must">Must</span></div>
+      <p>The repository shall contain nothing originating from the author's professional context — no internal figures, no employer name, no internal team or committee names. Banking practice shall be described in publicly documented, generic terms only.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>nothing from the author's day job goes in the repository, ever. Banking is described only from published public sources.</p>
+      </div>
+    </div>
+    <span class="sidenote">The repository is public from its first commit, so there is no window in which a mistake could be quietly fixed before the world sees it.</span>
+
+    <div class="req">
+      <div class="req-id">NF-5 <span class="priority must">Must</span></div>
+      <p>No output shall claim more than the evidence supports. Where the harness cannot demonstrate something, the output shall say so plainly rather than omitting it.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>the project never says more than it can prove, and says out loud where it falls short.</p>
+      </div>
+    </div>
+    <span class="sidenote">This follows from the value and viability risks. Overclaiming on a public repository attached to a public essay costs more credibility than the result could ever earn.</span>
+
+    <div class="req">
+      <div class="req-id">NF-6 <span class="priority should">Should</span></div>
+      <p>The judge, the worlds, the models, and the reporting layer shall be separable, with the judge importing nothing from the others.</p>
+      <div class="req-gloss">
+        <span class="req-gloss-label">In plain words</span>
+        <p>the four parts stay in their own boxes, and the judge never reaches into any of them.</p>
+      </div>
+    </div>
+    <span class="sidenote">This is what makes NF-1 achievable and what lets someone else point the judge at their own model.</span>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ccc; max-width: 640px;">
+
+    <h2 id="assumptions">Assumptions</h2>
+    <ol>
+      <li>Exact ground truth from known equations is an acceptable substitute for real-world observation, for the purpose of validating the harness rather than the field.</li>
+      <li>A model's stated uncertainty can be meaningfully compared against observed outcomes over the sample sizes a toy world produces.</li>
+      <li>The two chosen worlds differ enough in predictability to exercise the divergence-benchmark logic.</li>
+      <li>The reader of the results has no risk-management background and no intention of reading source code.</li>
+      <li>Standard scientific Python produces reproducible floating-point results on a fixed platform when seeded and single-threaded.</li>
+    </ol>
+    <span class="sidenote">Assumption 5 is the one most likely to bite. If it fails, NF-1 becomes considerably harder and the technical approach may need revisiting.</span>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ccc; max-width: 640px;">
+
+    <h2 id="constraints">Constraints</h2>
+    <ol>
+      <li><strong>Public repository from the first commit.</strong> Nothing can be quietly corrected before it is world-readable.</li>
+      <li><strong>Solo, unfunded, evenings.</strong> Scope discipline is a delivery control, not a preference.</li>
+      <li><strong>Ordinary consumer hardware.</strong> No GPU, no cluster.</li>
+      <li><strong>The essay is already published in draft.</strong> The build must make good on what draft v2.1 promised, or the difference must be stated openly.</li>
+    </ol>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ccc; max-width: 640px;">
+
+    <h2 id="out-of-scope">Out of Scope</h2>
+    <ul>
+      <li>Building, improving, or competing with any real world model.</li>
+      <li>Video, images, robotics data, or any real-world dataset.</li>
+      <li>A web application, hosted service, or interactive dashboard.</li>
+      <li>Any claim about whether a specific published world model is trustworthy.</li>
+      <li>Regulatory or standards advocacy. The project demonstrates a method; it does not propose a rule.</li>
+    </ul>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ccc; max-width: 640px;">
+
+    <h2 id="open-questions">Open Questions</h2>
+    <p>These are unresolved and carried forward to the next stage rather than guessed at now.</p>
+    <div class="open-question">
+      <p><strong>1. Where do the exception thresholds sit?</strong> Banking uses established supervisory bands. Whether to adopt an analogous banding or derive thresholds from each task's tolerance is a design decision for the technical specification.</p>
+    </div>
+    <div class="open-question">
+      <p><strong>2. How many rollouts make a sound sample?</strong> Exception counting needs enough trials for the count to mean something. The required number depends on the confidence level being tested.</p>
+    </div>
+    <div class="open-question">
+      <p><strong>3. Is foxes-and-rabbits too well-behaved?</strong> Its divergence is slow, so its trust horizons may be long and uninteresting. The double pendulum exists partly to cover this, but if the tame world produces nothing worth reporting, that should be stated rather than padded.</p>
+    </div>
+    <div class="open-question">
+      <p><strong>4. What exactly is the ensemble's stated uncertainty?</strong> Spread across members is the obvious choice, but the mapping from spread to a confidence range needs to be fixed before any judging happens, per JU-11.</p>
+    </div>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ccc; max-width: 640px;">
+
+    <h2 id="requirements-index">Requirements Index</h2>
+    <div style="overflow-x: auto;">
+      <table>
+        <thead>
+          <tr><th>ID</th><th>Domain</th><th>Summary</th><th>Priority</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>WD-1</td><td>Worlds</td><td>Two reference worlds with exact ground truth</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>WD-2</td><td>Worlds</td><td>Common state-and-action interface</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>WD-3</td><td>Worlds</td><td>Shared integrator and step size, test-enforced</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>WD-4</td><td>Worlds</td><td>Each world reports its own divergence rate</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>WD-5</td><td>Worlds</td><td>Declared training and out-of-training regions</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>WD-6</td><td>Worlds</td><td>At least two tasks with different tolerances</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>WD-7</td><td>Worlds</td><td>Seeded, byte-identical trajectories</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>WD-8</td><td>Worlds</td><td>No randomness, hidden state, or high-dimensional input</td><td><span class="priority wont">Won't</span></td></tr>
+          <tr><td>MU-1</td><td>Models</td><td>One interface returning prediction and uncertainty</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>MU-2</td><td>Models</td><td>Persistence and linear baselines, always compared</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>MU-3</td><td>Models</td><td>Three fixture models with specified failure modes</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>MU-4</td><td>Models</td><td>Fixtures labelled as fixtures everywhere</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>MU-5</td><td>Models</td><td>At least two unrigged models differing on uncertainty method</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>MU-6</td><td>Models</td><td>Recipe and expected ranking recorded before judging</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>MU-7</td><td>Models</td><td>Training and evaluation data disjoint</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>MU-8</td><td>Models</td><td>Seeded, reproducible training</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>MU-9</td><td>Models</td><td>New models need only the interface</td><td><span class="priority should">Should</span></td></tr>
+          <tr><td>MU-10</td><td>Models</td><td>No large or pretrained models</td><td><span class="priority wont">Won't</span></td></tr>
+          <tr><td>JU-1</td><td>Judge</td><td>Sees only predictions and outcomes</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>JU-2</td><td>Judge</td><td>Skill score against baselines, never absolute error alone</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>JU-3</td><td>Judge</td><td>Error against horizon, benchmarked on divergence</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>JU-4</td><td>Judge</td><td>Calibration via a strictly proper scoring rule, in and out of region</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>JU-5</td><td>Judge</td><td>Sharpness reported alongside calibration</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>JU-6</td><td>Judge</td><td>Switch to statistical grading past the predictability limit</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>JU-7</td><td>Judge</td><td>Trust horizon per model, world, and task</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>JU-8</td><td>Judge</td><td>Exception counting against pre-declared thresholds</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>JU-9</td><td>Judge</td><td>One structured verdict record including what was not tested</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>JU-10</td><td>Judge</td><td>Every verdict states the judge's own limitations</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>JU-11</td><td>Judge</td><td>Thresholds fixed before judging the unrigged models</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>JU-12</td><td>Judge</td><td>Pure function, no I/O, clock, or randomness</td><td><span class="priority should">Should</span></td></tr>
+          <tr><td>JU-13</td><td>Judge</td><td>No language model or learned component in the judge</td><td><span class="priority wont">Won't</span></td></tr>
+          <tr><td>RP-1</td><td>Reporting</td><td>Backtesting exception plot as the primary chart</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>RP-2</td><td>Reporting</td><td>Error against horizon with divergence reference line</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>RP-3</td><td>Reporting</td><td>Calibration chart, familiar and unfamiliar separately</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>RP-4</td><td>Reporting</td><td>Comparison table: ordinary error against trust horizon</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>RP-5</td><td>Reporting</td><td>Plain-language caption on every chart</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>RP-6</td><td>Reporting</td><td>Machine-readable verdict alongside charts</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>RP-7</td><td>Reporting</td><td>Full reproduction from one documented command</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>RP-8</td><td>Reporting</td><td>Fixtures marked as fixtures on the output itself</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>NF-1</td><td>Non-functional</td><td>Byte-identical verdicts across runs</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>NF-2</td><td>Non-functional</td><td>Runs on an ordinary laptop in minutes</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>NF-3</td><td>Non-functional</td><td>Minimal, well-established dependencies</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>NF-4</td><td>Non-functional</td><td>Nothing from the author's professional context</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>NF-5</td><td>Non-functional</td><td>No claim beyond the evidence</td><td><span class="priority must">Must</span></td></tr>
+          <tr><td>NF-6</td><td>Non-functional</td><td>Judge separable, importing nothing from other layers</td><td><span class="priority should">Should</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><strong>Totals:</strong> 45 requirements — 39 Must, 3 Should, 3 Won't.</p>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ccc; max-width: 640px;">
+
+    <h2 id="priority-model">Priority Model</h2>
+    <table>
+      <thead>
+        <tr><th>Priority</th><th>Meaning</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="priority must">Must</span></td><td>Without it the project fails its purpose. There is no version of this worth shipping that omits a Must.</td></tr>
+        <tr><td><span class="priority should">Should</span></td><td>Genuinely wanted and expected to be built, but the project still stands without it.</td></tr>
+        <tr><td><span class="priority could">Could</span></td><td>Desirable if time allows. Nothing in this round is a Could — anything that weak was moved to Won't instead.</td></tr>
+        <tr><td><span class="priority wont">Won't</span></td><td>Deliberately excluded from this round. Recorded so the exclusion is a decision that can be revisited, not an oversight.</td></tr>
+      </tbody>
+    </table>
+    <span class="sidenote">The high proportion of Musts is a consequence of deliberately narrow scope rather than a lack of prioritisation. Everything genuinely optional was cut before this document rather than downgraded within it.</span>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ccc; max-width: 640px;">
+
+    <p class="gvm-attribution">Developed using the Grounded Vibe Methodology</p>
+  </main>
+
+  <script>
+(function () {
+  const toc = document.getElementById('toc');
+  const headings = document.querySelectorAll('h2[id], h3[id]');
+  const links = [];
+
+  headings.forEach(function (h) {
+    const a = document.createElement('a');
+    a.href = '#' + h.id;
+    a.textContent = h.textContent;
+    if (h.tagName === 'H3') a.classList.add('toc-h3');
+    toc.appendChild(a);
+    links.push({ el: a, target: h });
+  });
+
+  function onScroll() {
+    let current = links[0];
+    for (let i = 0; i < links.length; i++) {
+      if (links[i].target.getBoundingClientRect().top <= 80) current = links[i];
+    }
+    links.forEach(function (l) { l.el.classList.remove('active'); });
+    if (current) {
+      current.el.classList.add('active');
+      const tocEl = document.getElementById('toc');
+      const elTop = current.el.offsetTop - tocEl.offsetTop;
+      const elBot = elTop + current.el.offsetHeight;
+      if (elTop < tocEl.scrollTop || elBot > tocEl.scrollTop + tocEl.clientHeight) {
+        tocEl.scrollTop = elTop - tocEl.clientHeight / 2;
+      }
+    }
+  }
+
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
+  </script>
+</body>
+</html>
