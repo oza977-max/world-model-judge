@@ -2,7 +2,13 @@
 
 **A governance harness for learned simulators, at toy scale.**
 
-Version 1.0 · 18 August 2026 · Derived from the essay *Words Are a Menu. The World Is Not.* (draft v2.1)
+Version 1.1 · 23 August 2026 · Derived from the essay *Words Are a Menu. The World Is Not.* (draft v2.2)
+
+> **Change note (v1.1).** The essay was revised to draft v2.2 after its first reader
+> feedback: simpler words, same argument. No requirement changed its meaning. One
+> alignment worth recording: draft v2.1 called the double pendulum a "stretch goal";
+> the requirements had already committed to it (WD-1), and draft v2.2 now commits to
+> it too, so the essay and the requirements finally promise the same thing.
 
 ---
 
@@ -420,7 +426,7 @@ These describe how the whole system must behave rather than what it must do.
 1. **Public repository from the first commit.** Nothing can be quietly corrected before it is world-readable.
 2. **Solo, unfunded, evenings.** Scope discipline is a delivery control, not a preference.
 3. **Ordinary consumer hardware.** No GPU, no cluster.
-4. **The essay is already published in draft.** The build must make good on what draft v2.1 promised, or the difference must be stated openly.
+4. **The essay is already published in draft.** The build must make good on what draft v2.2 promised, or the difference must be stated openly.
 
 ---
 
