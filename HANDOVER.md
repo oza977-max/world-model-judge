@@ -2,10 +2,13 @@
 
 ## CURRENT STATE
 
-**Phase:** Requirements **approved by the user**. Test cases written (v1.0,
-68 cases across all 45 requirements). Independent verification pass on the
-test cases is in progress or complete — check the note below dated after
-this line before trusting the test cases as final.
+**Phase:** Requirements **approved by the user**. Test cases written and
+independently verified (v1.0, 69 cases across all 45 requirements). The
+verification pass found real defects — a miscounted case total, a
+requirement with a silently-dropped disclosure, an unbuildable case
+referencing an undeclared list, two cases testing the wrong requirement —
+all fixed and re-verified by grep count against the document body, not
+just re-asserted. Ready to hand off to `/gvm-tech-spec`.
 **Code written:** none. Deliberately.
 **Blocked on:** nothing at the requirements/test-case stage. Next gate is
 `/gvm-tech-spec`, which reads the requirements and the test cases together.
@@ -25,7 +28,7 @@ Last updated 2026-08-25.
 | `requirements/requirements.html` | Same content, Tufte-styled. |
 | `requirements/wordsareamenu.html` | The source essay, now draft v2.7. Also revised post-review: narrowed novelty claim, corrected two factual errors (flight-simulator framing, SR 11-7 currency), added the employer disclaimer and an AI-assistance transparency note. |
 | `risks/risk-assessment.md` | Four product risks, written before requirements. Still references essay draft v2.1 deliberately — the historical record of what it was written against. |
-| `test-cases/test-cases.md` | v1.0. 68 cases, one `TC-{REQ-ID}-{NN}` per requirement minimum, more for credibility-fatal ones. Includes 5 negative/phantom-gate cases (proving WD-3, WD-7, NF-1's automated checks can actually fail, not just always pass) and 4 property-based cases. Full traceability matrix at the end — zero orphan requirements, zero orphan cases. |
+| `test-cases/test-cases.md` | v1.0. 69 cases, one `TC-{REQ-ID}-{NN}` per requirement minimum, more for credibility-fatal ones. Includes 5 negative/phantom-gate cases (proving WD-3, WD-7, NF-1, JU-9, JU-11's automated checks can actually fail, not just always pass) and 5 property-based cases. Full traceability matrix at the end — zero orphan requirements, zero orphan cases, every count independently grep-verified against the document body. |
 
 ## What does not exist
 
