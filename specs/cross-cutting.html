@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>World Model Judge — Cross-Cutting Specification</title>
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+
+    body {
+      font-family: "ET Book", Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif;
+      color: #111;
+      background: #fffff8;
+      line-height: 1.6;
+      padding: 2rem 1rem 6rem;
+      max-width: 1480px;
+      margin: 0 auto;
+    }
+
+    /* ── Typography ── */
+    h1 {
+      font-size: 2.4rem;
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.4rem;
+      color: #111;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 400;
+      font-style: italic;
+      margin-top: 3rem;
+      margin-bottom: 1rem;
+      color: #111;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 0.3rem;
+    }
+
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-top: 2rem;
+      margin-bottom: 0.6rem;
+      color: #333;
+    }
+
+    h4 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-top: 1rem;
+      margin-bottom: 0.5rem;
+      color: #333;
+    }
+
+    p, li {
+      font-size: 1rem;
+      line-height: 1.7;
+      margin-bottom: 0.8rem;
+      max-width: 780px;
+    }
+
+    ul, ol { padding-left: 1.4rem; margin-bottom: 1.2rem; }
+    li { margin-bottom: 0.4rem; }
+
+    .subtitle {
+      font-size: 1.1rem;
+      font-style: italic;
+      color: #555;
+      margin-bottom: 2.5rem;
+      max-width: 780px;
+    }
+
+    .date {
+      font-size: 0.9rem;
+      color: #888;
+      margin-bottom: 0.2rem;
+    }
+
+    /* ── Floating TOC (Left Side) ── */
+    nav.toc {
+      position: fixed;
+      top: 2rem;
+      left: 2rem;
+      width: 220px;
+      max-height: calc(100vh - 4rem);
+      overflow-y: auto;
+      background: #fffff8;
+      border-right: 2px solid #ddd;
+      padding: 1rem 1rem 1rem 0;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      z-index: 100;
+    }
+
+    nav.toc .toc-title {
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #999;
+      margin-bottom: 0.6rem;
+    }
+
+    nav.toc a {
+      color: #555;
+      text-decoration: none;
+      display: block;
+      padding: 0.15rem 0;
+      transition: color 0.15s;
+    }
+
+    nav.toc a:hover { color: #111; }
+    nav.toc a.active { color: #111; font-weight: 600; }
+    nav.toc .toc-h3 { padding-left: 0.8rem; font-size: 0.78rem; color: #888; }
+    nav.toc .toc-h3:hover { color: #555; }
+
+    /* Offset main content for left TOC */
+    main {
+      margin-left: 260px;
+      max-width: 1000px;
+    }
+
+    /* ── Sidenotes (Right Margin) ── */
+    .sidenote {
+      float: right;
+      clear: right;
+      width: 220px;
+      margin-right: -260px;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      color: #666;
+      padding-left: 1rem;
+      border-left: 2px solid #e0e0e0;
+    }
+
+    /* ── Tables (Few's principles) ── */
+    table {
+      border-collapse: collapse;
+      margin: 1.5rem 0 2rem;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      width: auto;
+      min-width: 480px;
+    }
+
+    thead th {
+      text-align: left;
+      font-weight: 600;
+      padding: 0.5rem 1rem 0.5rem 0;
+      border-bottom: 2px solid #333;
+      color: #111;
+    }
+
+    tbody td {
+      padding: 0.45rem 1rem 0.45rem 0;
+      border-bottom: 1px solid #e8e8e8;
+      vertical-align: top;
+    }
+
+    tbody tr:last-child td { border-bottom: 2px solid #333; }
+    tbody tr:nth-child(even) { background: #f9f9f4; }
+
+    caption {
+      font-style: italic;
+      font-size: 0.88rem;
+      color: #666;
+      text-align: left;
+      margin-bottom: 0.4rem;
+    }
+
+    /* ── Inline Code ── */
+    code {
+      font-family: "Menlo", "Consolas", "Monaco", monospace;
+      font-size: 0.88rem;
+      background: #f0f0e8;
+      padding: 0.1rem 0.35rem;
+      border-radius: 2px;
+    }
+
+    /* ── GVM Attribution ── */
+    .gvm-attribution {
+      font-size: 0.75rem;
+      color: #999;
+      font-style: italic;
+      text-align: center;
+      margin-top: 3rem;
+      margin-bottom: 0;
+      max-width: none;
+    }
+
+    /* ── ADR (Architecture Decision Record) ── */
+    details.adr {
+      background: #f7f7f0;
+      border-left: 3px solid #669;
+      padding: 0;
+      margin: 1rem 0 1.2rem;
+      max-width: 860px;
+    }
+
+    details.adr summary {
+      padding: 0.8rem 1rem;
+      cursor: pointer;
+      list-style: none;
+    }
+
+    details.adr summary::-webkit-details-marker { display: none; }
+
+    details.adr summary::before {
+      content: '\25B8 ';
+      font-size: 0.85rem;
+      color: #999;
+    }
+
+    details.adr[open] summary::before {
+      content: '\25BE ';
+    }
+
+    .adr-id {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-right: 0.5rem;
+    }
+
+    .adr-title {
+      font-weight: 600;
+      color: #333;
+    }
+
+    .adr-status {
+      font-size: 0.75rem;
+      color: #999;
+      font-style: italic;
+      margin-left: 0.5rem;
+    }
+
+    .adr-body {
+      padding: 0 1rem 0.8rem;
+      border-top: 1px solid #e0e0e0;
+    }
+
+    .adr-body h4 {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #666;
+      margin: 0.6rem 0 0.3rem;
+    }
+
+    .adr-body p {
+      margin-bottom: 0.5rem;
+    }
+
+    .adr-body ul {
+      margin-bottom: 0.8rem;
+    }
+
+    .adr-body li {
+      margin-bottom: 0.3rem;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 1200px) {
+      nav.toc {
+        position: static;
+        width: 100%;
+        max-height: none;
+        border-right: none;
+        border-bottom: 1px solid #ddd;
+        padding: 1rem 0;
+        margin-bottom: 2rem;
+      }
+      main { margin-left: 0; }
+      .sidenote {
+        float: none;
+        width: 100%;
+        margin: 0.8rem 0;
+        padding: 0.6rem 0 0.6rem 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="toc" id="toc">
+    <div class="toc-title">Contents</div>
+  </nav>
+
+  <main>
+    <p class="date">25 August 2026</p>
+    <h1>World Model Judge — Cross-Cutting Specification</h1>
+    <p class="subtitle">Version 1.0 · Derived from Requirements v1.2 and Test Cases v1.0</p>
+
+    <p><strong>What this document is.</strong> The decisions every other spec depends on: the tech stack, the project structure, the determinism rules, the error-handling conventions, and the dependency budget. Domain specs (worlds, models, judge, reporting) reference this document rather than repeating it.</p>
+
+    <p><strong>In plain words:</strong> this is the rulebook the whole build follows. If a domain spec and this document ever disagree, this document wins, and the disagreement is a bug to fix, not a choice to make.</p>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ddd;">
+
+    <h2 id="expert-panel">Expert Panel</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Expert</th>
+          <th>Work</th>
+          <th>Role in This Document</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Luciano Ramalho</td>
+          <td><em>Fluent Python</em> (2nd ed.)</td>
+          <td>Dataclasses for value types, type hints as documentation, data-model leverage</td>
+        </tr>
+        <tr>
+          <td>Harry Percival &amp; Bob Gregory</td>
+          <td><em>Architecture Patterns with Python</em></td>
+          <td>Framework-independent domain core, TDD workflow, layer separation</td>
+        </tr>
+        <tr>
+          <td>Steve McConnell</td>
+          <td><em>Code Complete</em> (2nd ed.)</td>
+          <td>Defensive programming: fail loudly at startup, never mask with defaults</td>
+        </tr>
+        <tr>
+          <td>Andrew Hunt &amp; David Thomas</td>
+          <td><em>The Pragmatic Programmer</em></td>
+          <td>DRY as knowledge (not code), tracer-bullet thin slices</td>
+        </tr>
+        <tr>
+          <td>Michael Keeling</td>
+          <td><em>Design It!</em></td>
+          <td>ADR format used throughout</td>
+        </tr>
+        <tr>
+          <td>Ernst Hairer, Syvert Nørsett &amp; Gerhard Wanner</td>
+          <td><em>Solving Ordinary Differential Equations I</em> (2nd ed.), Springer (1993)</td>
+          <td>Integrator selection and error behaviour (discovered expert — see below)</td>
+        </tr>
+        <tr>
+          <td>David Goldberg</td>
+          <td><em>What Every Computer Scientist Should Know About Floating-Point Arithmetic</em> (ACM Computing Surveys, 1991)</td>
+          <td>Floating-point determinism rules (discovered expert — see below)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 id="expert-discovery">Expert Discovery: Numerical Computing</h3>
+
+    <p>The existing GVM roster has no specialist for numerical integration or floating-point reproducibility — both load-bearing here. Per the discovery protocol:</p>
+
+    <p><strong>Ernst Hairer, Syvert Nørsett &amp; Gerhard Wanner</strong> — <em>Solving Ordinary Differential Equations I: Nonstiff Problems</em> (2nd ed.), Springer (1993)</p>
+    <ul>
+      <li><strong>Method choice follows problem structure:</strong> fixed-step explicit Runge–Kutta methods are the reference choice for smooth non-stiff systems like ours; their local truncation error is well-characterised, which is what WD-3's drift measurement quantifies.</li>
+      <li><strong>Conserved quantities drift under generic integrators:</strong> a non-symplectic method does not preserve energy or other invariants exactly — the drift is systematic, measurable, and must be bounded rather than assumed away (exactly WD-3's second clause).</li>
+    </ul>
+
+    <p><strong>David Goldberg</strong> — "What Every Computer Scientist Should Know About Floating-Point Arithmetic", <em>ACM Computing Surveys</em> 23(1) (1991)</p>
+    <ul>
+      <li><strong>Floating-point arithmetic is deterministic but not associative:</strong> the same operations in the same order give the same bits; a different summation order gives different bits. Reproducibility (NF-1) is therefore an <em>ordering</em> discipline, not a hardware property.</li>
+      <li><strong>Same platform, same libraries, same order → same bits:</strong> NF-1's "machines of the same platform" scope is exactly the scope within which IEEE-754 double arithmetic is bit-reproducible.</li>
+    </ul>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ddd;">
+
+    <details class="adr" id="adr-001">
+      <summary>
+        <span class="adr-id">ADR-001</span>
+        <span class="adr-title">Tech stack: pure NumPy scientific Python</span>
+        <span class="adr-status">Accepted</span>
+      </summary>
+      <div class="adr-body">
+        <h4>Context</h4>
+        <p>NF-1 requires byte-identical verdicts across runs and machines of the same platform. NF-2 requires laptop-scale runtime. NF-3 requires a small, named, long-established dependency set. The state spaces are 2–4 dimensions; the models are deliberately trivial (MU-10). [Requirement: NF-1, NF-2, NF-3, MU-5, MU-10]</p>
+
+        <h4>Options Considered</h4>
+        <ol>
+          <li><strong>Pure NumPy</strong> — hand-rolled MLPs (~150 lines including backprop). Strongest determinism (single-threaded, seeded, no framework kernels), smallest dependency set, code readable end-to-end by Dev.</li>
+          <li><strong>NumPy + PyTorch (CPU)</strong> — standard tooling, less hand-rolled code; but a ~2 GB dependency for two tiny MLPs, framework-level nondeterminism to fight (threaded kernels, versioned numerics), and a weaker NF-3 story.</li>
+          <li><strong>Stdlib only</strong> — maximum purity; but slow, unreadable matrix code, and Matplotlib is required for charts anyway, so the purity is spoiled regardless.</li>
+        </ol>
+
+        <h4>Decision</h4>
+        <p><strong>Decision:</strong> Python 3.12, with NumPy as the only numerical dependency, Matplotlib as the only charting dependency, pytest as the only test dependency. The two learned models (MU-5) are hand-rolled NumPy MLPs — no deep-learning framework.</p>
+        <p><strong>Decision rationale:</strong> Option 1. At this problem size a framework buys nothing and costs determinism. Writing backprop by hand is a feature for this project: the judge's subject matter is <em>trust in learned models</em>, and a reader can verify every line of what was learned.</p>
+
+        <h4>Consequences</h4>
+        <p>We own the correctness of the MLP implementation (mitigated: gradient-check test against finite differences, part of the models spec). Exact package versions must be pinned (see Dependency Budget). No GPU path exists, which NF-2 makes irrelevant.</p>
+      </div>
+    </details>
+
+    <details class="adr" id="adr-002">
+      <summary>
+        <span class="adr-id">ADR-002</span>
+        <span class="adr-title">Determinism strategy</span>
+        <span class="adr-status">Accepted</span>
+      </summary>
+      <div class="adr-body">
+        <h4>Context</h4>
+        <p>NF-1 (byte-identical verdicts), WD-7 (byte-identical trajectories), MU-8 (reproducible training), JU-12 (pure judge). Assumption 5 of the requirements flags this as the assumption most likely to bite. [Requirement: NF-1, WD-7, MU-8, JU-12] [Test: TC-NF1-01, TC-NF1-02, TC-WD7-01, TC-WD7-02, TC-MU8-01, TC-JU12-01]</p>
+
+        <h4>Options Considered</h4>
+        <p>(a) tolerance-based comparison instead of byte identity — rejected: NF-1 explicitly demands byte identity, and tolerances rot; (b) hash-based comparison of floats at reduced precision — rejected for the same reason; (c) the four rules below — accepted.</p>
+
+        <h4>Decision</h4>
+        <p><strong>Decision:</strong> Determinism is achieved by four enforced rules: (1) single-threaded execution, (2) one seeded generator per component with explicit seed plumbing, (3) no wall-clock, filesystem, or environment reads inside any computation path, (4) canonical serialization for every artefact that NF-1 compares.</p>
+        <p><strong>The four rules, precisely:</strong></p>
+        <ol>
+          <li><strong>Single-threaded.</strong> The entry point sets <code>OMP_NUM_THREADS=1</code>, <code>OPENBLAS_NUM_THREADS=1</code>, <code>MKL_NUM_THREADS=1</code> before importing NumPy, and the test suite asserts NumPy reports single-threaded configuration. Unordered parallel reduction is the canonical source of run-to-run float drift (Goldberg: non-associativity); we remove it entirely. NF-2's minutes-scale budget survives this — the workloads are small.</li>
+          <li><strong>Seeding.</strong> All randomness flows from <code>numpy.random.Generator(numpy.random.PCG64(seed))</code> instances created at the orchestration layer and passed down explicitly. No module creates its own generator from entropy; no code calls the legacy global <code>numpy.random.*</code> functions. Component seeds are derived from one run-level seed via <code>PCG64</code> jumped/spawned streams so adding a component never shifts another component's stream.</li>
+          <li><strong>No ambient inputs.</strong> Nothing in worlds, models, or judge reads the clock, the filesystem, environment variables, or network. The judge specifically is a pure function (JU-12): its entire call graph takes arguments and returns values. File I/O happens only in the orchestration and reporting layers, at the edges.</li>
+          <li><strong>Canonical serialization.</strong> One shared serializer produces every machine-readable artefact: JSON with sorted keys, UTF-8, <code>\n</code> newlines, no trailing whitespace, floats rendered with Python's <code>repr</code> (shortest round-trip representation — bit-exact by construction), arrays as nested lists, no timestamps or hostnames anywhere in the payload. NF-1's ten-run byte comparison (TC-NF1-01) compares these bytes.</li>
+        </ol>
+
+        <h4>Consequences</h4>
+        <p>Every function that needs randomness takes a <code>Generator</code> parameter (visible in every signature — this is a feature, not noise). Cross-<em>platform</em> identity (e.g. x86 vs ARM) is explicitly out of scope, matching NF-1's "machines of the same platform" wording; the verdict record states the platform.</p>
+      </div>
+    </details>
+
+    <details class="adr" id="adr-003">
+      <summary>
+        <span class="adr-id">ADR-003</span>
+        <span class="adr-title">Project structure: four packages plus a harness, judge imports nothing</span>
+        <span class="adr-status">Accepted</span>
+      </summary>
+      <div class="adr-body">
+        <h4>Context</h4>
+        <p>NF-6 (separable layers, judge imports nothing from the others), JU-12 (pure judge), MU-9 (new model touches nothing but its own file), JU-1 (judge input structurally cannot carry identity). [Requirement: NF-6, JU-12, MU-9, JU-1] [Test: TC-NF6-01, TC-JU1-01, TC-MU9-01]</p>
+
+        <h4>Options Considered</h4>
+        <p><strong>Layout:</strong></p>
+        <pre style="background: #f0f0e8; padding: 1rem; border-radius: 2px; overflow-x: auto; font-family: Menlo, Consolas, Monaco, monospace; font-size: 0.85rem;">wmj/
+  worlds/        # Domain 1: LV + pendulum, integrator, divergence, regions, tasks
+  models/        # Domain 2: baselines, fixtures, two unrigged models, training
+  judge/         # Domain 3: pure functions state → verdict; imports stdlib + numpy ONLY
+  reporting/     # Domain 4: charts, captions, verdict file writer
+  harness/       # orchestration: seeds, data flow, pre-registration checks, CLI
+tests/           # mirrors the package layout; plus tests/gates/ for the enforced gates
+prereg/          # committed-before-judging artefacts: recipe, margins, thresholds (MU-6, JU-11)
+out/             # generated: verdicts + charts (gitignored except published results)</pre>
+
+        <h4>Decision</h4>
+        <p><strong>Decision:</strong> A <code>src</code>-layout Python package <code>wmj</code> with five sub-packages: <code>wmj.worlds</code>, <code>wmj.models</code>, <code>wmj.judge</code>, <code>wmj.reporting</code>, <code>wmj.harness</code>. The judge imports only the standard library and NumPy — never the other <code>wmj</code> packages. The harness is the only package that imports everything.</p>
+        <p><strong>How the structure enforces the requirements rather than promising them:</strong></p>
+        <ul>
+          <li><code>tests/gates/test_import_graph.py</code> walks <code>wmj.judge</code>'s AST and fails on any <code>wmj.*</code> import (TC-NF6-01). This is a build gate, not a convention.</li>
+          <li>The judge's input types (defined <em>in the judge package</em>, since it can import nothing) are plain dataclasses of arrays and floats with no name, id, or provenance field — model identity is structurally unrepresentable (TC-JU1-01).</li>
+          <li><code>wmj.models</code> exposes one registry; adding a model is one new file registering itself (TC-MU9-01's zero-diff-outside-own-file check).</li>
+          <li><code>prereg/</code> is where MU-6/JU-11 artefacts live; the harness refuses to judge unrigged models unless the committed <code>prereg/</code> files predate the run (mechanics in the models and judge specs).</li>
+        </ul>
+
+        <h4>Consequences</h4>
+        <p>Data flows one way: harness pulls from worlds and models, hands plain arrays to the judge, hands the verdict to reporting. The judge cannot even <em>name</em> a model. The duplication cost (judge defines its own input dataclasses rather than importing shared types) is the price of NF-6, paid deliberately.</p>
+      </div>
+    </details>
+
+    <h2 id="error-handling">Error-Handling Conventions</h2>
+
+    <p><strong>The rule (McConnell, defensive programming): fail loudly and completely, never partially.</strong> This project's credibility requirements make silent degradation worse than crashing:</p>
+
+    <ol>
+      <li><strong>Refuse, don't improvise.</strong> Missing baselines → the judge raises <code>MissingBaselineError</code>; no verdict is produced (TC-MU2-01). A required verdict field that cannot be computed → the run aborts; no partial record is written (TC-JU9-02). Pre-registration files missing or dated after the run → the harness refuses to judge unrigged models (TC-JU11-02).</li>
+      <li><strong>Typed exceptions, single module per package.</strong> Each package defines its exceptions in one <code>errors.py</code>. Every exception message names what failed, what was expected, and which requirement's gate fired (e.g. <code>"WD-3 gate: model integrator step 0.02 != world step 0.01"</code>).</li>
+      <li><strong>Gates fail the run, not the assertion count.</strong> The enforced gates (integrator match, drift bound, determinism, import graph, prereg timestamps) run both as pytest tests and as startup checks in the harness — a violated gate stops the pipeline before any output is produced.</li>
+      <li><strong>No <code>except: pass</code>, no default fallbacks for configuration.</strong> Absent configuration is an error, per McConnell — a default that masks a missing value would quietly break pre-registration.</li>
+    </ol>
+
+    <h2 id="data-model">Data-Model Overview</h2>
+
+    <p>Full schemas live in the domain specs; the shared shapes every package agrees on are fixed here. All arrays are <code>numpy.float64</code>; all types are frozen dataclasses (Ramalho: value types as dataclasses).</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Shape</th>
+          <th>Owner spec</th>
+          <th>Consumed by</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>State</code></td>
+          <td><code>float64[d]</code> — d=2 (LV: prey, predator), d=4 (pendulum: θ₁, θ₂, ω₁, ω₂)</td>
+          <td>worlds</td>
+          <td>everyone</td>
+        </tr>
+        <tr>
+          <td><code>Action</code></td>
+          <td><code>float64[a]</code> — a=1 both worlds (cull/restock rate; pivot impulse)</td>
+          <td>worlds</td>
+          <td>everyone</td>
+        </tr>
+        <tr>
+          <td><code>Prediction</code></td>
+          <td><code>mean: float64[d]</code>, <code>spread: float64[d]</code> — per-dimension mean and standard deviation (the MU-1 fixed uncertainty format; the ensemble's mapping to this format is pre-registered, see models spec)</td>
+          <td>models</td>
+          <td>judge</td>
+        </tr>
+        <tr>
+          <td><code>JudgeInput</code></td>
+          <td>arrays only: predictions, spreads, outcomes, divergence curve, task tolerances, trial boundaries — defined inside <code>wmj.judge</code>, no identity fields</td>
+          <td>judge</td>
+          <td>judge</td>
+        </tr>
+        <tr>
+          <td><code>Verdict</code></td>
+          <td>the JU-9 record — full schema in the judge spec, serialized canonically per ADR-002</td>
+          <td>judge</td>
+          <td>reporting, harness</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p><strong>The <code>Prediction.spread</code> convention</strong> — one standard deviation per dimension — is the single uncertainty vocabulary of the whole system (MU-1). How a model <em>derives</em> its spread is its own business; what it <em>means</em> is fixed here and never varies (TC-MU1-01, TC-MU1-02). This settles Open Question 4's format half; the ensemble's spread-mapping rule is settled in the models spec.</p>
+
+    <h2 id="dependency-budget">Dependency Budget (settles the NF-3 half of Open Question 5)</h2>
+
+    <p><strong>Runtime dependencies — the complete list (TC-NF3-01's <code>&lt;spec-value&gt;</code>):</strong></p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Package</th>
+          <th>Pinned</th>
+          <th>Why</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>numpy</code></td>
+          <td><code>>=1.26,<2.0</code> — exact version pinned in lockfile</td>
+          <td>all numerics</td>
+        </tr>
+        <tr>
+          <td><code>matplotlib</code></td>
+          <td><code>>=3.8,<4.0</code> — exact version pinned in lockfile</td>
+          <td>the four required charts</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p><strong>Development dependencies:</strong> <code>pytest</code> (test runner). Nothing else — no coverage plugins, no linters as <em>dependencies</em> (contributors may run whatever tools they like; the build depends on none of them).</p>
+
+    <p>The dependency gate (TC-NF3-01) reads <code>pyproject.toml</code> and fails if any name outside <code>{numpy, matplotlib}</code> appears in runtime dependencies. The lockfile (<code>requirements.lock</code>, pip-compiled) pins exact versions and is part of the reproducibility statement: RP-7's single documented command installs from the lockfile.</p>
+
+    <p><strong>In plain words:</strong> two packages may be imported by shipped code, ever. The test suite enforces the list; this table is the list.</p>
+
+    <h2 id="development-conventions">Development Conventions</h2>
+
+    <ul>
+      <li><strong>TDD, strictly (Beck, via test-cases.md):</strong> each build chunk starts from its named TC-IDs; the failing test precedes the code. Tests are co-located per package under <code>tests/</code>, named for behaviour (<code>test_wd3_gate_fails_on_step_size_mismatch</code>, per Metz).</li>
+      <li><strong>Type hints on every public signature</strong> (Ramalho); <code>from __future__ import annotations</code> throughout. No runtime type-checking dependency — hints are documentation and IDE fuel, per NF-3.</li>
+      <li><strong>Plain-English docstrings carry the "In plain words" discipline (NF-5 territory):</strong> every public module and function docstring says what it does in ordinary language. A reader of the source meets the same voice as a reader of the requirements.</li>
+      <li><strong>Naming:</strong> requirement IDs appear in gate-test names and error messages, so a failing check names the requirement it protects.</li>
+      <li><strong>No <code>__init__.py</code> re-export mazes:</strong> import paths mirror the layout; <code>wmj.judge.calibration</code> is where calibration lives.</li>
+      <li><strong>Git hygiene:</strong> <code>out/</code> artefacts are regenerated, never hand-edited; <code>prereg/</code> files are append-only once committed (their history <em>is</em> the pre-registration evidence).</li>
+    </ul>
+
+    <h2 id="traceability">Traceability</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>This section</th>
+          <th>Requirements</th>
+          <th>Test cases</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>ADR-001 stack</td>
+          <td>NF-2, NF-3, MU-5, MU-10</td>
+          <td>TC-NF2-01, TC-NF3-01</td>
+        </tr>
+        <tr>
+          <td>ADR-002 determinism</td>
+          <td>NF-1, WD-7, MU-8, JU-12</td>
+          <td>TC-NF1-01/02, TC-WD7-01/02, TC-MU8-01, TC-JU12-01</td>
+        </tr>
+        <tr>
+          <td>ADR-003 structure</td>
+          <td>NF-6, JU-1, JU-12, MU-9</td>
+          <td>TC-NF6-01, TC-JU1-01, TC-MU9-01</td>
+        </tr>
+        <tr>
+          <td>Error handling</td>
+          <td>MU-2, JU-9, JU-11, NF-5</td>
+          <td>TC-MU2-01, TC-JU9-02, TC-JU11-02</td>
+        </tr>
+        <tr>
+          <td>Data model</td>
+          <td>MU-1, WD-2</td>
+          <td>TC-MU1-01, TC-MU1-02</td>
+        </tr>
+        <tr>
+          <td>Dependency budget</td>
+          <td>NF-3</td>
+          <td>TC-NF3-01</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>Open Questions settled here: <strong>OQ-5 (dependency half)</strong> — the named list is <code>{numpy, matplotlib}</code> + dev <code>pytest</code>. OQ-5's runtime-budget half is settled in the judge spec alongside sample size (OQ-1/OQ-2), as the requirements direct. <strong>OQ-4 (format half)</strong> — per-dimension mean + one standard deviation; the ensemble mapping is settled in the models spec.</p>
+
+    <h2 id="changelog">Changelog</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Version</th>
+          <th>Date</th>
+          <th>Change</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1.0</td>
+          <td>2026-08-25</td>
+          <td>Initial version. Stack decision (ADR-001) made by user; determinism and structure ADRs derived from requirements v1.2.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p class="gvm-attribution">Developed using the Grounded Vibe Methodology</p>
+  </main>
+
+  <script>
+    (function () {
+      const toc = document.getElementById('toc');
+      const headings = document.querySelectorAll('h2[id], h3[id]');
+      const links = [];
+
+      headings.forEach(function (h) {
+        const a = document.createElement('a');
+        a.href = '#' + h.id;
+        a.textContent = h.textContent;
+        if (h.tagName === 'H3') a.classList.add('toc-h3');
+        toc.appendChild(a);
+        links.push({ el: a, target: h });
+      });
+
+      function onScroll() {
+        let current = links[0];
+        for (let i = 0; i < links.length; i++) {
+          if (links[i].target.getBoundingClientRect().top <= 80) current = links[i];
+        }
+        links.forEach(function (l) { l.el.classList.remove('active'); });
+        if (current) {
+          current.el.classList.add('active');
+          const tocEl = document.getElementById('toc');
+          const elTop = current.el.offsetTop - tocEl.offsetTop;
+          const elBot = elTop + current.el.offsetHeight;
+          if (elTop < tocEl.scrollTop || elBot > tocEl.scrollTop + tocEl.clientHeight) {
+            tocEl.scrollTop = elTop - tocEl.clientHeight / 2;
+          }
+        }
+      }
+
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    })();
+  </script>
+</body>
+</html>
