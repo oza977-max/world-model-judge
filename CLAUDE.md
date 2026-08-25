@@ -86,11 +86,24 @@ exist specifically to give that risk a chance to resolve honestly.
 
 ## Method
 
-Built with the Grounded Vibe Methodology (`/gvm-*` skills). Discovery is
-complete: risk assessment → requirements. Next stage is `/gvm-test-cases`,
-which is still writing, not building. Expert panels are scored into
-`gvm-design-system/references/industry/`: `model-risk.md`,
-`forecast-verification.md`, `ai-evaluation.md`, `world-models.md`,
-`predictive-neuroscience.md`. Three of the five were scored in a single pass
-rather than the full two-reviewer cross-check — good enough to ground design
-decisions, not good enough to cite as settled authority.
+Built with the Grounded Vibe Methodology (`/gvm-*` skills, now committed at
+`.claude/skills/` — project-scoped, so any session on this repo has them).
+Discovery is complete: risk assessment → requirements → test cases, all
+approved/written. Next stage is `/gvm-tech-spec`.
+
+**Correction (25 Aug 2026):** this section previously claimed expert panels
+were scored into `gvm-design-system/references/industry/model-risk.md`,
+`forecast-verification.md`, `ai-evaluation.md`, `world-models.md`, and
+`predictive-neuroscience.md`. That was stale. What's actually in the repo
+now, at that path, is GVM's own generic domain-reference library
+(`model-risk.md`, `market-risk.md`, `operational-risk.md`, `credit-risk.md`
+— reusable across any project, not scored for this one specifically). The
+five project-specific files this project's own expert panel was supposedly
+scored into do not exist anywhere found so far. The Expert Panel table in
+`requirements/requirements.md` is real and grounded, but its "single-pass
+scoring" honesty note refers to scoring artefacts that currently cannot be
+located or verified. Whoever picks this up next: either find those five
+files (an earlier session's output that never got committed) or re-run
+`/gvm-experts` to regenerate them properly, with the two-reviewer
+cross-check this time. Until then, treat the honesty note as understating
+the gap, not overstating it.
