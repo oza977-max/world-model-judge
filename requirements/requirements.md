@@ -2,7 +2,7 @@
 
 **A governance harness for learned simulators, at toy scale.**
 
-Version 1.2 · 25 August 2026 · Derived from the essay *Words Are a Menu. The World Is Not.* (draft v2.3)
+Version 1.2 · 25 August 2026 · Derived from the essay *Words Are a Menu. The World Is Not.* (draft v2.4)
 
 > **Change note (v1.2).** Revised after a six-expert GVM review board examined this
 > document alongside the essay. Two critical fixes and roughly twenty important ones
@@ -438,7 +438,7 @@ These describe how the whole system must behave rather than what it must do.
 1. **Public repository from the first commit.** Nothing can be quietly corrected before it is world-readable.
 2. **Solo, unfunded, evenings.** Scope discipline is a delivery control, not a preference.
 3. **Ordinary consumer hardware.** No GPU, no cluster.
-4. **The essay is already published in draft.** The build must make good on what draft v2.3 promised, or the difference must be stated openly.
+4. **The essay is already published in draft.** The build must make good on what draft v2.4 promised, or the difference must be stated openly.
 
 ---
 
