@@ -2,18 +2,18 @@
 
 ## CURRENT STATE
 
-**Phase:** Requirements **approved by the user**. Test cases written and
-independently verified (v1.0, 69 cases across all 45 requirements). The
-verification pass found real defects — a miscounted case total, a
-requirement with a silently-dropped disclosure, an unbuildable case
-referencing an undeclared list, two cases testing the wrong requirement —
-all fixed and re-verified by grep count against the document body, not
-just re-asserted. Ready to hand off to `/gvm-tech-spec`.
-**Code written:** none. Deliberately.
-**Blocked on:** nothing at the requirements/test-case stage. Next gate is
-`/gvm-tech-spec`, which reads the requirements and the test cases together.
-**Do not** write source code or scaffolding until the technical spec exists
-and has cleared design review.
+**Phase:** Technical specification **complete and approved by the user**,
+all seven documents. `/gvm-tech-spec` ran in full: cross-cutting, four
+domain specs (worlds, models, judge, reporting), architecture overview,
+implementation guide — each approved individually via AskUserQuestion
+before the next was written, per gate. Coverage audit ran clean on the
+first pass: all 45 requirements and all 69 test cases referenced in at
+least one spec, zero orphans either direction.
+**Code written:** none. Deliberately. Still true — specs only.
+**Blocked on:** nothing. Next gate is `/gvm-design-review` (recommended,
+not yet run), then `/gvm-build` starting at Phase 1 / P1-C01.
+**Do not** write source code until design review has run, or the user
+explicitly says to skip it and go straight to build.
 
 Last updated 2026-08-25.
 
@@ -29,12 +29,19 @@ Last updated 2026-08-25.
 | `requirements/wordsareamenu.html` | The source essay, now draft v2.7. Also revised post-review: narrowed novelty claim, corrected two factual errors (flight-simulator framing, SR 11-7 currency), added the employer disclaimer and an AI-assistance transparency note. |
 | `risks/risk-assessment.md` | Four product risks, written before requirements. Still references essay draft v2.1 deliberately — the historical record of what it was written against. |
 | `test-cases/test-cases.md` | v1.0. 69 cases, one `TC-{REQ-ID}-{NN}` per requirement minimum, more for credibility-fatal ones. Includes 5 negative/phantom-gate cases (proving WD-3, WD-7, NF-1, JU-9, JU-11's automated checks can actually fail, not just always pass) and 5 property-based cases. Full traceability matrix at the end — zero orphan requirements, zero orphan cases, every count independently grep-verified against the document body. |
+| `specs/cross-cutting.md` (+.html) | v1.0. Stack (pure NumPy, hand-rolled MLPs — user's explicit choice over PyTorch/stdlib-only), the four-rule determinism strategy, five-package structure with the judge importing nothing, error-handling conventions, the two-package dependency budget (`numpy`, `matplotlib`). |
+| `specs/worlds.md` (+.html) | v1.0. LV and double-pendulum constants fully pinned (dt, horizons, scale vectors, regions, actions). Shared fixed-step RK4 with a 1e-6 relative drift bound (ADR-W1). Divergence benchmark: 64 seeded starts, median curve per region (ADR-W3). |
+| `specs/models.md` (+.html) | v1.0. Baselines with honest training-residual spreads. Three one-corruption fixtures. The direct-vs-ensemble unrigged pair (Nix & Weigend / Lakshminarayanan et al., both newly discovered experts) with a pre-registered `sqrt(1+1/K)`-corrected spread mapping and a 0.05 matching margin. Pre-registration enforced by git commit ordering. |
+| `specs/judge.md` (+.html) | v1.0. CRPS as the scoring rule. Settles Open Questions 1/2: **N=200 independent trials, bands green [12,29] / amber [8,11]∪[30,35] / red beyond**, derived from the exact binomial CDF and verified computationally in-session (not eyeballed). Settles OQ-5's runtime half: 600s budget. Full verdict JSON schema. |
+| `specs/reporting.md` (+.html) | v1.0. All four required charts designed down to authored caption templates. Fixture labelling centralised so it survives a screenshot. `wmj run` / `wmj verify` command pair. |
+| `specs/architecture-overview.md` (+.html, with an inline C4 container SVG) | v1.0. Synthesis of all five specs + a Brooks conceptual-integrity review — found and resolved one real tension (NF-1's byte-identity scope vs PNG rendering; resolved by disclosure, no spec change needed). |
+| `specs/implementation-guide.md` (+.html) | v1.0. 6 phases, 23 chunks, P1-C02 satisfies MVP-1 (first user-facing chunk is a runnable skeleton). Full dependency network, critical path, parallel-work sets, and a complete wiring matrix — no empty `Demanded by` cells, no exemptions needed. |
 
 ## What does not exist
 
 No source code. No worlds, no models, no judge, no charts. Nothing has
-been built. This is intentional — build starts only after a technical spec
-exists and clears design review.
+been built. This is intentional — build starts only after design review
+(recommended next step) or explicit user sign-off to skip it.
 
 ---
 
@@ -95,21 +102,15 @@ Full table with reasoning is in `CLAUDE.md`. In short:
 
 ## What comes next
 
-`/gvm-tech-spec` — turning the requirements and the test cases together into
-a buildable contract: per-component sections, chunks that each name the test
-cases they make pass, and resolution of the Open Questions the requirements
-deliberately left for this stage (exception-band derivation, sample size,
-runtime budget, the divergence-curve implementation for each world). Still
-writing, not building.
+`/gvm-design-review` — recommended, not yet run. Then `/gvm-build`, starting
+at Phase 1 / chunk P1-C01 (foundations: scaffold, serializer, seed plumbing)
+followed immediately by P1-C02, the walking-skeleton MVP slice (one world,
+two baselines, the skill score, one deterministic serialized output —
+already scoped in the implementation guide as satisfying MVP-1).
 
-After that: `/gvm-design-review` (blocking, before any code), then build,
-starting with a walking skeleton — one world, one baseline, the judge, one
-chart, wired end to end — before either second world or second model exists.
-
-Note: no `/gvm-tech-spec` skill is actually installed in this session,
-same gap as `/gvm-test-cases` was. Whoever picks this up next should either
-have the GVM skill files available, or do the equivalent work directly
-following the method the requirements and test cases already model.
+The GVM skill files are now committed in this repo's own `.claude/skills/`
+(no longer an external-availability gap — resolved a few sessions back,
+after the earlier note below about a missing `/gvm-tech-spec` install).
 
 ---
 
