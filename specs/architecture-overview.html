@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>World Model Judge — Architecture Overview</title>
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+
+    body {
+      font-family: "ET Book", Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif;
+      color: #111;
+      background: #fffff8;
+      line-height: 1.6;
+      padding: 2rem 1rem 6rem;
+      max-width: 1480px;
+      margin: 0 auto;
+    }
+
+    /* ── Typography ── */
+    h1 {
+      font-size: 2.4rem;
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.4rem;
+      color: #111;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 400;
+      font-style: italic;
+      margin-top: 3rem;
+      margin-bottom: 1rem;
+      color: #111;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 0.3rem;
+    }
+
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-top: 2rem;
+      margin-bottom: 0.6rem;
+      color: #333;
+    }
+
+    h4 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-top: 1rem;
+      margin-bottom: 0.5rem;
+      color: #333;
+    }
+
+    p, li {
+      font-size: 1rem;
+      line-height: 1.7;
+      margin-bottom: 0.8rem;
+      max-width: 780px;
+    }
+
+    ul, ol { padding-left: 1.4rem; margin-bottom: 1.2rem; }
+    li { margin-bottom: 0.4rem; }
+
+    .subtitle {
+      font-size: 1.1rem;
+      font-style: italic;
+      color: #555;
+      margin-bottom: 2.5rem;
+      max-width: 780px;
+    }
+
+    .date {
+      font-size: 0.9rem;
+      color: #888;
+      margin-bottom: 0.2rem;
+    }
+
+    /* ── Floating TOC (Left Side) ── */
+    nav.toc {
+      position: fixed;
+      top: 2rem;
+      left: 2rem;
+      width: 220px;
+      max-height: calc(100vh - 4rem);
+      overflow-y: auto;
+      background: #fffff8;
+      border-right: 2px solid #ddd;
+      padding: 1rem 1rem 1rem 0;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      z-index: 100;
+    }
+
+    nav.toc .toc-title {
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #999;
+      margin-bottom: 0.6rem;
+    }
+
+    nav.toc a {
+      color: #555;
+      text-decoration: none;
+      display: block;
+      padding: 0.15rem 0;
+      transition: color 0.15s;
+    }
+
+    nav.toc a:hover { color: #111; }
+    nav.toc a.active { color: #111; font-weight: 600; }
+    nav.toc .toc-h3 { padding-left: 0.8rem; font-size: 0.78rem; color: #888; }
+    nav.toc .toc-h3:hover { color: #555; }
+
+    /* Offset main content for left TOC */
+    main {
+      margin-left: 260px;
+      max-width: 1000px;
+    }
+
+    /* ── Sidenotes (Right Margin) ── */
+    .sidenote {
+      float: right;
+      clear: right;
+      width: 220px;
+      margin-right: -260px;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      color: #666;
+      padding-left: 1rem;
+      border-left: 2px solid #e0e0e0;
+    }
+
+    /* ── Tables (Few's principles) ── */
+    table {
+      border-collapse: collapse;
+      margin: 1.5rem 0 2rem;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      width: auto;
+      min-width: 480px;
+    }
+
+    thead th {
+      text-align: left;
+      font-weight: 600;
+      padding: 0.5rem 1rem 0.5rem 0;
+      border-bottom: 2px solid #333;
+      color: #111;
+    }
+
+    tbody td {
+      padding: 0.45rem 1rem 0.45rem 0;
+      border-bottom: 1px solid #e8e8e8;
+      vertical-align: top;
+    }
+
+    tbody tr:last-child td { border-bottom: 2px solid #333; }
+    tbody tr:nth-child(even) { background: #f9f9f4; }
+
+    caption {
+      font-style: italic;
+      font-size: 0.88rem;
+      color: #666;
+      text-align: left;
+      margin-bottom: 0.4rem;
+    }
+
+    /* ── Inline Code ── */
+    code {
+      font-family: "Menlo", "Consolas", "Monaco", monospace;
+      font-size: 0.88rem;
+      background: #f0f0e8;
+      padding: 0.1rem 0.35rem;
+      border-radius: 2px;
+    }
+
+    /* ── GVM Attribution ── */
+    .gvm-attribution {
+      font-size: 0.75rem;
+      color: #999;
+      font-style: italic;
+      text-align: center;
+      margin-top: 3rem;
+      margin-bottom: 0;
+      max-width: none;
+    }
+
+    /* ── ADR (Architecture Decision Record) ── */
+    details.adr {
+      background: #f7f7f0;
+      border-left: 3px solid #669;
+      padding: 0;
+      margin: 1rem 0 1.2rem;
+      max-width: 860px;
+    }
+
+    details.adr summary {
+      padding: 0.8rem 1rem;
+      cursor: pointer;
+      list-style: none;
+    }
+
+    details.adr summary::-webkit-details-marker { display: none; }
+
+    details.adr summary::before {
+      content: '\25B8 ';
+      font-size: 0.85rem;
+      color: #999;
+    }
+
+    details.adr[open] summary::before {
+      content: '\25BE ';
+    }
+
+    .adr-id {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-right: 0.5rem;
+    }
+
+    .adr-title {
+      font-weight: 600;
+      color: #333;
+    }
+
+    .adr-status {
+      font-size: 0.75rem;
+      color: #999;
+      font-style: italic;
+      margin-left: 0.5rem;
+    }
+
+    .adr-body {
+      padding: 0 1rem 0.8rem;
+      border-top: 1px solid #e0e0e0;
+    }
+
+    .adr-body h4 {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #666;
+      margin: 0.6rem 0 0.3rem;
+    }
+
+    .adr-body p {
+      margin-bottom: 0.5rem;
+    }
+
+    .adr-body ul {
+      margin-bottom: 0.8rem;
+    }
+
+    .adr-body li {
+      margin-bottom: 0.3rem;
+    }
+
+    /* ── Figures ── */
+    figure {
+      margin: 1.5rem 0 2rem;
+      padding: 0;
+      text-align: center;
+    }
+
+    figure svg {
+      max-width: 100%;
+      height: auto;
+      display: inline-block;
+    }
+
+    figcaption {
+      font-size: 0.88rem;
+      color: #666;
+      font-style: italic;
+      margin-top: 0.5rem;
+      text-align: center;
+    }
+
+    /* ── Pre/Code Blocks ── */
+    pre {
+      background: #f0f0e8;
+      padding: 1rem;
+      border-radius: 2px;
+      overflow-x: auto;
+      margin: 1rem 0 1.5rem;
+    }
+
+    pre code {
+      background: none;
+      padding: 0;
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 1200px) {
+      nav.toc {
+        position: static;
+        width: 100%;
+        max-height: none;
+        border-right: none;
+        border-bottom: 1px solid #ddd;
+        padding: 1rem 0;
+        margin-bottom: 2rem;
+      }
+      main { margin-left: 0; }
+      .sidenote {
+        float: none;
+        width: 100%;
+        margin: 0.8rem 0;
+        padding: 0.6rem 0 0.6rem 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="toc" id="toc">
+    <div class="toc-title">Contents</div>
+  </nav>
+
+  <main>
+    <p class="date">25 August 2026</p>
+    <h1>World Model Judge — Architecture Overview</h1>
+    <p class="subtitle">Version 1.0 · 25 August 2026 · Synthesises: cross-cutting v1.0, worlds v1.0, models v1.0, judge v1.0, reporting v1.0</p>
+
+    <p><strong>What this document is.</strong> The one-page-up view: how the pieces fit, the decisions that matter most, and an honest check that the whole thing coheres as one design rather than five documents stapled together.</p>
+
+    <p><strong>In plain words:</strong> if you read only one spec, read this one — it says what the system is, then points into the four domain specs for every detail.</p>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ddd;">
+
+    <h2 id="expert-panel">Expert Panel</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Expert</th>
+          <th>Work</th>
+          <th>Role in This Document</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Simon Brown</td>
+          <td>C4 Model / <em>Software Architecture for Developers</em></td>
+          <td>Context and container views</td>
+        </tr>
+        <tr>
+          <td>Frederick Brooks</td>
+          <td><em>The Mythical Man-Month</em> / <em>The Design of Design</em></td>
+          <td>The conceptual-integrity review (§6)</td>
+        </tr>
+        <tr>
+          <td>Bass, Clements &amp; Kazman</td>
+          <td><em>Software Architecture in Practice</em> (4th ed.)</td>
+          <td>Quality-attribute framing (§4)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="system-context">1. System Context (C4 Level 1)</h2>
+
+    <p><strong>The system:</strong> one Python command-line pipeline (<code>python -m wmj run</code>) that builds two toy worlds, trains and rolls out models against them, judges every model blind, and writes verdicts and charts.</p>
+
+    <p><strong>People:</strong></p>
+    <ul>
+      <li><strong>Dev</strong> (the essay's reader) — opens <code>out/results.html</code>, reads two charts and their captions in ten minutes.</li>
+      <li><strong>Mor</strong> (the validator) — reads the model interface (models spec ADR-M1) and the verdict schema (judge spec §5) to judge adaptability.</li>
+      <li><strong>The sceptic</strong> — clones the public repo, runs <code>python -m wmj verify</code>, and byte-compares the published verdicts.</li>
+    </ul>
+
+    <p><strong>External systems:</strong> exactly one — <strong>the git repository itself</strong>, which serves as the pre-registration ledger: commit timestamps of <code>prereg/</code> files are the mechanical evidence that recipes, margins, and thresholds predate judging (MU-6/JU-11; models spec ADR-M5). There are no other external systems: no network, no services, no data sources beyond the equations.</p>
+
+    <h2 id="container-view">2. Container View (C4 Level 2)</h2>
+
+    <p>One deployable unit; the containers are the five packages plus two artefact stores. Data flows one way:</p>
+
+    <pre><code>[worlds]────trajectories, tasks,──────▶┌─────────┐
+            divergence curves          │ harness │────JudgeInput────▶[judge]
+[models]────predictions + spreads─────▶│  (hub)  │◀───Verdict────────  pure,
+                                       └─────────┘                    no I/O
+[prereg/]──recipe, thresholds,             │
+           git timestamps─────────────────▶│────verdicts + name/fixture map───▶[reporting]───▶[out/]</code></pre>
+
+    <figure>
+      <svg viewBox="0 0 780 370" width="780" height="370" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Container view: worlds, models and prereg feed the harness; the harness hands JudgeInput to the judge; the verdict flows to reporting and out">
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#111"/>
+          </marker>
+        </defs>
+        <style>
+          .box { fill: #f7f7f0; stroke: #111; stroke-width: 2; rx: 4; }
+          .pure { fill: #f7f7f0; stroke: #669; stroke-width: 2; }
+          .store { fill: #ffffff; stroke: #999; stroke-width: 1.5; stroke-dasharray: 4 3; }
+          .name { font: 600 14px system-ui, sans-serif; fill: #111; }
+          .sub { font: 12px system-ui, sans-serif; fill: #999; }
+          .lbl { font: 12px system-ui, sans-serif; fill: #111; }
+          .flow { stroke: #111; stroke-width: 1.5; fill: none; marker-end: url(#arr); }
+        </style>
+
+        <rect class="box" x="20" y="40" width="130" height="60" rx="4"/>
+        <text class="name" x="85" y="65" text-anchor="middle">wmj.worlds</text>
+        <text class="sub" x="85" y="83" text-anchor="middle">LV · pendulum · RK4</text>
+
+        <rect class="box" x="20" y="200" width="130" height="60" rx="4"/>
+        <text class="name" x="85" y="225" text-anchor="middle">wmj.models</text>
+        <text class="sub" x="85" y="243" text-anchor="middle">baselines · fixtures · pair</text>
+
+        <rect class="store" x="20" y="290" width="130" height="44" rx="4"/>
+        <text class="name" x="85" y="309" text-anchor="middle">prereg/</text>
+        <text class="sub" x="85" y="325" text-anchor="middle">committed ledger</text>
+
+        <rect class="box" x="240" y="120" width="150" height="80" rx="4"/>
+        <text class="name" x="315" y="152" text-anchor="middle">wmj.harness</text>
+        <text class="sub" x="315" y="170" text-anchor="middle">seeds · gates · CLI (hub)</text>
+
+        <rect class="pure" x="480" y="60" width="140" height="70" rx="4"/>
+        <text class="name" x="550" y="88" text-anchor="middle">wmj.judge</text>
+        <text class="sub" x="550" y="106" text-anchor="middle">pure · imports nothing</text>
+
+        <rect class="box" x="480" y="210" width="140" height="70" rx="4"/>
+        <text class="name" x="550" y="238" text-anchor="middle">wmj.reporting</text>
+        <text class="sub" x="550" y="256" text-anchor="middle">charts · captions · page</text>
+
+        <rect class="store" x="668" y="226" width="92" height="44" rx="4"/>
+        <text class="name" x="714" y="245" text-anchor="middle">out/</text>
+        <text class="sub" x="714" y="261" text-anchor="middle">generated</text>
+
+        <path class="flow" d="M 150 70 L 260 70 L 260 120"/>
+        <text class="lbl" x="158" y="62">trajectories, curves, tasks</text>
+
+        <path class="flow" d="M 150 230 L 260 230 L 260 200"/>
+        <text class="lbl" x="158" y="224">predictions + spreads</text>
+
+        <path class="flow" d="M 150 312 L 300 312 L 300 200"/>
+        <text class="lbl" x="158" y="306">thresholds, recipe, timestamps</text>
+
+        <path class="flow" d="M 390 140 L 435 140 L 435 95 L 480 95"/>
+        <text class="lbl" x="394" y="156">JudgeInput (arrays only)</text>
+
+        <path class="flow" d="M 550 130 L 550 210"/>
+        <text class="lbl" x="558" y="174">Verdict</text>
+
+        <path class="flow" d="M 390 180 L 455 180 L 455 245 L 480 245"/>
+        <text class="lbl" x="394" y="175">name/fixture map</text>
+
+        <path class="flow" d="M 620 245 L 668 245"/>
+
+        <text class="sub" x="20" y="360">Figure 1 — Container view (C4 L2). Blue border = pure package; dashed = artefact store. The Verdict returns via the harness — the judge itself performs no I/O.</text>
+      </svg>
+    </figure>
+
+    <ul>
+      <li><strong><code>wmj.worlds</code></strong> — LV + pendulum, shared RK4 integrator, divergence benchmark, regions, tasks. Pure functions of (state, action).</li>
+      <li><strong><code>wmj.models</code></strong> — baselines, fixtures, the direct/ensemble pair; registry-only discovery. Sees <code>(state, action)</code> arrays, never world internals.</li>
+      <li><strong><code>wmj.judge</code></strong> — pure functions, arrays in → verdict out; imports stdlib + NumPy only; cannot represent a model's identity in its types.</li>
+      <li><strong><code>wmj.reporting</code></strong> — verdict records in → charts, captions, results page out; computes no metric of its own.</li>
+      <li><strong><code>wmj.harness</code></strong> — the only package that imports everything: seeding, orchestration, gates, prereg checks, CLI.</li>
+      <li><strong><code>prereg/</code></strong> (committed) and <strong><code>out/</code></strong> (generated) — the ledger and the product.</li>
+    </ul>
+
+    <p>The judge's isolation is the load-bearing wall: everything else may know about the judge; the judge knows about nothing (cross-cutting ADR-003, enforced by AST test).</p>
+
+    <h2 id="key-decisions">3. Key Decisions (the ADRs that shape everything)</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>ADR</th>
+          <th>Decision</th>
+          <th>Spec</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>ADR-001</td>
+          <td>Pure NumPy stack; hand-rolled MLPs; deps = {numpy, matplotlib}</td>
+          <td>cross-cutting</td>
+        </tr>
+        <tr>
+          <td>ADR-002</td>
+          <td>Determinism via single-thread + explicit seeds + no ambient inputs + canonical serialization</td>
+          <td>cross-cutting</td>
+        </tr>
+        <tr>
+          <td>ADR-003</td>
+          <td>Five packages; judge imports nothing; blindness by type</td>
+          <td>cross-cutting</td>
+        </tr>
+        <tr>
+          <td>ADR-W1</td>
+          <td>Shared fixed-step RK4; drift measured, bounded at 1e-6 relative</td>
+          <td>worlds</td>
+        </tr>
+        <tr>
+          <td>ADR-W3</td>
+          <td>Divergence benchmark: empirical median curve per region, 64 seeded starts</td>
+          <td>worlds</td>
+        </tr>
+        <tr>
+          <td>ADR-M3</td>
+          <td>Same network twice: direct variance head vs 5-member ensemble with pre-registered <code>sqrt(1+1/K)</code> spread correction; 0.05 matching margin</td>
+          <td>models</td>
+        </tr>
+        <tr>
+          <td>ADR-M5</td>
+          <td>Pre-registration enforced by git commit ordering</td>
+          <td>models</td>
+        </tr>
+        <tr>
+          <td>ADR-J1</td>
+          <td>CRPS (closed-form Gaussian) as the strictly proper score; skill vs both baselines</td>
+          <td>judge</td>
+        </tr>
+        <tr>
+          <td>ADR-J4</td>
+          <td>N=200 independent trials; exact-binomial bands green [12,29] / amber / red, derived and committed</td>
+          <td>judge</td>
+        </tr>
+        <tr>
+          <td>ADR-J5</td>
+          <td>Per-task climate switch at divergence-exceeds-tolerance; conditioned climatology re-measured from the true trajectory</td>
+          <td>judge</td>
+        </tr>
+        <tr>
+          <td>ADR-R3</td>
+          <td>Captions authored as templates in the spec, not improvised at render time</td>
+          <td>reporting</td>
+        </tr>
+        <tr>
+          <td>ADR-R5</td>
+          <td><code>wmj run</code> / <code>wmj verify</code> command pair; byte-identity scoped to verdicts + manifest</td>
+          <td>reporting</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="quality-attributes">4. Quality Attributes (how the ASRs are answered)</h2>
+
+    <ul>
+      <li><strong>Reproducibility (NF-1, WD-7, MU-8):</strong> the four ADR-002 rules + the ten-run byte gate + <code>wmj verify</code>. Platform-scoped, stated in the manifest.</li>
+      <li><strong>Credibility (NF-4, NF-5, MU-4, JU-10):</strong> fixture labels burned into images; limitations as fixed constants in the judge; the forbidden-terms scan; the agreement-case caption that declines to manufacture a punchline.</li>
+      <li><strong>Separability (NF-6, JU-12, JU-1):</strong> enforced by import-graph AST test, purity-under-blocked-environment test, and identity-free types.</li>
+      <li><strong>Adaptability (MU-9):</strong> registry + one-interface rule; the zero-diff-outside-own-file test is the contract Mor checks.</li>
+      <li><strong>Performance (NF-2):</strong> 600-second budget with envelope math (judge spec ADR-J6); single-threaded by design and still two orders of magnitude inside budget.</li>
+      <li><strong>Comprehensibility (RP-5, NF-5):</strong> captions specified as content; plain-words docstrings; the ten-minute reader is a named quality attribute, not a hope.</li>
+    </ul>
+
+    <h2 id="domain-spec-index">5. Domain Spec Index</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Spec</th>
+          <th>Covers</th>
+          <th>In one line</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>cross-cutting.md</code></td>
+          <td>stack, determinism, structure, errors, deps</td>
+          <td>The rulebook: NumPy-only, four determinism rules, judge-imports-nothing.</td>
+        </tr>
+        <tr>
+          <td><code>worlds.md</code></td>
+          <td>WD-1..8</td>
+          <td>Two pinned worlds, one integrator, measured divergence, declared regions and tasks.</td>
+        </tr>
+        <tr>
+          <td><code>models.md</code></td>
+          <td>MU-1..10</td>
+          <td>Baselines with honest spreads, three one-corruption fixtures, the direct-vs-ensemble experiment, prereg mechanics.</td>
+        </tr>
+        <tr>
+          <td><code>judge.md</code></td>
+          <td>JU-1..13</td>
+          <td>The arithmetic of the verdict: CRPS, coverage, sharpness, derived bands, climate switch, trust horizons, full schema.</td>
+        </tr>
+        <tr>
+          <td><code>reporting.md</code></td>
+          <td>RP-1..8</td>
+          <td>Four charts with authored captions, fixture marking, machine-readable verdicts, one-command reproduction.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="conceptual-integrity">6. Conceptual Integrity Review (Brooks)</h2>
+
+    <p>Does it cohere as one design? The checks, run across all five specs:</p>
+
+    <ul>
+      <li><strong>One distance, everywhere.</strong> The normalised RMS distance defined in worlds ADR-W3 is the divergence measure, the judge's error metric, the tolerance unit, and the chart axis. No second metric exists anywhere. ✓</li>
+      <li><strong>One uncertainty vocabulary.</strong> Per-dimension mean + one standard deviation (MU-1), from the baselines to the fixtures to both unrigged models to every judge computation. ✓</li>
+      <li><strong>One serializer.</strong> Every byte-compared artefact goes through the cross-cutting canonical serializer; reporting adds none of its own. ✓</li>
+      <li><strong>One refusal discipline.</strong> Missing baseline, missing verdict field, prereg violation, gate failure — all stop the run before output exists; nothing degrades silently. ✓</li>
+      <li><strong>One pre-registration mechanism.</strong> MU-6 and JU-11 share the same git-timestamp machinery rather than two bespoke checks. ✓</li>
+      <li><strong>Tension found and resolved during synthesis:</strong> cross-cutting ADR-002 said canonical serialization covers "every artefact NF-1 compares"; reporting ADR-R5 scopes byte-identity to verdicts + manifest, excluding PNG encoding. These are consistent — NF-1's own wording covers <em>verdicts</em> — but the exclusion is now stated openly in the reporting spec and the README obligation, rather than discovered by a sceptic. Resolution: reporting's scoping stands; no spec change needed beyond the disclosure it already carries.</li>
+      <li><strong>Residual asymmetry, accepted:</strong> the judge defines its own input dataclasses instead of importing shared types — a deliberate duplication paid for NF-6 (cross-cutting ADR-003 records it). It is the design's one repetition, and it is load-bearing. ✓</li>
+    </ul>
+
+    <p>Verdict: the system reads as one mind's design. The single idea it expresses everywhere: <strong>decide the rules first, in writing, then let arithmetic apply them — and refuse loudly rather than improvise.</strong></p>
+
+    <h2 id="changelog">Changelog</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Version</th>
+          <th>Date</th>
+          <th>Change</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1.0</td>
+          <td>2026-08-25</td>
+          <td>Initial version, synthesised after all four domain specs were individually approved.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p class="gvm-attribution">Developed using the Grounded Vibe Methodology</p>
+  </main>
+
+  <script>
+    (function () {
+      const toc = document.getElementById('toc');
+      const headings = document.querySelectorAll('h2[id], h3[id]');
+      const links = [];
+
+      headings.forEach(function (h) {
+        const a = document.createElement('a');
+        a.href = '#' + h.id;
+        a.textContent = h.textContent;
+        if (h.tagName === 'H3') a.classList.add('toc-h3');
+        toc.appendChild(a);
+        links.push({ el: a, target: h });
+      });
+
+      function onScroll() {
+        let current = links[0];
+        for (let i = 0; i < links.length; i++) {
+          if (links[i].target.getBoundingClientRect().top <= 80) current = links[i];
+        }
+        links.forEach(function (l) { l.el.classList.remove('active'); });
+        if (current) {
+          current.el.classList.add('active');
+          const tocEl = document.getElementById('toc');
+          const elTop = current.el.offsetTop - tocEl.offsetTop;
+          const elBot = elTop + current.el.offsetHeight;
+          if (elTop < tocEl.scrollTop || elBot > tocEl.scrollTop + tocEl.clientHeight) {
+            tocEl.scrollTop = elTop - tocEl.clientHeight / 2;
+          }
+        }
+      }
+
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    })();
+  </script>
+</body>
+</html>
