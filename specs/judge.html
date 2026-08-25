@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>World Model Judge — Judge Specification</title>
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+
+    body {
+      font-family: "ET Book", Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif;
+      color: #111;
+      background: #fffff8;
+      line-height: 1.6;
+      padding: 2rem 1rem 6rem;
+      max-width: 1480px;
+      margin: 0 auto;
+    }
+
+    /* ── Typography ── */
+    h1 {
+      font-size: 2.4rem;
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.4rem;
+      color: #111;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 400;
+      font-style: italic;
+      margin-top: 3rem;
+      margin-bottom: 1rem;
+      color: #111;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 0.3rem;
+    }
+
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-top: 2rem;
+      margin-bottom: 0.6rem;
+      color: #333;
+    }
+
+    h4 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-top: 1rem;
+      margin-bottom: 0.5rem;
+      color: #333;
+    }
+
+    p, li {
+      font-size: 1rem;
+      line-height: 1.7;
+      margin-bottom: 0.8rem;
+      max-width: 780px;
+    }
+
+    ul, ol { padding-left: 1.4rem; margin-bottom: 1.2rem; }
+    li { margin-bottom: 0.4rem; }
+
+    .subtitle {
+      font-size: 1.1rem;
+      font-style: italic;
+      color: #555;
+      margin-bottom: 2.5rem;
+      max-width: 780px;
+    }
+
+    .date {
+      font-size: 0.9rem;
+      color: #888;
+      margin-bottom: 0.2rem;
+    }
+
+    /* ── Floating TOC (Left Side) ── */
+    nav.toc {
+      position: fixed;
+      top: 2rem;
+      left: 2rem;
+      width: 220px;
+      max-height: calc(100vh - 4rem);
+      overflow-y: auto;
+      background: #fffff8;
+      border-right: 2px solid #ddd;
+      padding: 1rem 1rem 1rem 0;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      z-index: 100;
+    }
+
+    nav.toc .toc-title {
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #999;
+      margin-bottom: 0.6rem;
+    }
+
+    nav.toc a {
+      color: #555;
+      text-decoration: none;
+      display: block;
+      padding: 0.15rem 0;
+      transition: color 0.15s;
+    }
+
+    nav.toc a:hover { color: #111; }
+    nav.toc a.active { color: #111; font-weight: 600; }
+    nav.toc .toc-h3 { padding-left: 0.8rem; font-size: 0.78rem; color: #888; }
+    nav.toc .toc-h3:hover { color: #555; }
+
+    /* Offset main content for left TOC */
+    main {
+      margin-left: 260px;
+      max-width: 1000px;
+    }
+
+    /* ── Sidenotes (Right Margin) ── */
+    .sidenote {
+      float: right;
+      clear: right;
+      width: 220px;
+      margin-right: -260px;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      color: #666;
+      padding-left: 1rem;
+      border-left: 2px solid #e0e0e0;
+    }
+
+    /* ── Tables (Few's principles) ── */
+    table {
+      border-collapse: collapse;
+      margin: 1.5rem 0 2rem;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      width: auto;
+      min-width: 480px;
+    }
+
+    thead th {
+      text-align: left;
+      font-weight: 600;
+      padding: 0.5rem 1rem 0.5rem 0;
+      border-bottom: 2px solid #333;
+      color: #111;
+    }
+
+    tbody td {
+      padding: 0.45rem 1rem 0.45rem 0;
+      border-bottom: 1px solid #e8e8e8;
+      vertical-align: top;
+    }
+
+    tbody tr:last-child td { border-bottom: 2px solid #333; }
+    tbody tr:nth-child(even) { background: #f9f9f4; }
+
+    caption {
+      font-style: italic;
+      font-size: 0.88rem;
+      color: #666;
+      text-align: left;
+      margin-bottom: 0.4rem;
+    }
+
+    /* ── Inline Code ── */
+    code {
+      font-family: "Menlo", "Consolas", "Monaco", monospace;
+      font-size: 0.88rem;
+      background: #f0f0e8;
+      padding: 0.1rem 0.35rem;
+      border-radius: 2px;
+    }
+
+    /* ── GVM Attribution ── */
+    .gvm-attribution {
+      font-size: 0.75rem;
+      color: #999;
+      font-style: italic;
+      text-align: center;
+      margin-top: 3rem;
+      margin-bottom: 0;
+      max-width: none;
+    }
+
+    /* ── ADR (Architecture Decision Record) ── */
+    details.adr {
+      background: #f7f7f0;
+      border-left: 3px solid #669;
+      padding: 0;
+      margin: 1rem 0 1.2rem;
+      max-width: 860px;
+    }
+
+    details.adr summary {
+      padding: 0.8rem 1rem;
+      cursor: pointer;
+      list-style: none;
+    }
+
+    details.adr summary::-webkit-details-marker { display: none; }
+
+    details.adr summary::before {
+      content: '\25B8 ';
+      font-size: 0.85rem;
+      color: #999;
+    }
+
+    details.adr[open] summary::before {
+      content: '\25BE ';
+    }
+
+    .adr-id {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-right: 0.5rem;
+    }
+
+    .adr-title {
+      font-weight: 600;
+      color: #333;
+    }
+
+    .adr-status {
+      font-size: 0.75rem;
+      color: #999;
+      font-style: italic;
+      margin-left: 0.5rem;
+    }
+
+    .adr-body {
+      padding: 0 1rem 0.8rem;
+      border-top: 1px solid #e0e0e0;
+    }
+
+    .adr-body h4 {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #666;
+      margin: 0.6rem 0 0.3rem;
+    }
+
+    .adr-body p {
+      margin-bottom: 0.5rem;
+    }
+
+    .adr-body ul {
+      margin-bottom: 0.8rem;
+    }
+
+    .adr-body li {
+      margin-bottom: 0.3rem;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 1200px) {
+      nav.toc {
+        position: static;
+        width: 100%;
+        max-height: none;
+        border-right: none;
+        border-bottom: 1px solid #ddd;
+        padding: 1rem 0;
+        margin-bottom: 2rem;
+      }
+      main { margin-left: 0; }
+      .sidenote {
+        float: none;
+        width: 100%;
+        margin: 0.8rem 0;
+        padding: 0.6rem 0 0.6rem 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="toc" id="toc">
+    <div class="toc-title">Contents</div>
+  </nav>
+
+  <main>
+    <p class="date">25 August 2026</p>
+    <h1>World Model Judge — Judge Specification</h1>
+    <p class="subtitle">Version 1.0 · 25 August 2026 · Domain 3 of Requirements v1.2 · References: cross-cutting spec v1.0, worlds spec v1.0, models spec v1.0</p>
+
+    <p><strong>What this document is.</strong> The design of the product itself: every metric the judge computes, precisely enough to build from — the skill score, the calibration diagnostic, the scoring rule, sharpness, the climatology switch, the trust horizon, and the exception bands. This spec settles Open Questions 1 and 2 (bands and sample size, derived together) and the runtime half of Open Question 5.</p>
+
+    <p><strong>In plain words:</strong> this is the arithmetic of the verdict. Every number the judge produces is defined here before any model is judged, down to the formula — so when the verdict says "amber", the only remaining question is what the data was, never what the rule was.</p>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ddd;">
+
+    <h2 id="expert-panel">Expert Panel</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Expert</th>
+          <th>Work</th>
+          <th>Role in This Document</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Tilmann Gneiting &amp; Adrian Raftery</td>
+          <td><em>Strictly Proper Scoring Rules</em> (JASA 2007)</td>
+          <td>The CRPS choice (ADR-J1) and its anti-gaming property</td>
+        </tr>
+        <tr>
+          <td>Gneiting, Balabdaoui &amp; Raftery</td>
+          <td><em>Probabilistic Forecasts, Calibration and Sharpness</em> (JRSS-B 2007)</td>
+          <td>Calibration and sharpness as distinct, jointly required checks (ADR-J2, ADR-J3)</td>
+        </tr>
+        <tr>
+          <td>Allan Murphy</td>
+          <td><em>What Is a Good Forecast?</em> (1993)</td>
+          <td>Skill-score form: always relative to a reference</td>
+        </tr>
+        <tr>
+          <td>A. Philip Dawid</td>
+          <td>The prequential principle (1984)</td>
+          <td>The judge's input contract: predictions and outcomes only</td>
+        </tr>
+        <tr>
+          <td>Edward Lorenz</td>
+          <td><em>Deterministic Nonperiodic Flow</em> (1963)</td>
+          <td>The divergence-relative grading and the JU-6 switch</td>
+        </tr>
+        <tr>
+          <td>Jolliffe &amp; Stephenson</td>
+          <td><em>Forecast Verification</em> (2nd ed.)</td>
+          <td>Independent-trials discipline in exception counting</td>
+        </tr>
+        <tr>
+          <td>Federal Reserve / OCC</td>
+          <td><em>SR 11-7</em> (2011)</td>
+          <td>The band structure: exceptions counted against ex-ante thresholds (public, generic description only — NF-4)</td>
+        </tr>
+        <tr>
+          <td>Michael Keeling</td>
+          <td><em>Design It!</em></td>
+          <td>ADR format</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ddd;">
+
+    <h2 id="purpose">1. Purpose</h2>
+
+    <p>Covers requirements <strong>JU-1 through JU-13</strong>. The judge package (<code>wmj.judge</code>) is a set of pure functions (JU-12) over plain arrays (JU-1) producing one structured verdict (JU-9) with a limitations statement (JU-10), computed against thresholds fixed in advance (JU-11), containing no learned component (JU-13, Won't).</p>
+
+    <h2 id="architecturally-significant-requirements">2. Architecturally Significant Requirements</h2>
+
+    <ul>
+      <li><strong>JU-12 + NF-6</strong>: the judge is a leaf package — pure functions, no I/O, imports stdlib + NumPy only. Everything it needs arrives as arguments; everything it produces returns as values.</li>
+      <li><strong>JU-1</strong>: the input type is defined <em>inside</em> the judge package and has no field that could carry identity — blindness by construction, not by discipline.</li>
+      <li><strong>JU-11 + OQ-1/OQ-2</strong>: bands must be <em>derived</em> from a declared test and sample size. This spec fixes the derivation; the resulting integers are computed once and committed in <code>prereg/thresholds.json</code> (models spec ADR-M5 mechanics).</li>
+      <li><strong>JU-9</strong>: the verdict record is the reporting layer's entire input — its schema is the project's most important API boundary contract (§5).</li>
+    </ul>
+
+    <h2 id="design-decisions">3. Design Decisions</h2>
+
+    <details class="adr" id="adr-j1">
+      <summary>
+        <span class="adr-id">ADR-J1</span>
+        <span class="adr-title">Scoring rule: CRPS, closed-form Gaussian, skill relative to baselines</span>
+        <span class="adr-status">Accepted</span>
+      </summary>
+      <div class="adr-body">
+        <h4>Context</h4>
+        <p>JU-4(b) requires a strictly proper scoring rule so misstated confidence cannot improve the summary score. JU-2 requires accuracy always reported as skill relative to both baselines. [Requirement: JU-2, JU-4(b)] [Test: TC-JU2-01, TC-JU4-02]</p>
+
+        <h4>Options Considered</h4>
+        <ol>
+          <li><strong>CRPS (Continuous Ranked Probability Score)</strong> — strictly proper for distributions with finite first moment; closed form for Gaussians: <code>CRPS(μ,σ;y) = σ·[z(2Φ(z)−1) + 2φ(z) − 1/√π]</code>, z=(y−μ)/σ. In the units of the state (we use normalised units), robust to outliers, degrades gracefully as σ→0.</li>
+          <li><strong>Logarithmic score (Gaussian NLL)</strong> — strictly proper; but unbounded penalties explode on a single bad out-of-region prediction with small σ, letting one step dominate a summary — bad fit for a toy sample size.</li>
+          <li><strong>Interval/Winkler score</strong> — proper for a single interval level, narrower in what it validates; retained implicitly via the calibration diagnostic instead.</li>
+        </ol>
+
+        <h4>Decision</h4>
+        <p><strong>Decision:</strong> CRPS (option 1), computed per dimension on normalised state (worlds-spec scale vectors), averaged over dimensions; Φ and φ implemented in-house from <code>math.erf</code> (stdlib) — no SciPy (NF-3).</p>
+        <p><strong>Skill form (Murphy, JU-2):</strong> <code>skill = 1 − CRPS_model / CRPS_baseline</code>, reported against persistence and linear separately, per task, per region, at one step. No absolute error is ever emitted without its skill counterpart (TC-JU2-01); the strictly-proper property is verified by TC-JU4-02's misstatement test.</p>
+      </div>
+    </details>
+
+    <details class="adr" id="adr-j2">
+      <summary>
+        <span class="adr-id">ADR-J2</span>
+        <span class="adr-title">Calibration diagnostic: central-interval coverage at four declared levels</span>
+        <span class="adr-status">Accepted</span>
+      </summary>
+      <div class="adr-body">
+        <h4>Context</h4>
+        <p>[Requirement: JU-4(a)] [Test: TC-JU4-01]</p>
+
+        <h4>Decision</h4>
+        <p><strong>Decision:</strong> Predictions are Gaussian per dimension (MU-1 mean/spread). The diagnostic computes observed coverage of central intervals at levels <strong>{50%, 80%, 90%, 95%}</strong>: for level p, the interval is μ ± z_(p)·σ per dimension; an outcome "covers" if <em>all</em> dimensions fall inside (the joint event is what a user of the prediction experiences; per-dimension coverage is also recorded for diagnosis). Coverage is computed separately in-region and out-of-region (WD-5 labels), over the independent-trial set only (§ADR-J4 sampling). The diagnostic and the ADR-J1 summary are distinct fields in the verdict and never combined (JU-4's "never conflate", TC-JU4-01).</p>
+      </div>
+    </details>
+
+    <details class="adr" id="adr-j3">
+      <summary>
+        <span class="adr-id">ADR-J3</span>
+        <span class="adr-title">Sharpness: mean 90% interval width, reported beside calibration</span>
+        <span class="adr-status">Accepted</span>
+      </summary>
+      <div class="adr-body">
+        <h4>Context</h4>
+        <p>[Requirement: JU-5] [Test: TC-JU5-01, TC-JU5-02]</p>
+
+        <h4>Decision</h4>
+        <p><strong>Decision:</strong> Sharpness = mean over trials and dimensions of the stated 90% central-interval width (2·z₀.₉₀·σ), in normalised units, per region. Smaller is sharper; it is monotone in stated σ by construction (TC-JU5-02's property). Reported in the same verdict block as calibration so neither is readable without the other (GBR: maximise sharpness subject to calibration).</p>
+      </div>
+    </details>
+
+    <details class="adr" id="adr-j4">
+      <summary>
+        <span class="adr-id">ADR-J4</span>
+        <span class="adr-title">Exception counting and bands: binomial acceptance regions at N = 200 (settles OQ-1 and OQ-2)</span>
+        <span class="adr-status">Accepted</span>
+      </summary>
+      <div class="adr-body">
+        <h4>Context</h4>
+        <p>JU-8 demands exceptions counted over statistically independent trials, compared to the model's implied rate with a declared test at a declared sample size, against bands fixed in advance with declared false-alarm probabilities. Open Questions 1 and 2 defer the numbers to this spec. [Requirement: JU-8, JU-11] [Test: TC-JU8-01, TC-JU8-02, TC-JU8-03]</p>
+
+        <h4>The Declared Design</h4>
+        <ul>
+          <li><strong>Independent trials: N = 200</strong> per (model, world, region). Each trial is a rollout from its own evaluation starting condition (disjoint from training and from each other — models spec MU-7 mechanics) with its own seeded action sequence.</li>
+          <li><strong>Exception definition:</strong> at each <strong>pre-declared horizon step h ∈ {1, h_task}</strong> (h_task = the task's JU-6 switch step, per task), the trial's outcome at step h either falls inside the model's stated 90% central interval (all dimensions, ADR-J2 joint convention) or is an exception. One observation per trial per horizon — never pooled within a rollout (TC-JU8-01 rejects correlated pooling by construction: the input carries trial boundaries, and the counter consumes one designated step per trial).</li>
+          <li><strong>The test:</strong> exact two-sided binomial test against p = 0.10 at n = 200. Expected exceptions: 20.</li>
+          <li><strong>Bands, derived (not chosen by eye — JU-11):</strong>
+            <ul>
+              <li><strong>Green</strong> — count inside the central 95% binomial acceptance region for Bin(200, 0.10): <strong>[12, 29]</strong>.</li>
+              <li><strong>Amber</strong> — outside green but inside the central 99.9% region: <strong>[8, 11] or [30, 35]</strong>.</li>
+              <li><strong>Red</strong> — <strong>≤ 7 or ≥ 36</strong>.</li>
+              <li>False-alarm probability for a perfectly calibrated model, from the exact binomial CDF: <strong>3.3%</strong> of landing outside green (declared bound ≤ 5%), <strong>0.087%</strong> outside amber (declared bound ≤ 0.1%) — declared per band, per JU-8. The integer boundaries above are computed from the exact binomial CDF by a build-time derivation script whose output is committed to <code>prereg/thresholds.json</code>; the committed file is what the judge reads (via its arguments), and TC-JU8-02 checks a known-calibrated fixture lands green at the declared rate.</li>
+              <li><strong>Low-side counts are flagged, not rewarded:</strong> a green-or-better count with bottom-decile sharpness triggers the JU-5 cross-flag (TC-JU8-03) — too few misses plus wide intervals is hedging, and the verdict says so.</li>
+            </ul>
+          </li>
+        </ul>
+
+        <h4>Why N=200</h4>
+        <p>At p=0.10 the green region [12,28] distinguishes a true 90% model from a fixture at 70% true coverage (expected 60 exceptions — deep red) and from a padded 99% model (expected 2 — red on the low side) with power ≈ 1; it is the smallest round sample where the amber band is non-degenerate at both ends, and it fits the NF-2 budget with two orders of magnitude to spare (§ADR-J6). Assumption 2 of the requirements (independent trials shrink the usable sample) is answered by construction: the 200 are independent starts, not steps.</p>
+      </div>
+    </details>
+
+    <details class="adr" id="adr-j5">
+      <summary>
+        <span class="adr-id">ADR-J5</span>
+        <span class="adr-title">The JU-6 switch and conditioned climatology</span>
+        <span class="adr-status">Accepted</span>
+      </summary>
+      <div class="adr-body">
+        <h4>Context</h4>
+        <p>[Requirement: JU-6, JU-3, JU-7] [Test: TC-JU6-01, TC-JU6-02, TC-JU3-01, TC-JU7-01, TC-JU7-02]</p>
+
+        <h4>Decision</h4>
+        <ul>
+          <li><strong>Switch step per task:</strong> the first step where the world's own divergence curve (WD-4, the trial's region's curve) exceeds the task tolerance τ. Before it: trajectory grading (normalised error vs the divergence reference, JU-3). At and after it: statistical grading. The verdict records the switch step per task (TC-JU6-01).</li>
+          <li><strong>Conditioned climatology:</strong> the reference statistics (per-dimension mean and standard deviation of state) of the true world <em>restricted to the invariant's value</em> — computed by binning long true reference runs (harness-generated artefact, part of the benchmark data) by conserved-quantity value into <strong>16 bins</strong> per world, and at each compared step using the bin of the invariant <em>measured from the true trajectory at that step</em> (TC-JU6-02's re-measured-not-frozen check; both action impulses and bounded integrator drift move the bin, per WD-3/JU-6).</li>
+          <li><strong>Statistical agreement score:</strong> past the switch, the model's predicted mean at each compared step is scored against the conditioned climatology as a standardised deviation <code>(pred_mean − clim_mean)/clim_sd</code>, averaged per dimension over the post-switch window; agreement holds when the average |z| ≤ 1. The threshold is part of <code>prereg/thresholds.json</code>.</li>
+          <li><strong>Trust horizon (JU-7):</strong> <code>trust_horizon(model, world, task) = the largest step h ≤ switch_step such that the model's median normalised error across trials at every step ≤ h stays within τ</code>. Always reported as (steps, steps × dt in world time units, fraction of the world's natural cycle for LV / seconds for the pendulum), and always attached to its task name and τ (TC-JU7-01/02). It is capped at the switch step by construction — beyond it, exact-path trust is not a claim anyone can earn (Lorenz).</li>
+        </ul>
+      </div>
+    </details>
+
+    <details class="adr" id="adr-j6">
+      <summary>
+        <span class="adr-id">ADR-J6</span>
+        <span class="adr-title">Runtime budget (settles OQ-5's runtime half)</span>
+        <span class="adr-status">Accepted</span>
+      </summary>
+      <div class="adr-body">
+        <h4>Context</h4>
+        <p>[Requirement: NF-2] [Test: TC-NF2-01]</p>
+
+        <h4>Decision</h4>
+        <p><strong>Decision:</strong> The full result set — benchmarks, training both unrigged models, all rollouts, judging, charts — completes in <strong>under 600 seconds wall-clock on a 4-core consumer laptop CPU</strong> (TC-NF2-01's <code>&lt;spec-value&gt;</code> = 600 s). Envelope: 200 trials × (700 + 5000) steps × 8 models ≈ 9M model-step calls, each a 2×64×64 MLP forward ≈ tens of kFLOPs — well under a minute of compute; training two small MLPs full-batch for a pinned epoch count dominates and is budgeted at ≤ 6 minutes combined. The budget includes headroom ≥ 30% on the reference machine class.</p>
+      </div>
+    </details>
+
+    <h2 id="component-design">4. Component Design</h2>
+
+    <pre><code>wmj/judge/
+  types.py        # JudgeInput, Verdict, Task/ToleranceView — frozen dataclasses, arrays+floats only,
+                  # no name/id/provenance fields anywhere (JU-1; TC-JU1-01)
+  skill.py        # CRPS closed form, skill scores vs both baselines (ADR-J1)
+  calibration.py  # coverage at the four levels, in/out region (ADR-J2)
+  sharpness.py    # interval widths (ADR-J3)
+  exceptions.py   # trial-wise exception counts, binomial band assignment (ADR-J4)
+  climatology.py  # switch step, conditioned climatology agreement (ADR-J5)
+  horizon.py      # trust horizons (ADR-J5)
+  verdict.py      # assembles the JU-9 record; refuses on any missing input (TC-JU9-02)
+  limitations.py  # the seven JU-10 disclosures as fixed text constants</code></pre>
+
+    <p>Every public function: pure, typed, arrays in → values out. The package imports <code>numpy</code>, <code>math</code>, <code>dataclasses</code>, <code>typing</code> — nothing else (TC-NF6-01, TC-JU12-01, TC-JU13-01).</p>
+
+    <p><strong>JudgeInput (complete):</strong> predictions (mean, spread) <code>[n_trials, H, d]</code>, outcomes <code>[n_trials, H, d]</code>, baseline predictions (same shapes, one set per baseline), region labels per trial (+ axis), divergence curves per region <code>[H]</code>, conditioned-climatology table <code>(bin → mean[d], sd[d])</code> + per-step true invariant bins <code>[n_trials, H]</code>, task list (name, kind, τ, horizon), thresholds (bands, agreement threshold, interval levels), world time step dt and natural-cycle length. Nothing else — by type, nothing else <em>can</em> be passed (TC-JU1-01), and label-swap invariance is property-tested (TC-JU1-02).</p>
+
+    <h2 id="api-boundary-contracts">5. API Boundary Contracts — the Verdict record (JU-9)</h2>
+
+    <p>The complete schema reporting consumes; serialized canonically (cross-cutting ADR-002). One verdict per (model, world):</p>
+
+    <pre><code>{
+  "schema": "wmj-verdict/1",
+  "world": "lv",
+  "model_ref": "opaque-index-3",
+  "is_fixture": false,
+  "skill": {"per_task_region": [{"task": "lv-control", "region": "training",
+    "vs_persistence": 0.41, "vs_linear": 0.28, "crps": 0.031}]},
+  "error_vs_horizon": {"steps": [1, 2, "..."], "median_error": ["..."],
+    "divergence_reference": ["..."], "region": "training"},
+  "calibration": {"levels": [0.5, 0.8, 0.9, 0.95],
+    "coverage_in_region": [0.52, 0.79, 0.9, 0.94],
+    "coverage_out_region": [0.44, 0.71, 0.82, 0.88],
+    "per_dimension": "..."},
+  "sharpness": {"mean_width_90_in": 0.18, "mean_width_90_out": 0.21},
+  "exceptions": {"per_task": [{"task": "lv-control", "horizon_step": 1, "n_trials": 200,
+    "expected": 20, "observed": 27, "band": "green",
+    "bands": {"green": [12, 29], "amber": [[8, 11], [30, 35]], "red": "outside"},
+    "low_side_sharpness_flag": false}]},
+  "climatology": {"per_task": [{"task": "lv-planning", "switch_step": 214,
+    "agreement_mean_abs_z": 0.6, "agrees": true}]},
+  "trust_horizons": {"per_task": [{"task": "lv-control", "tolerance": 0.1,
+    "steps": 118, "world_time": 2.36, "natural_units": "0.34 cycles"}]},
+  "not_tested": ["genuine off-model surprises (WD-8)", "closed-loop action selection",
+    "ongoing monitoring", "..."],
+  "limitations": ["&lt;the seven JU-10 disclosures, fixed text&gt;"],
+  "meta": {"seed": 20260825, "platform": "linux-x86_64", "prereg_commit": "&lt;sha&gt;",
+    "thresholds_file": "prereg/thresholds.json"}
+}</code></pre>
+
+    <p><code>model_ref</code> is an opaque index assigned by the harness — the judge never sees a name; the harness's index→name map lets reporting label charts (models spec §5). All six JU-9 field groups are mandatory: <code>verdict.py</code> raises rather than emitting a record with any of them missing or null (TC-JU9-01, TC-JU9-02).</p>
+
+    <h2 id="integration-points">6. Integration Points</h2>
+
+    <ul>
+      <li><strong>← harness:</strong> builds <code>JudgeInput</code> from world artefacts + model rollouts; owns the prereg check (models spec ADR-M5) and passes <code>thresholds</code> as data — the judge never reads files (JU-12).</li>
+      <li><strong>→ reporting:</strong> consumes only <code>Verdict</code> records plus the harness's index→name/fixture map.</li>
+      <li><strong>Bands derivation script</strong> (<code>wmj/harness/derive_thresholds.py</code>): computes the binomial boundaries from (N, p, α-levels) and writes <code>prereg/thresholds.json</code>; run once, committed, never re-run after judging begins (JU-11; TC-JU11-01/02).</li>
+    </ul>
+
+    <h2 id="error-handling-edge-cases">7. Error Handling &amp; Edge Cases</h2>
+
+    <ul>
+      <li>Missing baselines → <code>MissingBaselineError</code>, no verdict (TC-MU2-01). Any uncomputable JU-9 field → abort, no partial record (TC-JU9-02).</li>
+      <li>σ = 0 in a stated spread → <code>ModelContractError</code> upstream (models spec); the judge additionally guards CRPS/coverage against σ ≤ 0 with a hard error, never a clamp.</li>
+      <li>A trial whose true trajectory left the declared task's domain (e.g. LV clamp event) was already aborted upstream (worlds spec §7); the judge asserts input completeness (<code>n_trials</code> consistent across all arrays).</li>
+      <li>Bands file with boundaries inconsistent with the declared (N, p, α) → the harness's certification check fails the run before judging (TC-JU11-02's mechanism).</li>
+    </ul>
+
+    <h2 id="testing-strategy">8. Testing Strategy</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Concern</th>
+          <th>Cases</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Blindness by type + label-swap invariance</td>
+          <td>TC-JU1-01, TC-JU1-02</td>
+        </tr>
+        <tr>
+          <td>Skill-only reporting</td>
+          <td>TC-JU2-01</td>
+        </tr>
+        <tr>
+          <td>Error vs divergence on shared axes</td>
+          <td>TC-JU3-01</td>
+        </tr>
+        <tr>
+          <td>Calibration/summary distinct; anti-gaming property</td>
+          <td>TC-JU4-01, TC-JU4-02</td>
+        </tr>
+        <tr>
+          <td>Sharpness beats hedging; monotone</td>
+          <td>TC-JU5-01, TC-JU5-02</td>
+        </tr>
+        <tr>
+          <td>Switch step + re-measured invariant</td>
+          <td>TC-JU6-01, TC-JU6-02</td>
+        </tr>
+        <tr>
+          <td>Trust horizon always task-attached, dual units</td>
+          <td>TC-JU7-01, TC-JU7-02</td>
+        </tr>
+        <tr>
+          <td>Independent trials only; band correctness; hedging flag</td>
+          <td>TC-JU8-01, TC-JU8-02, TC-JU8-03</td>
+        </tr>
+        <tr>
+          <td>Complete verdict or none</td>
+          <td>TC-JU9-01, TC-JU9-02</td>
+        </tr>
+        <tr>
+          <td>Seven disclosures present; readable</td>
+          <td>TC-JU10-01, TC-JU10-02 (judged)</td>
+        </tr>
+        <tr>
+          <td>Prereg ordering</td>
+          <td>TC-JU11-01, TC-JU11-02</td>
+        </tr>
+        <tr>
+          <td>Purity under blocked environment</td>
+          <td>TC-JU12-01</td>
+        </tr>
+        <tr>
+          <td>No learned component</td>
+          <td>TC-JU13-01</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ddd;">
+
+    <h2 id="changelog">Changelog</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Version</th>
+          <th>Date</th>
+          <th>Change</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1.0</td>
+          <td>2026-08-25</td>
+          <td>Initial version. CRPS chosen (ADR-J1); OQ-1/OQ-2 settled: N=200 independent trials, 90% interval, exact-binomial bands green [12,29] / amber [8,11]∪[30,35] / red beyond, derived by exact binomial CDF (verified in-session) and committed. OQ-5 runtime half settled: 600 s budget.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ddd;">
+
+    <p class="gvm-attribution">Developed using the Grounded Vibe Methodology</p>
+  </main>
+
+  <script>
+    (function () {
+      const toc = document.getElementById('toc');
+      const headings = document.querySelectorAll('h2[id], h3[id]');
+      const links = [];
+
+      headings.forEach(function (h) {
+        const a = document.createElement('a');
+        a.href = '#' + h.id;
+        a.textContent = h.textContent;
+        if (h.tagName === 'H3') a.classList.add('toc-h3');
+        toc.appendChild(a);
+        links.push({ el: a, target: h });
+      });
+
+      function onScroll() {
+        let current = links[0];
+        for (let i = 0; i < links.length; i++) {
+          if (links[i].target.getBoundingClientRect().top <= 80) current = links[i];
+        }
+        links.forEach(function (l) { l.el.classList.remove('active'); });
+        if (current) {
+          current.el.classList.add('active');
+          const tocEl = document.getElementById('toc');
+          const elTop = current.el.offsetTop - tocEl.offsetTop;
+          const elBot = elTop + current.el.offsetHeight;
+          if (elTop < tocEl.scrollTop || elBot > tocEl.scrollTop + tocEl.clientHeight) {
+            tocEl.scrollTop = elTop - tocEl.clientHeight / 2;
+          }
+        }
+      }
+
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    })();
+  </script>
+</body>
+</html>
