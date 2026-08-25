@@ -2,7 +2,7 @@
 
 **A governance harness for learned simulators, at toy scale.**
 
-Version 1.2 · 25 August 2026 · Derived from the essay *Words Are a Menu. The World Is Not.* (draft v2.5)
+Version 1.2 · 25 August 2026 · Derived from the essay *Words Are a Menu. The World Is Not.* (draft v2.6)
 
 > **Change note (v1.2).** Revised after a six-expert GVM review board examined this
 > document alongside the essay. Two critical fixes and roughly twenty important ones
@@ -52,7 +52,7 @@ Now the important part. It is easy to check whether one guess was right. It is m
 
 Banks have asked exactly these questions about their own models for decades, because confident models once lost them enormous amounts of money. They have independent teams who check, they count the times a model was wrong when it claimed to be sure, and they have limits that force action when the count gets too high. Weather forecasters built the measuring techniques for their own forecasts.
 
-Neither discipline has been pointed at *learned, general-purpose, action-conditioned* world models — the kind this project is about. That distinction matters: flight simulators are already certified against a strict standard, and weather-forecasting models already get checked with meteorology's own toolkit, but neither takes an action and predicts a consequence the way this project's judge grades. That narrower gap — not "nobody checks anything, anywhere" — is what this project fills, at the smallest honest scale we could find.
+Neither discipline has been pointed at *learned, general-purpose, action-conditioned* world models — the kind this project is about. That distinction matters: flight simulators take an action and predict a consequence, but they're physics-based, not learned from data; weather-forecasting models are learned, but nothing you do changes the forecast. Neither combines both the way this project's judge grades. That narrower gap — not "nobody checks anything, anywhere" — is what this project fills, at the smallest honest scale we could find.
 
 ---
 
@@ -143,11 +143,11 @@ Having both is what forces the judge to tell apart *the model is wrong* from *th
 >
 > For foxes and rabbits, the lever removes or adds animals. For the pendulum, it's a push at the pivot.
 
-**WD-3 (Must):** Ground truth and every model under test shall be advanced using the same numerical integrator and the same step size, enforced by an automated test rather than by convention.
+**WD-3 (Must):** Ground truth and every model under test shall be advanced using the same numerical integrator and the same step size, enforced by an automated test rather than by convention. The chosen integrator's own drift in each world's conserved quantity (energy for the pendulum, the conserved orbit for foxes-and-rabbits) over the rollout horizons used by JU-6 shall be measured and bounded, enforced by an automated test.
 
-**In plain words:** the true world and the model being tested must use the same maths engine and the same size time-step — and a test has to check it, not a promise.
+**In plain words:** the true world and the model being tested must use the same maths engine and the same size time-step — and a test has to check it, not a promise. The maths engine also has to be checked for its own quiet errors: even a correctly-shared integrator can let a "conserved" quantity like the pendulum's energy drift slightly over a long run, and that drift has to be measured and kept small, not assumed away.
 
-> This is the trap named in the essay. If the two differ, every chart secretly measures the difference between two maths engines instead of the quality of the model. The results still look completely plausible, which is exactly why a written convention isn't enough protection.
+> This is the trap named in the essay. If the two differ, every chart secretly measures the difference between two maths engines instead of the quality of the model. The results still look completely plausible, which is exactly why a written convention isn't enough protection. The same caution extends to the integrator's own numerical drift: an ordinary (non-invariant-preserving) integrator does not exactly conserve energy or the LV orbit, and JU-6's conditioned climatology depends on that invariant being trustworthy.
 
 **WD-4 (Must):** Every world shall report its own divergence benchmark — the growth of separation between two trajectories started a declared small distance apart, measured empirically as a curve against rollout length, for a declared perturbation size, distance measure, and starting region. Neither world has a single constant divergence "rate": Lotka–Volterra's nearby orbits separate roughly linearly in phase rather than exponentially, and the pendulum's separation speed depends on its energy regime, so the benchmark is the measured curve itself, not one number.
 
@@ -281,9 +281,9 @@ The judge takes what a model predicted and what actually happened, and returns a
 
 > Without this the judge would reward cowardice, and the vaguest model would win.
 
-**JU-6 (Must):** Beyond the point where the world's own divergence (WD-4) exceeds the task tolerance, the judge shall stop grading individual trajectories and grade statistical agreement instead, against a third reference — a **conditioned climatology**: the long-run statistics of the world restricted to the same invariant the true trajectory started on (its energy shell for the pendulum, its conserved orbit for foxes-and-rabbits), since neither world has one single long-run "climate" to compare against otherwise. Where an action moves the trajectory to a different invariant mid-rollout, the judge shall condition on the invariant in force at each point compared.
+**JU-6 (Must):** Beyond the point where the world's own divergence (WD-4) exceeds the task tolerance, the judge shall stop grading individual trajectories and grade statistical agreement instead, against a third reference — a **conditioned climatology**: the long-run statistics of the world restricted to the invariant the true discretized trajectory actually holds at each point compared (its energy shell for the pendulum, its conserved orbit for foxes-and-rabbits), tracked from the true trajectory itself rather than assumed constant, since neither world has one single long-run "climate" to compare against otherwise. Where an action, or the integrator's own numerical drift (WD-3), moves the trajectory to a different invariant value mid-rollout, the judge shall condition on the invariant in force at each point compared.
 
-**In plain words:** past the point where nobody could predict the exact path, stop marking the precise numbers and start marking whether the general pattern is right — compared against "what this world usually does starting from roughly here," not some single average for the whole world, because these two worlds don't have just one "usual".
+**In plain words:** past the point where nobody could predict the exact path, stop marking the precise numbers and start marking whether the general pattern is right — compared against "what this world usually does starting from roughly here," not some single average for the whole world, because these two worlds don't have just one "usual". "Roughly here" is re-measured from the real trajectory as it goes, not fixed once at the start, because both a lever-pull and the maths engine's own small errors can quietly shift it.
 
 > This is weather versus climate. Nobody grades a forecast for a specific day nine months out; they check whether the predicted climate is right. The judge must switch the same way — and must say where it switched, and against which "climate", because neither foxes-and-rabbits nor the pendulum settles into one average state the way a weather system does.
 
@@ -438,7 +438,7 @@ These describe how the whole system must behave rather than what it must do.
 1. **Public repository from the first commit.** Nothing can be quietly corrected before it is world-readable.
 2. **Solo, unfunded, evenings.** Scope discipline is a delivery control, not a preference.
 3. **Ordinary consumer hardware.** No GPU, no cluster.
-4. **The essay is already published in draft.** The build must make good on what draft v2.5 promised, or the difference must be stated openly.
+4. **The essay is already published in draft.** The build must make good on what draft v2.6 promised, or the difference must be stated openly.
 
 ---
 
