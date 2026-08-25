@@ -2,7 +2,7 @@
 
 **A governance harness for learned simulators, at toy scale.**
 
-Version 1.2 · 25 August 2026 · Derived from the essay *Words Are a Menu. The World Is Not.* (draft v2.6)
+Version 1.2 · 25 August 2026 · Derived from the essay *Words Are a Menu. The World Is Not.* (draft v2.7)
 
 > **Change note (v1.2).** Revised after a six-expert GVM review board examined this
 > document alongside the essay. Two critical fixes and roughly twenty important ones
@@ -52,7 +52,7 @@ Now the important part. It is easy to check whether one guess was right. It is m
 
 Banks have asked exactly these questions about their own models for decades, because confident models once lost them enormous amounts of money. They have independent teams who check, they count the times a model was wrong when it claimed to be sure, and they have limits that force action when the count gets too high. Weather forecasters built the measuring techniques for their own forecasts.
 
-Neither discipline has been pointed at *learned, general-purpose, action-conditioned* world models — the kind this project is about. That distinction matters: flight simulators take an action and predict a consequence, but they're physics-based, not learned from data; weather-forecasting models are learned, but nothing you do changes the forecast. Neither combines both the way this project's judge grades. That narrower gap — not "nobody checks anything, anywhere" — is what this project fills, at the smallest honest scale we could find.
+Banking's specific mechanism — backtesting with exceptions counted against thresholds fixed in advance, calibration and sharpness scored so a model can't cheat by hedging, reporting that makes it someone's job — has not been pointed at *learned, general-purpose, action-conditioned* world models — the kind this project is about. That distinction matters: flight simulators take an action and predict a consequence, but they're physics-based, not learned from data; weather-forecasting models are learned, but nothing you do changes the forecast; and in 2026 a few researchers have started reaching for the same institutional instinct from a different regulated discipline (aerospace and automotive simulation safety), rather than banking's. That specific gap — not that nobody's had the idea, but that nobody's brought banking's own version of it here — is what this project fills, at the smallest honest scale we could find.
 
 ---
 
@@ -67,7 +67,7 @@ The requirements below are grounded in published work rather than invented. This
 | Alan Cooper | *About Face* (4th ed.) | Deciding who the verdict is written for |
 | Clayton Christensen | *Competing Against Luck* | Framing what job this project is hired to do |
 | Robertson & Robertson | *Mastering the Requirements Process* | Making "it must be reproducible" into something measurable |
-| Federal Reserve / OCC | *SR 11-7* | The governance shape borrowed: outcomes-based backtesting and ex-ante thresholds — not SR 11-7's full independent-review and ongoing-monitoring apparatus, which this project does not attempt (see JU-10) |
+| Federal Reserve / OCC / FDIC | *SR 11-7 (2011), superseded April 2026 by SR 26-2* | The governance shape borrowed: outcomes-based backtesting and ex-ante thresholds — not the full independent-review and ongoing-monitoring apparatus, which this project does not attempt (see JU-10). SR 26-2 itself explicitly excludes generative and agentic AI from scope, calling them too novel to fit the existing frame — supporting evidence for this essay's own gap claim. |
 | Prudential Regulation Authority | *SS1/23* | Stating in advance how much model risk is acceptable, rather than reacting later |
 | Emanuel Derman | *Models.Behaving.Badly* | A model is an analogy, not the truth; the dangerous simplifications are the ones you didn't notice |
 | Riccardo Rebonato | *Plight of the Fortune Tellers* | The objection to our own method: this kind of checking tests the ordinary cases, not the disasters |
@@ -438,7 +438,7 @@ These describe how the whole system must behave rather than what it must do.
 1. **Public repository from the first commit.** Nothing can be quietly corrected before it is world-readable.
 2. **Solo, unfunded, evenings.** Scope discipline is a delivery control, not a preference.
 3. **Ordinary consumer hardware.** No GPU, no cluster.
-4. **The essay is already published in draft.** The build must make good on what draft v2.6 promised, or the difference must be stated openly.
+4. **The essay is already published in draft.** The build must make good on what draft v2.7 promised, or the difference must be stated openly.
 
 ---
 

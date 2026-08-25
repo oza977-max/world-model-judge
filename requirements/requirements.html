@@ -288,7 +288,7 @@ code {
     <p class="date">August 2026</p>
     <h1>World Model Judge</h1>
     <p class="subtitle">A governance harness for learned simulators, at toy scale.</p>
-    <p class="date">Version 1.2 &middot; 25 August 2026 &middot; Derived from the essay <em>Words Are a Menu. The World Is Not.</em> (draft v2.6)</p>
+    <p class="date">Version 1.2 &middot; 25 August 2026 &middot; Derived from the essay <em>Words Are a Menu. The World Is Not.</em> (draft v2.7)</p>
     <p style="font-size:0.92rem;color:#666;font-style:italic;max-width:640px;border-left:3px solid #ccc;padding-left:1rem;"><strong>Change note (v1.2).</strong> Revised after a six-expert GVM review board examined this document alongside the essay. Two critical fixes and roughly twenty important ones were applied: the headline claim (MU-5) now has a measurable fit criterion instead of &ldquo;as closely as practicable&rdquo;; JU-1&rsquo;s &ldquo;independent&rdquo; claim was corrected to &ldquo;blind&rdquo; &mdash; one person builds the models, the judge, and the thresholds, which is not banking independence, and JU-10 now discloses that rather than letting the earlier wording imply more than it delivered; the divergence measure (WD-4), the uncertainty format (MU-1, Open Question 4), and the exception-counting statistics (JU-8) are now specified precisely enough to build from, not merely worded precisely. Three requirements (MU-9, JU-12, NF-6) moved from Should to Must because a Must requirement&rsquo;s own stated reasoning already depended on each of them. No settled scope decision changed.</p>
 
     <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ccc; max-width: 640px;">
@@ -319,7 +319,7 @@ code {
 <li>At what point should you stop believing it — and stop believing it <em>for which purpose</em>?</li>
 </ol>
 <p>Banks have asked exactly these questions about their own models for decades, because confident models once lost them enormous amounts of money. They have independent teams who check, they count the times a model was wrong when it claimed to be sure, and they have limits that force action when the count gets too high. Weather forecasters built the measuring techniques for their own forecasts.</p>
-<p>Neither discipline has been pointed at <em>learned, general-purpose, action-conditioned</em> world models — the kind this project is about. That distinction matters: flight simulators take an action and predict a consequence, but they're physics-based, not learned from data; weather-forecasting models are learned, but nothing you do changes the forecast. Neither combines both the way this project's judge grades. That narrower gap — not "nobody checks anything, anywhere" — is what this project fills, at the smallest honest scale we could find.</p>
+<p>Banking's specific mechanism — backtesting with exceptions counted against thresholds fixed in advance, calibration and sharpness scored so a model can't cheat by hedging, reporting that makes it someone's job — has not been pointed at <em>learned, general-purpose, action-conditioned</em> world models — the kind this project is about. That distinction matters: flight simulators take an action and predict a consequence, but they're physics-based, not learned from data; weather-forecasting models are learned, but nothing you do changes the forecast; and in 2026 a few researchers have started reaching for the same institutional instinct from a different regulated discipline (aerospace and automotive simulation safety), rather than banking's. That specific gap — not that nobody's had the idea, but that nobody's brought banking's own version of it here — is what this project fills, at the smallest honest scale we could find.</p>
 <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ccc; max-width: 640px;">
 <h2 id="expert-panel">Expert Panel</h2>
 <p>The requirements below are grounded in published work rather than invented. This table records whose ideas shaped which parts.</p>
@@ -354,9 +354,9 @@ code {
 <td>Making "it must be reproducible" into something measurable</td>
 </tr>
 <tr>
-<td>Federal Reserve / OCC</td>
-<td><em>SR 11-7</em></td>
-<td>The governance shape borrowed: outcomes-based backtesting and ex-ante thresholds — not SR 11-7's full independent-review and ongoing-monitoring apparatus, which this project does not attempt (see JU-10)</td>
+<td>Federal Reserve / OCC / FDIC</td>
+<td><em>SR 11-7 (2011), superseded April 2026 by SR 26-2</em></td>
+<td>The governance shape borrowed: outcomes-based backtesting and ex-ante thresholds — not the full independent-review and ongoing-monitoring apparatus, which this project does not attempt (see JU-10). SR 26-2 itself explicitly excludes generative and agentic AI from scope, calling them too novel to fit the existing frame — supporting evidence for this essay's own gap claim.</td>
 </tr>
 <tr>
 <td>Prudential Regulation Authority</td>
@@ -777,7 +777,7 @@ code {
 <li><strong>Public repository from the first commit.</strong> Nothing can be quietly corrected before it is world-readable.</li>
 <li><strong>Solo, unfunded, evenings.</strong> Scope discipline is a delivery control, not a preference.</li>
 <li><strong>Ordinary consumer hardware.</strong> No GPU, no cluster.</li>
-<li><strong>The essay is already published in draft.</strong> The build must make good on what draft v2.6 promised, or the difference must be stated openly.</li>
+<li><strong>The essay is already published in draft.</strong> The build must make good on what draft v2.7 promised, or the difference must be stated openly.</li>
 </ol>
 <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ccc; max-width: 640px;">
 <h2 id="out-of-scope">Out of Scope</h2>
