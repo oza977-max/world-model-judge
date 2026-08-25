@@ -189,7 +189,7 @@ Two distinctions carry most of this project's honesty. First, the difference bet
 
 **MU-1 (Must):** All models under test shall implement one interface: given a state and an action, return a predicted next state together with a stated uncertainty in a declared, fixed format — a per-dimension mean and spread, at minimum — recorded before judging (per JU-11) and identical across every model under test, since the state is multi-dimensional (population counts, or joint angles and velocities) and the judge cannot score an uncertainty whose shape changes model to model.
 
-**In plain words:** every model plugs into the same socket, and must say not just what it predicts but how sure it is — and "how sure" has to come in one fixed shape (for example, a number and a plus-or-minus for each part of the state), decided in advance and the same for every model, not invented differently each time.
+**In plain words:** every model plugs into the same socket. Given today's numbers and which lever was pulled, it hands back tomorrow's numbers, plus a range around them — in one fixed shape, decided before any model is built, so every model's "how sure" means the same thing and can be lined up side by side.
 
 > The confidence is not decoration. A model that only ever says "12.4", and never "12.4, give or take 3", cannot be asked the one question this whole project exists to ask. And "give or take 3" only means something if every model gives or takes in the same units, on the same parts of the state — otherwise the judge would be comparing shapes, not confidence.
 
