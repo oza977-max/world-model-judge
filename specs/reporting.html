@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>World Model Judge — Reporting Specification</title>
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+
+    body {
+      font-family: "ET Book", Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif;
+      color: #111;
+      background: #fffff8;
+      line-height: 1.6;
+      padding: 2rem 1rem 6rem;
+      max-width: 1480px;
+      margin: 0 auto;
+    }
+
+    /* ── Typography ── */
+    h1 {
+      font-size: 2.4rem;
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.4rem;
+      color: #111;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 400;
+      font-style: italic;
+      margin-top: 3rem;
+      margin-bottom: 1rem;
+      color: #111;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 0.3rem;
+    }
+
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-top: 2rem;
+      margin-bottom: 0.6rem;
+      color: #333;
+    }
+
+    h4 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-top: 1rem;
+      margin-bottom: 0.5rem;
+      color: #333;
+    }
+
+    p, li {
+      font-size: 1rem;
+      line-height: 1.7;
+      margin-bottom: 0.8rem;
+      max-width: 780px;
+    }
+
+    ul, ol { padding-left: 1.4rem; margin-bottom: 1.2rem; }
+    li { margin-bottom: 0.4rem; }
+
+    .subtitle {
+      font-size: 1.1rem;
+      font-style: italic;
+      color: #555;
+      margin-bottom: 2.5rem;
+      max-width: 780px;
+    }
+
+    .date {
+      font-size: 0.9rem;
+      color: #888;
+      margin-bottom: 0.2rem;
+    }
+
+    /* ── Floating TOC (Left Side) ── */
+    nav.toc {
+      position: fixed;
+      top: 2rem;
+      left: 2rem;
+      width: 220px;
+      max-height: calc(100vh - 4rem);
+      overflow-y: auto;
+      background: #fffff8;
+      border-right: 2px solid #ddd;
+      padding: 1rem 1rem 1rem 0;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      z-index: 100;
+    }
+
+    nav.toc .toc-title {
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #999;
+      margin-bottom: 0.6rem;
+    }
+
+    nav.toc a {
+      color: #555;
+      text-decoration: none;
+      display: block;
+      padding: 0.15rem 0;
+      transition: color 0.15s;
+    }
+
+    nav.toc a:hover { color: #111; }
+    nav.toc a.active { color: #111; font-weight: 600; }
+    nav.toc .toc-h3 { padding-left: 0.8rem; font-size: 0.78rem; color: #888; }
+    nav.toc .toc-h3:hover { color: #555; }
+
+    /* Offset main content for left TOC */
+    main {
+      margin-left: 260px;
+      max-width: 1000px;
+    }
+
+    /* ── Sidenotes (Right Margin) ── */
+    .sidenote {
+      float: right;
+      clear: right;
+      width: 220px;
+      margin-right: -260px;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      color: #666;
+      padding-left: 1rem;
+      border-left: 2px solid #e0e0e0;
+    }
+
+    /* ── Tables (Few's principles) ── */
+    table {
+      border-collapse: collapse;
+      margin: 1.5rem 0 2rem;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      width: auto;
+      min-width: 480px;
+    }
+
+    thead th {
+      text-align: left;
+      font-weight: 600;
+      padding: 0.5rem 1rem 0.5rem 0;
+      border-bottom: 2px solid #333;
+      color: #111;
+    }
+
+    tbody td {
+      padding: 0.45rem 1rem 0.45rem 0;
+      border-bottom: 1px solid #e8e8e8;
+      vertical-align: top;
+    }
+
+    tbody tr:last-child td { border-bottom: 2px solid #333; }
+    tbody tr:nth-child(even) { background: #f9f9f4; }
+
+    caption {
+      font-style: italic;
+      font-size: 0.88rem;
+      color: #666;
+      text-align: left;
+      margin-bottom: 0.4rem;
+    }
+
+    /* ── Inline Code ── */
+    code {
+      font-family: "Menlo", "Consolas", "Monaco", monospace;
+      font-size: 0.88rem;
+      background: #f0f0e8;
+      padding: 0.1rem 0.35rem;
+      border-radius: 2px;
+    }
+
+    /* ── GVM Attribution ── */
+    .gvm-attribution {
+      font-size: 0.75rem;
+      color: #999;
+      font-style: italic;
+      text-align: center;
+      margin-top: 3rem;
+      margin-bottom: 0;
+      max-width: none;
+    }
+
+    /* ── ADR (Architecture Decision Record) ── */
+    details.adr {
+      background: #f7f7f0;
+      border-left: 3px solid #669;
+      padding: 0;
+      margin: 1rem 0 1.2rem;
+      max-width: 860px;
+    }
+
+    details.adr summary {
+      padding: 0.8rem 1rem;
+      cursor: pointer;
+      list-style: none;
+    }
+
+    details.adr summary::-webkit-details-marker { display: none; }
+
+    details.adr summary::before {
+      content: '\25B8 ';
+      font-size: 0.85rem;
+      color: #999;
+    }
+
+    details.adr[open] summary::before {
+      content: '\25BE ';
+    }
+
+    .adr-id {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-right: 0.5rem;
+    }
+
+    .adr-title {
+      font-weight: 600;
+      color: #333;
+    }
+
+    .adr-status {
+      font-size: 0.75rem;
+      color: #999;
+      font-style: italic;
+      margin-left: 0.5rem;
+    }
+
+    .adr-body {
+      padding: 0 1rem 0.8rem;
+      border-top: 1px solid #e0e0e0;
+    }
+
+    .adr-body h4 {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #666;
+      margin: 0.6rem 0 0.3rem;
+    }
+
+    .adr-body p {
+      margin-bottom: 0.5rem;
+    }
+
+    .adr-body ul {
+      margin-bottom: 0.8rem;
+    }
+
+    .adr-body li {
+      margin-bottom: 0.3rem;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 1200px) {
+      nav.toc {
+        position: static;
+        width: 100%;
+        max-height: none;
+        border-right: none;
+        border-bottom: 1px solid #ddd;
+        padding: 1rem 0;
+        margin-bottom: 2rem;
+      }
+      main { margin-left: 0; }
+      .sidenote {
+        float: none;
+        width: 100%;
+        margin: 0.8rem 0;
+        padding: 0.6rem 0 0.6rem 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="toc" id="toc">
+    <div class="toc-title">Contents</div>
+  </nav>
+
+  <main>
+    <p class="date">25 August 2026</p>
+    <h1>World Model Judge — Reporting Specification</h1>
+    <p class="subtitle">Version 1.0 · 25 August 2026 · Domain 4 of Requirements v1.2 · References: cross-cutting spec v1.0, judge spec v1.0 (verdict schema)</p>
+
+    <p><strong>What this document is.</strong> The design of what a reader actually sees: the four required charts and their captions, the comparison table, the fixture labelling, the machine-readable verdict files, and the single command that rebuilds everything.</p>
+
+    <p><strong>In plain words:</strong> the judge's arithmetic is worthless if Dev can't get the point in ten minutes from two charts. This spec designs those charts sentence by sentence — including the captions — and wires the "run one command, get everything" promise.</p>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ddd;">
+
+    <h2 id="expert-panel">Expert Panel</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Expert</th>
+          <th>Work</th>
+          <th>Role in This Document</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Edward Tufte</td>
+          <td><em>The Visual Display of Quantitative Information</em> (2nd ed.)</td>
+          <td>Data-ink ratio, small multiples, no chartjunk</td>
+        </tr>
+        <tr>
+          <td>Stephen Few</td>
+          <td><em>Show Me the Numbers</em> (2nd ed.)</td>
+          <td>Tables where precision matters; comparison as the core task (RP-4)</td>
+        </tr>
+        <tr>
+          <td>Margaret Mitchell et al.</td>
+          <td><em>Model Cards for Model Reporting</em> (2019)</td>
+          <td>The not-tested list rendered as a first-class output, not a footnote</td>
+        </tr>
+        <tr>
+          <td>Federal Reserve / OCC</td>
+          <td><em>SR 11-7</em> (2011, public description)</td>
+          <td>The exception plot's visual grammar a risk reader recognises on sight</td>
+        </tr>
+        <tr>
+          <td>Michael Keeling</td>
+          <td><em>Design It!</em></td>
+          <td>ADR format</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="purpose">1. Purpose</h2>
+
+    <p>Covers requirements <strong>RP-1 through RP-8</strong>. The reporting package (<code>wmj.reporting</code>) consumes <code>Verdict</code> records (judge spec §5) plus the harness's index→name/fixture map, and produces: the four required charts (RP-1..RP-4) with plain-language captions (RP-5), machine-readable verdict files (RP-6), and fixture labels burned into every image (RP-8) — all regenerated by one documented command (RP-7).</p>
+
+    <h2 id="arch-sig-req">2. Architecturally Significant Requirements</h2>
+
+    <ul>
+      <li><strong>RP-7 + NF-1</strong>: chart <em>data</em> must be byte-reproducible; chart <em>images</em> are regenerated deterministically (fixed Matplotlib style, fixed figure sizes, no timestamps) but the byte-identity guarantee (NF-1) attaches to the serialized verdicts, not PNG encoding.</li>
+      <li><strong>RP-8</strong>: fixture labelling must survive screenshots — so it is drawn <em>inside</em> the figure axes, not in surrounding page text.</li>
+      <li><strong>RP-5 + the ten-minute reader</strong>: captions are content, not decoration — they are authored in this spec as templates with slots, so their quality is reviewable now, before any code exists.</li>
+    </ul>
+
+    <h2 id="design-decisions">3. Design Decisions</h2>
+
+    <details class="adr" id="adr-r1">
+      <summary>
+        <span class="adr-id">ADR-R1</span>
+        <span class="adr-title">Chart engine and style: Matplotlib, one shared style module, data-ink discipline</span>
+        <span class="adr-status">Accepted</span>
+      </summary>
+      <div class="adr-body">
+        <h4>Status</h4>
+        <p>Accepted. [Requirement: RP-1..RP-5, NF-3] [Test: TC-RP1-01..TC-RP5-01]</p>
+
+        <h4>Decision</h4>
+        <p>All charts through <code>wmj.reporting.style</code>: a single Matplotlib style (white background, no chart borders beyond the two axes, light dotted gridlines only where values are read off, colour-blind-safe palette, direct line labelling instead of floating legends where possible — Tufte's data-ink rule). Figure size 8×5 in at 150 dpi PNG. SVG duplicates are also written (charts as text — diff-able and crisp). No 3D, no gradients, no decorative colour.</p>
+
+        <p><strong>Fixed colour semantics</strong> (colour conveys meaning, consistently across all charts): model under discussion = dark blue; baselines = mid grey; world's own divergence reference = black dashed; exceptions/misses = red circles; bands: green/amber/red as muted fills; fixtures = every fixture line/marker rendered in orange <em>and</em> labelled (colour alone never carries the fixture flag).</p>
+      </div>
+    </details>
+
+    <details class="adr" id="adr-r2">
+      <summary>
+        <span class="adr-id">ADR-R2</span>
+        <span class="adr-title">The four charts, exactly</span>
+        <span class="adr-status">Accepted</span>
+      </summary>
+      <div class="adr-body">
+        <h4>Status</h4>
+        <p>Accepted. [Requirement: RP-1, RP-2, RP-3, RP-4] [Test: TC-RP1-01, TC-RP2-01, TC-RP3-01, TC-RP4-01, TC-RP4-02]</p>
+
+        <h4>Chart 1 — Backtesting exception plot (RP-1, the primary chart).</h4>
+        <p>One panel per (model, world, task). X: trial index (the 200 independent trials, ordered by start-state position along the region for visual continuity); Y: normalised outcome at the task's declared horizon step, drawn over the model's stated 90% band for that trial (band as a light blue vertical interval, outcome as a dot). Misses (outcome outside band) circled in red. A header strip states: <code>observed exceptions: 27 · expected: 20 of 200 · band: GREEN</code>, with the JU-8 band boundaries drawn as a small inset scale showing where the observed count sits inside green/amber/red — the expected-vs-actual pairing RP-1 demands, on the image itself (TC-RP1-01).</p>
+
+        <h4>Chart 2 — Error against horizon (RP-2).</h4>
+        <p>X: rollout step (dual axis label: steps and world time); Y: median normalised error, <strong>log scale</strong> — the scale choice that keeps the early-horizon gap legible when late-horizon error blows up (TC-RP2-01's legibility clause; on a linear scale the pendulum's late divergence flattens the first 100 steps into invisibility). Model curve solid blue, world divergence reference black dashed, baselines grey. The JU-6 switch step marked with a vertical line labelled "grading switches to climate here". Caption states the reading rule verbatim (template below).</p>
+
+        <h4>Chart 3 — Calibration (RP-3).</h4>
+        <p>X: stated confidence level (the four declared levels); Y: observed coverage. Two lines: in-region (solid), out-of-region (dashed). The perfect-calibration diagonal drawn and labelled "perfectly honest". Y-error bars from the binomial standard error at N=200. Caption in natural frequencies (template below; TC-RP3-01).</p>
+
+        <h4>Chart 4 — The comparison table (RP-4, the headline result).</h4>
+        <p>A rendered table (Few: precision task → table, not chart), one row per model, columns: ordinary-error rank (by one-step CRPS), then trust horizon per task (steps + world time). Rows where error-rank and any trust-horizon rank disagree get a filled marker in a "⇄ disagree" column and a light highlight; agreement rows get nothing (TC-RP4-02's not-always-on check). Fixture rows are prefixed <code>FIXTURE:</code> and tinted (ADR-R1 orange). The caption slot renders the one-sentence disagreement statement (template below), generated from the actual ranking comparison.</p>
+      </div>
+    </details>
+
+    <details class="adr" id="adr-r3">
+      <summary>
+        <span class="adr-id">ADR-R3</span>
+        <span class="adr-title">Captions as authored templates with computed slots</span>
+        <span class="adr-status">Accepted</span>
+      </summary>
+      <div class="adr-body">
+        <h4>Status</h4>
+        <p>Accepted. [Requirement: RP-5] [Test: TC-RP5-01 (judged)]</p>
+
+        <h4>Decision</h4>
+        <p>Captions live in <code>wmj.reporting.captions</code> as fixed English templates with numeric slots — authored here, reviewed as part of this spec, and never improvised at render time:</p>
+
+        <ul>
+          <li><strong>Chart 1:</strong> "Each vertical bar is what the model said was 90% likely for one test run; the dot is what actually happened. Red circles are the misses. A model this confident should miss about {expected} of {n} times — it missed {observed}, which lands it in the {band} band drawn on the right."</li>
+          <li><strong>Chart 2:</strong> "How wrong the model gets as it predicts further ahead. The dashed black line is how fast the world drifts away from itself — nobody's fault. Only the gap above the dashed line is the model's fault. Past the marked step, exact paths stop being gradable and the judge switches to checking the overall pattern."</li>
+          <li><strong>Chart 3:</strong> "When the model said it was {level}% sure, was it right that often? Of every 100 ranges it drew at 90% confidence, about 90 should contain the true outcome. The solid line is familiar territory; the dashed line is territory it never saw in training — the honest model's lines both hug the diagonal."</li>
+          <li><strong>Chart 4:</strong> "Ordinary accuracy and the judge's trust horizon, side by side. {disagreement_sentence}" — where the sentence is one of two fixed forms: "Ordinary error says {A} and {B} are equals; the judge does not." (disagreement) or "On this run the two rankings agree — the interesting case did not occur, and saying so plainly beats manufacturing one." (agreement — NF-5's no-overclaim rule applied to the punchline itself).</li>
+        </ul>
+
+        <p>All captions ≤ 3 sentences (RP-5), natural frequencies not percentages where RP-3 demands, and rendered into both the image sidecar text file and the results page.</p>
+      </div>
+    </details>
+
+    <details class="adr" id="adr-r4">
+      <summary>
+        <span class="adr-id">ADR-R4</span>
+        <span class="adr-title">Fixture labelling that survives a screenshot</span>
+        <span class="adr-status">Accepted</span>
+      </summary>
+      <div class="adr-body">
+        <h4>Status</h4>
+        <p>Accepted. [Requirement: RP-8, MU-4] [Test: TC-RP8-01, TC-MU4-01]</p>
+
+        <h4>Decision</h4>
+        <p>Any figure containing fixture output draws, inside the axes (top-left, semi-opaque box): <code>TEST FIXTURE — deliberately broken model; a detected fault here is the instrument working, not a finding.</code> Fixture curves additionally use the fixture colour and a <code>FIXTURE:</code> name prefix in any on-chart label. The rule is implemented once in <code>wmj.reporting.style.mark_fixture(ax)</code> and the renderer calls it whenever the index→fixture map says so — one code path, no per-chart discretion (TC-RP8-01 checks the pixels' source: the label call is asserted present in the figure object before save).</p>
+      </div>
+    </details>
+
+    <details class="adr" id="adr-r5">
+      <summary>
+        <span class="adr-id">ADR-R5</span>
+        <span class="adr-title">Output layout and the single command (RP-6, RP-7)</span>
+        <span class="adr-status">Accepted</span>
+      </summary>
+      <div class="adr-body">
+        <h4>Status</h4>
+        <p>Accepted. [Requirement: RP-6, RP-7, NF-1] [Test: TC-RP6-01, TC-RP7-01, TC-NF1-01]</p>
+
+        <h4>Decision</h4>
+        <p><code>python -m wmj run</code> (documented in the README as <em>the</em> command) executes: gates → benchmarks → training (or load of committed trained weights per prereg) → rollouts → judging → reporting, writing:</p>
+
+        <pre><code>out/
+  verdicts/{world}-{model}.json      # canonical serialization — the NF-1 byte-compared artefacts (RP-6)
+  charts/{world}-{model}-{chart}.png + .svg
+  charts/{world}-comparison.png + .svg
+  captions/{...}.txt                 # each chart's rendered caption
+  results.html                       # one static page: all charts, captions, verdict links
+  run-manifest.json                  # seed, platform, package versions, prereg commit — canonical</code></pre>
+
+        <p><code>python -m wmj verify</code> re-runs the pipeline and byte-compares <code>out/verdicts/</code> and <code>run-manifest.json</code> against the committed published copies — the sceptic's one command (RP-7's rationale). <code>results.html</code> is a static file with no JavaScript dependencies — openable from disk, matching the no-hosted-service scope exclusion.</p>
+      </div>
+    </details>
+
+    <h2 id="component-design">4. Component Design</h2>
+
+    <pre><code>wmj/reporting/
+  style.py       # shared Matplotlib style, colour semantics, mark_fixture (ADR-R1, ADR-R4)
+  captions.py    # the ADR-R3 templates + slot filling
+  exception_plot.py, horizon_plot.py, calibration_plot.py, comparison_table.py
+  page.py        # results.html assembly (static, stdlib templating)
+  writer.py      # verdict JSON + manifest via the cross-cutting canonical serializer</code></pre>
+
+    <p>Reporting imports the judge's <code>Verdict</code> type read-only and Matplotlib; it never computes a metric — every number on a chart comes from the verdict record (single source of truth; a chart/verdict disagreement is structurally impossible).</p>
+
+    <h2 id="api-boundary">5. API Boundary Contracts</h2>
+
+    <p>Input: the judge spec's <code>Verdict</code> schema (judge spec §5) — reporting adds nothing and drops nothing. The index→name/fixture map: <code>{"opaque-index-3": {"name": "ensemble", "is_fixture": false}}</code> (harness-owned, models spec §5). Output contract: the <code>out/</code> layout above; <code>results.html</code> embeds charts by relative path so the folder is self-contained and copyable.</p>
+
+    <h2 id="integration-points">6. Integration Points</h2>
+
+    <ul>
+      <li><strong>← judge:</strong> <code>Verdict</code> records only.</li>
+      <li><strong>← harness:</strong> index→name/fixture map; run manifest data (seed, platform, prereg commit).</li>
+      <li><strong>→ the reader:</strong> <code>results.html</code> and the four chart families; <strong>→ other tools:</strong> <code>out/verdicts/*.json</code> (RP-6).</li>
+    </ul>
+
+    <h2 id="error-handling">7. Error Handling & Edge Cases</h2>
+
+    <ul>
+      <li>A verdict record failing schema validation → <code>VerdictSchemaError</code>, no charts rendered (partial chart sets would misrepresent the run — same no-partial-output discipline as TC-JU9-02).</li>
+      <li>A chart whose data is degenerate (e.g. all 200 outcomes inside bands — zero exceptions) renders normally with the true zero count; the JU-5 hedging cross-flag, if set, is printed in the header strip ("0 misses — but see sharpness: possible hedging").</li>
+      <li>Font/rendering nondeterminism: PNGs are excluded from byte-identity claims (ADR-R5); SVGs are generated with fixed Matplotlib <code>svg.hashsalt</code> so they are reproducible in practice, but NF-1's guarantee names verdicts + manifest only — stated in the README rather than silently implied.</li>
+    </ul>
+
+    <h2 id="testing-strategy">8. Testing Strategy</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Concern</th>
+          <th>Cases</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Exception plot: expected-vs-actual + band on image</td>
+          <td>TC-RP1-01</td>
+        </tr>
+        <tr>
+          <td>Horizon chart: legible early gap + reading-rule caption</td>
+          <td>TC-RP2-01</td>
+        </tr>
+        <tr>
+          <td>Calibration chart: diagonal, regions, natural frequencies</td>
+          <td>TC-RP3-01</td>
+        </tr>
+        <tr>
+          <td>Comparison table: disagreement marked, not always-on</td>
+          <td>TC-RP4-01, TC-RP4-02</td>
+        </tr>
+        <tr>
+          <td>Captions readable in isolation</td>
+          <td>TC-RP5-01 (judged)</td>
+        </tr>
+        <tr>
+          <td>Machine-readable verdicts exist and match schema</td>
+          <td>TC-RP6-01</td>
+        </tr>
+        <tr>
+          <td>One command, clean checkout, full regeneration</td>
+          <td>TC-RP7-01</td>
+        </tr>
+        <tr>
+          <td>Fixture label on the image itself</td>
+          <td>TC-RP8-01, TC-MU4-01</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ddd;">
+
+    <h2 id="changelog">Changelog</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Version</th>
+          <th>Date</th>
+          <th>Change</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1.0</td>
+          <td>2026-08-25</td>
+          <td>Initial version. Four charts fully designed including caption templates; fixture marking centralised; <code>python -m wmj run</code> / <code>verify</code> command pair; NF-1 byte-identity scoped to verdicts + manifest with the PNG exclusion stated openly.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p class="gvm-attribution">Developed using the Grounded Vibe Methodology</p>
+  </main>
+
+  <script>
+    (function () {
+      const toc = document.getElementById('toc');
+      const headings = document.querySelectorAll('h2[id], h3[id]');
+      const links = [];
+
+      headings.forEach(function (h) {
+        const a = document.createElement('a');
+        a.href = '#' + h.id;
+        a.textContent = h.textContent;
+        if (h.tagName === 'H3') a.classList.add('toc-h3');
+        toc.appendChild(a);
+        links.push({ el: a, target: h });
+      });
+
+      function onScroll() {
+        let current = links[0];
+        for (let i = 0; i < links.length; i++) {
+          if (links[i].target.getBoundingClientRect().top <= 80) current = links[i];
+        }
+        links.forEach(function (l) { l.el.classList.remove('active'); });
+        if (current) {
+          current.el.classList.add('active');
+          const tocEl = document.getElementById('toc');
+          const elTop = current.el.offsetTop - tocEl.offsetTop;
+          const elBot = elTop + current.el.offsetHeight;
+          if (elTop < tocEl.scrollTop || elBot > tocEl.scrollTop + tocEl.clientHeight) {
+            tocEl.scrollTop = elTop - tocEl.clientHeight / 2;
+          }
+        }
+      }
+
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    })();
+  </script>
+</body>
+</html>
