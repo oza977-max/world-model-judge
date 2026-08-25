@@ -85,7 +85,7 @@ The requirements below are grounded in published work rather than invented. This
 | Zheng et al. | *Judging LLM-as-a-Judge* (2023) | Automated judges have their own documented biases — a reason ours is plain arithmetic |
 | David Ha & Jürgen Schmidhuber | *World Models* (2018) | The paper that fixed the term |
 | Yann LeCun | *A Path Towards Autonomous Machine Intelligence* (2022) | The predict-in-abstract-space position |
-| Danijar Hafner et al. | The Dreamer line | Measured how prediction error grows with rollout length — prior art for the core measurement |
+| Danijar Hafner et al. | The Dreamer line | Reports how prediction error grows with rollout length — supporting analysis in a working system; the short-rollout argument itself is Janner et al.'s |
 | Sutton & Barto | *Reinforcement Learning: An Introduction* | The foundational text on planning with a learned model |
 | Janner, Fu, Zhang & Levine | *When to Trust Your Model: Model-Based Policy Optimization* (2019) | The specific, named source for why compounding rollout error keeps imagined rollouts short — corrected attribution; earlier drafts credited this to Dreamer or Sutton & Barto |
 | Daniel Wolpert | Internal models for motor control | The brain runs forward models predicting the consequences of its own actions |
@@ -227,7 +227,7 @@ Two distinctions carry most of this project's honesty. First, the difference bet
 
 **In plain words:** no model is ever tested starting from a point it already saw during training. Because these systems repeat themselves (foxes-and-rabbits cycles, the pendulum's energy shells), test states can still *resemble* training states by design — genuine novelty comes from the out-of-region starts in WD-5, not from this requirement, which only guards against literally re-using a training start.
 
-> Kapoor and Narayanan document this kind of leakage as the biggest cause of overstated results across machine-learning research. A judge whose subject was trained on the test set measures nothing at all.
+> Kapoor and Narayanan document this kind of leakage as a major, underappreciated cause of overstated results across machine-learning research. A judge whose subject was trained on the test set measures nothing at all.
 
 **MU-8 (Must):** Model training shall be seeded and reproducible, such that re-training from the same seed produces the same model and therefore the same verdict.
 

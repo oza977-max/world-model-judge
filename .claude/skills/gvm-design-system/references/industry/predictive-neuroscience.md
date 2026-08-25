@@ -30,14 +30,14 @@ Activate this file for any application dealing with: biological forward models o
 |-----------|-------------|---------|----------|----------|----------------|
 | 5 | 5 | 4 | 4 | 3 | **Established** |
 
-Evidence: Authority — Wolpert (University of Cambridge, later Columbia) is a leading figure in computational motor neuroscience; the forward-model framework for motor control is foundational and widely taught. Publication — *Nature Neuroscience* and *Phil. Trans. Royal Society B*, top venues. Adoption — the standard citation for "the cerebellum runs predictive forward models of the body's own movements," referenced across neuroscience, robotics, and cognitive science.
+Evidence: Authority — Wolpert (University of Cambridge, later Columbia) is a leading figure in computational motor neuroscience; the forward-model framework for motor control is foundational and widely taught. Publication — *Nature Neuroscience* and *Phil. Trans. Royal Society B*, top venues. Breadth — the framework extends from motor control into social interaction and sensorimotor learning, though within one research programme. Adoption — the standard citation for "the cerebellum runs predictive forward models of the body's own movements," referenced across neuroscience, robotics, and cognitive science.
 
-**Work score:**
+**Work score — "Computational Principles of Movement Neuroscience" (2000), with the 2003 *Phil. Trans.* framework paper as supporting citation:**
 | Specificity | Depth | Currency | Influence | Classification |
 |-------------|-------|----------|-----------|----------------|
 | 4 | 4 | 3 | 4 | **Established** |
 
-Evidence: Specificity — precisely describes forward models predicting the sensory consequences of one's own motor commands, which is the mechanism behind the essay's "try to tickle yourself" example (the brain cancels a self-predicted sensation) — verified accurate in this project's own independent technical audit. Influence — the essay's cerebellum passage was corrected during review to use this self-movement example rather than a mismatched reflex example (ducking a thrown ball), following exactly this framework.
+Evidence: Specificity — precisely describes forward models predicting the sensory consequences of one's own motor commands, which is the mechanism behind the essay's "try to tickle yourself" example (the brain cancels a self-predicted sensation) — verified accurate in this project's own independent technical audit. Depth — a computational framework (forward/inverse model pairs, state estimation) with experimental grounding, not a review-level summary. Influence — the essay's cerebellum passage was corrected during review to use this self-movement example rather than a mismatched reflex example (ducking a thrown ball), following exactly this framework.
 
 **Activation signals:** Forward models, motor prediction, self-generated sensory cancellation, tickle attenuation
 
@@ -57,14 +57,14 @@ Evidence: Specificity — precisely describes forward models predicting the sens
 |-----------|-------------|---------|----------|----------|----------------|
 | 5 | 5 | 4 | 5 | 3 | **Established** |
 
-Evidence: Authority — Spelke (Harvard) is one of the most cited researchers in developmental cognitive science; "core knowledge" is a foundational framework for innate cognitive structure in infancy. Publication — *Cognitive Science* and *Developmental Science*, leading journals in the field. Adoption — the standard citation for infants possessing pre-wired expectations (object permanence, physical continuity) prior to extensive learning.
+Evidence: Authority — Spelke (Harvard) is one of the most cited researchers in developmental cognitive science; "core knowledge" is a foundational framework for innate cognitive structure in infancy. Publication — *Cognitive Science* and *Developmental Science*, leading journals in the field. Breadth — the core-knowledge programme spans objects, number, space, and agents, not a single experimental paradigm. Adoption — the standard citation for infants possessing pre-wired expectations (object permanence, physical continuity) prior to extensive learning.
 
-**Work score:**
+**Work score — "Core Knowledge" (2007), with "Principles of Object Perception" (1990) as supporting citation:**
 | Specificity | Depth | Currency | Influence | Classification |
 |-------------|-------|----------|-----------|----------------|
 | 4 | 4 | 3 | 5 | **Established** |
 
-Evidence: Specificity — the violation-of-expectation paradigm (infants look longer at physically impossible events) is the specific experimental method behind the essay's "ball rolls behind the couch" example, correctly using "she looks longer" rather than "she's startled" following this project's own review correction. Influence — grounds the essay's claim that infants predict at the level of events, not raw pixels, and that some of this predictive structure is pre-wired (core knowledge) rather than learned from scratch.
+Evidence: Depth — synthesises decades of looking-time experiments into a structured theory of innate systems, not a single result. Specificity — the violation-of-expectation paradigm (infants look longer at physically impossible events) is the specific experimental method behind the essay's "ball rolls behind the couch" example, correctly using "she looks longer" rather than "she's startled" following this project's own review correction. Influence — grounds the essay's claim that infants predict at the level of events, not raw pixels, and that some of this predictive structure is pre-wired (core knowledge) rather than learned from scratch.
 
 **Activation signals:** Object permanence, violation of expectation, core knowledge, infant physical reasoning
 

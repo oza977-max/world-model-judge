@@ -24,21 +24,21 @@ Activate this file for any application dealing with: action-conditioned predicti
 
 ## David Ha & Jürgen Schmidhuber
 
-**Source:** David Ha & Jürgen Schmidhuber, "World Models," arXiv:1803.10122 / NeurIPS 2018
+**Source:** David Ha & Jürgen Schmidhuber, "World Models," arXiv:1803.10122 (2018); published at NeurIPS 2018 as "Recurrent World Models Facilitate Policy Evolution"
 
 **Expert score:**
 | Authority | Publication | Breadth | Adoption | Currency | Classification |
 |-----------|-------------|---------|----------|----------|----------------|
 | 5 | 5 | 4 | 5 | 3 | **Established** |
 
-Evidence: Authority — the paper that fixed the term "world model" in its modern ML sense (Ha at Google Brain at time of writing; Schmidhuber a foundational RNN/RL researcher with the concept's roots in his own early-1990s controller/model work). Publication — NeurIPS 2018, top ML venue. Adoption — the canonical starting citation for any "world models" literature review since 2018. Currency scored down: the field has moved substantially past the paper's specific VAE+RNN architecture, though the naming and framing endure.
+Evidence: Authority — the paper that fixed the term "world model" in its modern ML sense (Ha at Google Brain at time of writing; Schmidhuber a foundational RNN/RL researcher with the concept's roots in his own early-1990s controller/model work). Publication — NeurIPS 2018, top ML venue. Breadth — spans generative modelling, evolution strategies, and RL in one architecture, though demonstrated on two game environments. Adoption — the canonical starting citation for any "world models" literature review since 2018. Currency scored down: the field has moved substantially past the paper's specific VAE+RNN architecture, though the naming and framing endure.
 
 **Work score — "World Models":**
 | Specificity | Depth | Currency | Influence | Classification |
 |-------------|-------|----------|-----------|----------------|
 | 4 | 4 | 3 | 5 | **Established** |
 
-Evidence: Specificity — concretely demonstrates training a policy inside a learned, compressed simulation of an environment. Influence — the paper this essay's title and central framing trace to directly; "the name stuck in 2018" is a factual claim this citation supports.
+Evidence: Specificity — concretely demonstrates training a policy inside a learned, compressed simulation of an environment. Depth — full VAE+MDN-RNN+controller pipeline with the notable train-inside-the-dream result, though at demonstration rather than framework depth. Currency — the architecture is dated but the framing endures. Influence — the paper this essay's title and central framing trace to directly; "the name stuck in 2018" is a factual claim this citation supports.
 
 **Activation signals:** World model definition, learned environment simulation, train-inside-a-dream
 
@@ -56,16 +56,16 @@ Evidence: Specificity — concretely demonstrates training a policy inside a lea
 **Expert score:**
 | Authority | Publication | Breadth | Adoption | Currency | Classification |
 |-----------|-------------|---------|----------|----------|----------------|
-| 5 | 4 | 5 | 5 | 4 | **Established** |
+| 5 | 4 | 5 | 5 | 4 | **Canonical** |
 
-Evidence: Authority — LeCun is a Turing Award laureate and one of the most prominent voices arguing that current LLM-scale approaches are insufficient for genuine world modelling; the paper is his fullest public statement of an alternative architecture (JEPA). Publication — widely circulated preprint, extensively discussed rather than formally peer-reviewed at time of writing, scored down slightly on publication accordingly. Breadth — the position spans architecture, training objective, and a broader theory of machine intelligence. Adoption — JEPA has since been implemented and extended in multiple follow-on papers (I-JEPA, V-JEPA), establishing real research uptake beyond the position paper itself.
+Evidence: Authority — LeCun is a Turing Award laureate and one of the most prominent voices arguing that current LLM-scale approaches are insufficient for genuine world modelling; the paper is his fullest public statement of an alternative architecture (JEPA). Publication — widely circulated preprint, extensively discussed rather than formally peer-reviewed at time of writing, scored down slightly on publication accordingly. Breadth — the position spans architecture, training objective, and a broader theory of machine intelligence. Adoption — JEPA has since been implemented and extended in multiple follow-on papers (I-JEPA, V-JEPA), establishing real research uptake beyond the position paper itself. Currency — the position remains live and actively contested, renewed by LeCun's 2026 venture betting directly on it. Computed average 4.6 — classified Canonical per the scoring bands.
 
 **Work score — "A Path Towards Autonomous Machine Intelligence":**
 | Specificity | Depth | Currency | Influence | Classification |
 |-------------|-------|----------|-----------|----------------|
 | 4 | 4 | 4 | 5 | **Established** |
 
-Evidence: Specificity — proposes predicting in a learned abstract representation space rather than raw pixel/token space specifically because most high-dimensional perceptual detail is unpredictable and irrelevant. Influence — grounds the essay's central "menu" metaphor (language has a pre-built menu of meaningful tokens; the world does not, so a world model must learn what to discard) and is directly cited as the "predict-in-abstract-space position" in requirements.md's expert table.
+Evidence: Specificity — proposes predicting in a learned abstract representation space rather than raw pixel/token space specifically because most high-dimensional perceptual detail is unpredictable and irrelevant. Depth — a full architecture proposal (configurator, perception, world model, cost, actor) with training objectives, not a slogan-level manifesto. Currency — the JEPA line it launched is under active development. Influence — grounds the essay's central "menu" metaphor (language has a pre-built menu of meaningful tokens; the world does not, so a world model must learn what to discard) and is directly cited as the "predict-in-abstract-space position" in requirements.md's expert table.
 
 **Activation signals:** JEPA, predict-in-representation-space, self-supervised world modelling, hierarchical planning
 
@@ -85,14 +85,14 @@ Evidence: Specificity — proposes predicting in a learned abstract representati
 |-----------|-------------|---------|----------|----------|----------------|
 | 4 | 4 | 4 | 4 | 4 | **Established** |
 
-Evidence: Authority — Hafner's Dreamer line is one of the most influential model-based RL research programmes, spanning multiple top-venue papers (ICLR, with DreamerV3 achieving broad benchmark success including Minecraft diamond collection). Publication — ICLR, a top ML venue, across three successive papers. Adoption — widely cited and reproduced as the reference architecture for "train a policy entirely inside a learned latent world model."
+Evidence: Authority — Hafner's Dreamer line is one of the most influential model-based RL research programmes, spanning multiple top-venue papers (ICLR, with DreamerV3 achieving broad benchmark success including Minecraft diamond collection). Publication — Dreamer (ICLR 2020) and DreamerV2 (ICLR 2021) at a top ML venue; DreamerV3 circulated as a 2023 preprint before journal publication in *Nature* (2025). Breadth — the line spans continuous control, Atari, and open-world Minecraft, though within the single model-based-RL programme. Adoption — widely cited and reproduced as the reference architecture for "train a policy entirely inside a learned latent world model." Currency — DreamerV3's cross-domain results keep it the current reference implementation.
 
 **Work score — Dreamer line:**
 | Specificity | Depth | Currency | Influence | Classification |
 |-------------|-------|----------|-----------|----------------|
-| 3 | 4 | 4 | 4 | **Recognised** |
+| 3 | 4 | 4 | 4 | **Established** |
 
-Evidence: Specificity — Dreamer's core contribution is training behaviour entirely inside imagined latent rollouts, with rollout-error-growth measurement appearing as supporting analysis rather than the paper's central claim; this project's own independent audit correctly flagged that crediting Dreamer as "prior art for the core measurement" somewhat overstates its centrality to that specific methodology relative to the paper's actual headline contribution — reflected here in a lower specificity score than the expert-level score, and by the essay's own softened wording ("has measured how error grows," not "measured exactly").
+Evidence: Specificity — Dreamer's core contribution is training behaviour entirely inside imagined latent rollouts, with rollout-error-growth measurement appearing as supporting analysis rather than the paper's central claim; this project's own independent audit correctly flagged that crediting Dreamer as "prior art for the core measurement" somewhat overstates its centrality to that specific methodology relative to the paper's actual headline contribution — reflected here in the Specificity score of 3 (the classification itself is computed mechanically from the average: 3.75 → Established), and by the essay's own softened wording ("has measured how error grows," not "measured exactly"). Depth — a complete working system across three paper generations, with ablations. Currency — DreamerV3 (2023, later *Nature* 2025) keeps the line current.
 
 **Activation signals:** Latent imagination, train-inside-a-dream RL, Dreamer architecture
 
@@ -119,7 +119,7 @@ Evidence: Authority — the standard, most widely used textbook in reinforcement
 |-------------|-------|----------|-----------|----------------|
 | 3 | 5 | 4 | 5 | **Established** |
 
-Evidence: Specificity — foundational and comprehensive, but general RL theory rather than a specific claim about world-model rollout-length practice; scored down on specificity relative to Janner et al.'s targeted contribution. Influence — the field's standard grounding text for "planning with a learned model" as a concept, correctly re-scoped by this project's own review to a general foundational role rather than the specific source for the compounding-error/short-rollout argument (which belongs to Janner et al., below) — this correction was applied to both this file and requirements.md's expert table.
+Evidence: Specificity — foundational and comprehensive, but general RL theory rather than a specific claim about world-model rollout-length practice; scored down on specificity relative to Janner et al.'s targeted contribution. Currency — the 2018 second edition remains the field's standard text. Influence — the field's standard grounding text for "planning with a learned model" as a concept, correctly re-scoped by this project's own review to a general foundational role rather than the specific source for the compounding-error/short-rollout argument (which belongs to Janner et al., below) — this correction was applied to both this file and requirements.md's expert table.
 
 **Activation signals:** Model-based RL foundations, planning with a learned model, general RL theory
 
@@ -139,14 +139,14 @@ Evidence: Specificity — foundational and comprehensive, but general RL theory 
 |-----------|-------------|---------|----------|----------|----------------|
 | 4 | 4 | 3 | 4 | 4 | **Established** |
 
-Evidence: Authority — Levine's lab (UC Berkeley) is a leading model-based RL research group; MBPO is a well-cited, influential paper specifically on the theoretical justification for rollout-length limits. Publication — NeurIPS 2019, top ML venue. Adoption — widely cited as the source of the theoretical bound relating model rollout length to policy-improvement guarantees.
+Evidence: Authority — Levine's lab (UC Berkeley) is a leading model-based RL research group; MBPO is a well-cited, influential paper specifically on the theoretical justification for rollout-length limits. Publication — NeurIPS 2019, top ML venue. Adoption — widely cited as the source of the theoretical bound relating model rollout length to policy-improvement guarantees. Currency — remains the standard citation for rollout-length justification in current model-based RL work.
 
 **Work score — "When to Trust Your Model":**
 | Specificity | Depth | Currency | Influence | Classification |
 |-------------|-------|----------|-----------|----------------|
 | 5 | 4 | 4 | 4 | **Established** |
 
-Evidence: Specificity — the paper's core theoretical contribution is precisely a bound on model rollout length tied to policy-improvement guarantees under compounding model error — exactly the "why do researchers keep imagined rollouts short" claim this project needed a source for. Influence — this project's own review process identified this as the correct, specific attribution (replacing an earlier misattribution to Dreamer/Sutton & Barto), and both the essay and requirements.md were corrected accordingly.
+Evidence: Specificity — the paper's core theoretical contribution is precisely a bound on model rollout length tied to policy-improvement guarantees under compounding model error — exactly the "why do researchers keep imagined rollouts short" claim this project needed a source for. Depth — theoretical bound plus a working algorithm (MBPO) validating it empirically. Currency — the branched-rollout design it introduced is still standard practice. Influence — this project's own review process identified this as the correct, specific attribution (replacing an earlier misattribution to Dreamer/Sutton & Barto), and both the essay and requirements.md were corrected accordingly.
 
 **Activation signals:** Compounding rollout error, model rollout length bound, when to trust a learned model
 

@@ -30,14 +30,14 @@ Activate this file for any application dealing with: auditing an AI system as an
 |-----------|-------------|---------|----------|----------|----------------|
 | 4 | 4 | 4 | 4 | 4 | **Established** |
 
-Evidence: Authority — Raji is a leading researcher in AI accountability and algorithmic auditing (Mozilla Foundation / UC Berkeley lineage); this paper is widely cited in the AI-governance literature as a framework paper, not a position piece. Publication — FAT* (now FAccT), the leading venue for AI fairness/accountability research. Adoption — widely cited as the closest existing academic relative to "auditing as an institution."
+Evidence: Authority — Raji is a leading researcher in AI accountability and algorithmic auditing (Mozilla Foundation / UC Berkeley lineage); this paper is widely cited in the AI-governance literature as a framework paper, not a position piece. Publication — FAT* (now FAccT), the leading venue for AI fairness/accountability research. Breadth — her work spans auditing frameworks, facial-recognition evaluation (Gender Shades follow-ons), and evaluation policy. Adoption — widely cited as the closest existing academic relative to "auditing as an institution." Currency — actively publishing in this area; the audit-framework line remains current.
 
 **Work score — "Closing the AI Accountability Gap":**
 | Specificity | Depth | Currency | Influence | Classification |
 |-------------|-------|----------|-----------|----------------|
 | 4 | 4 | 4 | 4 | **Established** |
 
-Evidence: Specificity — proposes a concrete internal-audit process (not just a call for accountability), the closest existing academic relative to this project's own institutional framing. Influence — cited in requirements.md explicitly as "the closest existing relative to this thesis — auditing as an institution, not a metric," and this project's honest positioning ("cite the fragments that do exist rather than claiming a vacuum," per the risk assessment's mitigation for Value Risk) depends on this citation existing.
+Evidence: Specificity — proposes a concrete internal-audit process (not just a call for accountability), the closest existing academic relative to this project's own institutional framing. Depth — a staged end-to-end framework (scoping, mapping, artifact collection, testing, reflection) with defined artefacts per stage. Influence — cited in requirements.md explicitly as "the closest existing relative to this thesis — auditing as an institution, not a metric," and this project's honest positioning ("cite the fragments that do exist rather than claiming a vacuum," per the risk assessment's mitigation for Value Risk) depends on this citation existing.
 
 **Activation signals:** Auditing as institution, internal algorithmic audit framework, accountability gap
 
@@ -55,16 +55,16 @@ Evidence: Specificity — proposes a concrete internal-audit process (not just a
 **Expert score:**
 | Authority | Publication | Breadth | Adoption | Currency | Classification |
 |-----------|-------------|---------|----------|----------|----------------|
-| 5 | 5 | 4 | 5 | 4 | **Established** |
+| 5 | 5 | 4 | 5 | 4 | **Canonical** |
 
-Evidence: Authority — Mitchell led Google's AI ethics documentation work; "Model Cards" is one of the most widely adopted AI documentation standards in the field. Publication — FAT* '19, foundational venue paper. Adoption — Model Cards are now a standard feature on major model-hosting platforms (e.g. Hugging Face), making this one of the most operationally adopted papers in applied AI ethics.
+Evidence: Authority — Mitchell led Google's AI ethics documentation work; "Model Cards" is one of the most widely adopted AI documentation standards in the field. Publication — FAT* '19, foundational venue paper. Breadth — her work spans documentation standards, bias measurement, and ML fairness, not one artefact. Adoption — Model Cards are now a standard feature on major model-hosting platforms (e.g. Hugging Face), making this one of the most operationally adopted papers in applied AI ethics. Currency — the template remains in active platform-level use. Computed average 4.6 — classified Canonical per the scoring bands.
 
 **Work score — "Model Cards for Model Reporting":**
 | Specificity | Depth | Currency | Influence | Classification |
 |-------------|-------|----------|-----------|----------------|
-| 5 | 4 | 4 | 5 | **Established** |
+| 5 | 4 | 4 | 5 | **Canonical** |
 
-Evidence: Specificity — a concrete reporting template (intended use, limitations, evaluation data, ethical considerations) that directly parallels this project's JU-9 verdict-record structure. Influence — JU-9's rationale ("stating what wasn't evaluated matters more than the headline score") is Mitchell's central argument, restated for this project's domain.
+Evidence: Specificity — a concrete reporting template (intended use, limitations, evaluation data, ethical considerations) that directly parallels this project's JU-9 verdict-record structure. Depth — the template is worked through with per-section guidance and worked examples, not a bare checklist. Currency — still the reference format for model reporting. Influence — JU-9's rationale ("stating what wasn't evaluated matters more than the headline score") is Mitchell's central argument, restated for this project's domain. Computed average 4.5 — boundary classifies upward to Canonical per the scoring bands.
 
 **Activation signals:** Model cards, intended-use disclosure, stating what wasn't evaluated
 
@@ -77,21 +77,21 @@ Evidence: Specificity — a concrete reporting template (intended use, limitatio
 
 ## Percy Liang et al.
 
-**Source:** Percy Liang et al., "Holistic Evaluation of Language Models," *Annals of the New York Academy of Sciences* / arXiv:2211.09110 (HELM, Stanford CRFM, 2022–)
+**Source:** Percy Liang et al., "Holistic Evaluation of Language Models," *Transactions on Machine Learning Research* (2023) / arXiv:2211.09110 (HELM, Stanford CRFM, 2022–)
 
 **Expert score:**
 | Authority | Publication | Breadth | Adoption | Currency | Classification |
 |-----------|-------------|---------|----------|----------|----------------|
 | 4 | 4 | 4 | 4 | 4 | **Established** |
 
-Evidence: Authority — Liang leads Stanford's Center for Research on Foundation Models; HELM is a large, well-resourced, continuously maintained multi-institution benchmark effort. Publication — widely circulated preprint plus ongoing public leaderboard. Adoption — frequently cited as the standard example of multi-metric, coverage-honest LLM evaluation, as opposed to single-number leaderboards.
+Evidence: Authority — Liang leads Stanford's Center for Research on Foundation Models; HELM is a large, well-resourced, continuously maintained multi-institution benchmark effort. Publication — TMLR (2023) plus an ongoing public leaderboard. Breadth — HELM spans scenarios, metrics, and model families rather than one benchmark axis. Adoption — frequently cited as the standard example of multi-metric, coverage-honest LLM evaluation, as opposed to single-number leaderboards. Currency — continuously maintained and extended (e.g. domain-specific HELM variants).
 
 **Work score — HELM:**
 | Specificity | Depth | Currency | Influence | Classification |
 |-------------|-------|----------|-----------|----------------|
 | 4 | 4 | 4 | 4 | **Established** |
 
-Evidence: Specificity — HELM's core design choice (report a matrix of scenarios × metrics, not one leaderboard number) directly parallels this project's refusal to reduce a verdict to a single trust number (JU-7: never report a trust horizon without its task and tolerance attached). Influence — the general principle "a single headline number misleads; report coverage honestly" is HELM's central contribution, cited in requirements.md's expert table.
+Evidence: Specificity — HELM's core design choice (report a matrix of scenarios × metrics, not one leaderboard number) directly parallels this project's refusal to reduce a verdict to a single trust number (JU-7: never report a trust horizon without its task and tolerance attached). Depth — dozens of scenarios crossed with seven metric categories, with explicit incompleteness reporting. Influence — the general principle "a single headline number misleads; report coverage honestly" is HELM's central contribution, cited in requirements.md's expert table.
 
 **Activation signals:** Multi-metric evaluation, coverage honesty, no single leaderboard number
 
@@ -116,15 +116,15 @@ Evidence: Authority — Narayanan (Princeton CITP) and Kapoor are widely recogni
 **Work score — "Leakage and the Reproducibility Crisis":**
 | Specificity | Depth | Currency | Influence | Classification |
 |-------------|-------|----------|-----------|----------------|
-| 5 | 4 | 5 | 4 | **Established** |
+| 5 | 4 | 5 | 4 | **Canonical** |
 
-Evidence: Specificity — catalogues concrete leakage types (e.g. temporal leakage, duplicate-record leakage) with worked examples across scientific fields. Influence — this project's MU-7 (disjoint training/evaluation data) and its rationale ("the biggest cause of overstated results," now correctly softened to "a major, underappreciated cause" per this project's own review-board correction) trace directly to this paper.
+Evidence: Specificity — catalogues concrete leakage types (e.g. temporal leakage, duplicate-record leakage) with worked examples across scientific fields. Depth — a systematic survey across 294 papers in 17 fields with a taxonomy and model-info-sheet remedy, not a commentary piece. Influence — this project's MU-7 (disjoint training/evaluation data) and its rationale ("a major, underappreciated cause" of overstated results — scoped this way rather than as definitively "the biggest") trace directly to this paper. Computed average 4.5 — boundary classifies upward to Canonical per the scoring bands.
 
 **Activation signals:** Train/test leakage, reproducibility crisis, disjoint data requirement
 
 **Key principles:**
 
-- **Leakage is pervasive and underappreciated as a cause of overstated ML results** — the paper documents it across 294 papers in 17 fields; the claim should be scoped as "a major cause," not asserted as definitively "the biggest," a correction this project's own review process already made to its MU-7 rationale.
+- **Leakage is pervasive and underappreciated as a cause of overstated ML results** — the paper documents it across 294 papers in 17 fields; the claim should be scoped as "a major cause," not asserted as definitively "the biggest" — the scoping this project's MU-7 rationale uses.
 - **Disjoint data is a structural requirement, not a courtesy** — a judge whose subject was trained on the test set measures nothing at all. Directly grounds MU-7.
 
 ---
@@ -143,9 +143,9 @@ Evidence: Authority — widely cited paper documenting systematic biases in usin
 **Work score — "Judging LLM-as-a-Judge":**
 | Specificity | Depth | Currency | Influence | Classification |
 |-------------|-------|----------|-----------|----------------|
-| 5 | 4 | 4 | 5 | **Established** |
+| 5 | 4 | 4 | 5 | **Canonical** |
 
-Evidence: Specificity — names and empirically measures specific bias types (position bias, verbosity bias, self-enhancement bias where a model favours its own outputs). Influence — this project's JU-13 (no language model or learned component in the judge) exists specifically to avoid this entire class of problem, and the rationale cites this paper directly in requirements.md.
+Evidence: Specificity — names and empirically measures specific bias types (position bias, verbosity bias, self-enhancement bias where a model favours its own outputs). Depth — controlled measurement across two benchmarks with agreement analysis against human judgments, not anecdote. Currency — remains the standard citation as LLM-as-judge use has grown. Influence — this project's JU-13 (no language model or learned component in the judge) exists specifically to avoid this entire class of problem, and the rationale cites this paper directly in requirements.md. Computed average 4.5 — boundary classifies upward to Canonical per the scoring bands.
 
 **Activation signals:** LLM-as-judge bias, position bias, verbosity bias, self-enhancement bias
 

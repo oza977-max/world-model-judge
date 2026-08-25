@@ -19,7 +19,7 @@ strong_signals:
 
 # Industry Domain Specialists — Forecast Verification (Project: World Model Judge)
 
-> **Project-scoped file.** Grounds this project's measurement layer — the techniques borrowed from meteorology's forecast-verification discipline, distinct from banking's institutional/enforcement contribution (see `model-risk.md`). Append-only within this project.
+> **Project-scoped file.** Grounds this project's measurement layer — the techniques borrowed from meteorology's forecast-verification discipline, distinct from banking's institutional/enforcement contribution (see `model-risk-world-model-judge.md`). Append-only within this project.
 
 ## Activation Signals
 
@@ -34,16 +34,16 @@ Activate this file for any application dealing with: scoring a probabilistic pre
 **Expert score:**
 | Authority | Publication | Breadth | Adoption | Currency | Classification |
 |-----------|-------------|---------|----------|----------|----------------|
-| 5 | 5 | 4 | 5 | 4 | **Established** |
+| 5 | 5 | 4 | 5 | 4 | **Canonical** |
 
-Evidence: Authority — Gneiting is a leading figure in statistical forecast verification (University of Heidelberg); the paper is one of the most cited works in probabilistic forecasting. Publication — JASA, the flagship journal of the American Statistical Association. Adoption — the standard reference for why scoring-rule choice matters, cited across meteorology, econometrics, and machine-learning uncertainty-quantification literature.
+Evidence: Authority — Gneiting is a leading figure in statistical forecast verification (Karlsruhe Institute of Technology / Heidelberg Institute for Theoretical Studies); the paper is one of the most cited works in probabilistic forecasting. Publication — JASA, the flagship journal of the American Statistical Association. Breadth — the scoring-rule framework spans meteorology, econometrics, and ML uncertainty quantification, though centred on one methodological area. Adoption — the standard reference for why scoring-rule choice matters, cited across all three of those literatures. Currency — the framework remains the active standard; follow-on work builds on rather than replaces it. Computed average 4.6 — classified Canonical per the scoring bands.
 
 **Work score — "Strictly Proper Scoring Rules, Prediction, and Estimation":**
 | Specificity | Depth | Currency | Influence | Classification |
 |-------------|-------|----------|-----------|----------------|
-| 5 | 5 | 4 | 5 | **Established** |
+| 5 | 5 | 4 | 5 | **Canonical** |
 
-Evidence: Specificity — precisely defines the property (a forecaster cannot improve their expected score by misreporting their true belief) that this project's JU-4(b) requires directly. Influence — the anti-gaming property this project's entire calibration-honesty argument rests on; without it, an overconfident model could score well by being confident, the exact failure the project exists to catch.
+Evidence: Specificity — precisely defines the property (a forecaster cannot improve their expected score by misreporting their true belief) that this project's JU-4(b) requires directly. Depth — full mathematical characterisation of the class of strictly proper rules (CRPS, log score, Brier), with proofs, not just a definition. Currency — still the standard treatment; no successor framework has displaced it. Influence — the anti-gaming property this project's entire calibration-honesty argument rests on; without it, an overconfident model could score well by being confident, the exact failure the project exists to catch. Computed average 4.75 — classified Canonical per the scoring bands.
 
 **Activation signals:** Strictly proper scoring rules, anti-gaming scoring, CRPS, honest probabilistic reporting
 
@@ -63,14 +63,14 @@ Evidence: Specificity — precisely defines the property (a forecaster cannot im
 |-----------|-------------|---------|----------|----------|----------------|
 | 5 | 5 | 4 | 4 | 4 | **Established** |
 
-Evidence: Authority — same research lineage as the JASA 2007 paper, extending it into the calibration/sharpness framework specifically. Publication — JRSS-B, a top statistics journal. Adoption — the standard citation for "calibration is necessary but not sufficient" in probabilistic forecasting.
+Evidence: Authority — same research lineage as the JASA 2007 paper, extending it into the calibration/sharpness framework specifically. Publication — JRSS-B, a top statistics journal. Breadth — the calibration/sharpness distinction applies to probabilistic forecasting generally, beyond meteorology. Adoption — the standard citation for "calibration is necessary but not sufficient" in probabilistic forecasting. Currency — remains the live reference for the distinction in current UQ literature.
 
 **Work score — "Probabilistic Forecasts, Calibration and Sharpness":**
 | Specificity | Depth | Currency | Influence | Classification |
 |-------------|-------|----------|-----------|----------------|
-| 5 | 5 | 4 | 5 | **Established** |
+| 5 | 5 | 4 | 5 | **Canonical** |
 
-Evidence: Specificity — formally separates calibration (statistical consistency between stated and observed frequencies) from sharpness (concentration of the predictive distribution), and shows both are required. Influence — this project's JU-4/JU-5 pairing is a direct application: JU-4 checks calibration, JU-5 checks sharpness, and JU-5's rationale ("without this the judge would reward cowardice, and the vaguest model would win") restates this paper's central finding in plain language.
+Evidence: Depth — defines multiple calibration modes (probabilistic, exceedance, marginal) with formal analysis, not a single informal notion. Specificity — formally separates calibration (statistical consistency between stated and observed frequencies) from sharpness (concentration of the predictive distribution), and shows both are required. Influence — this project's JU-4/JU-5 pairing is a direct application: JU-4 checks calibration, JU-5 checks sharpness, and JU-5's rationale ("without this the judge would reward cowardice, and the vaguest model would win") restates this paper's central finding in plain language. Computed average 4.75 — classified Canonical per the scoring bands.
 
 **Activation signals:** Calibration and sharpness distinction, "maximise sharpness subject to calibration," honest-but-useless forecasts
 
@@ -90,14 +90,14 @@ Evidence: Specificity — formally separates calibration (statistical consistenc
 |-----------|-------------|---------|----------|----------|----------------|
 | 5 | 4 | 4 | 5 | 3 | **Established** |
 
-Evidence: Authority — Murphy was a foundational figure in operational meteorological forecast verification at NOAA/NWS; this essay is widely regarded as the field's clearest statement of why a single accuracy number is insufficient. Publication — *Weather and Forecasting*, the standard journal of the American Meteorological Society's forecasting community. Adoption — routinely cited as the entry point for skill-score thinking in verification science.
+Evidence: Authority — Murphy (University of Michigan, later Oregon State University) was a foundational figure in meteorological forecast verification; this essay is widely regarded as the field's clearest statement of why a single accuracy number is insufficient. Breadth — his verification framework covers the general structure of forecast goodness (consistency, quality, value), not one measure. Publication — *Weather and Forecasting*, the standard journal of the American Meteorological Society's forecasting community. Adoption — routinely cited as the entry point for skill-score thinking in verification science.
 
 **Work score — "What Is a Good Forecast?":**
 | Specificity | Depth | Currency | Influence | Classification |
 |-------------|-------|----------|-----------|----------------|
 | 4 | 4 | 3 | 5 | **Established** |
 
-Evidence: Specificity — introduces the skill-score framework (score relative to a reference forecast, not in absolute terms) precisely as this project's JU-2 requires. Influence — JU-2's rationale ("0.03 means nothing until you know that doing nothing scores 0.04") restates Murphy's own argument directly.
+Evidence: Specificity — introduces the skill-score framework (score relative to a reference forecast, not in absolute terms) precisely as this project's JU-2 requires. Depth — decomposes forecast "goodness" into distinct types and named quality dimensions rather than asserting a slogan. Influence — JU-2's rationale ("0.03 means nothing until you know that doing nothing scores 0.04") restates Murphy's own argument directly.
 
 **Activation signals:** Skill scores, forecast goodness dimensions, reference-forecast comparison
 
@@ -145,14 +145,14 @@ Evidence: Specificity — the Lorenz system is the standard minimal example of s
 |-----------|-------------|---------|----------|----------|----------------|
 | 5 | 4 | 4 | 4 | 3 | **Established** |
 
-Evidence: Authority — Dawid is a leading figure in statistical theory (University College London), and the prequential principle is a foundational concept in sequential forecast evaluation. Publication — JRSS-A, a top statistics journal. Adoption — the standard citation for "judge a forecaster only on realized predictions vs. outcomes, never on internal mechanism."
+Evidence: Authority — Dawid is a leading figure in statistical theory (University College London), and the prequential principle is a foundational concept in sequential forecast evaluation. Publication — JRSS-A, a top statistics journal. Breadth — Dawid's contributions span prequential theory, causal inference, and Bayesian decision theory. Adoption — the standard citation for "judge a forecaster only on realized predictions vs. outcomes, never on internal mechanism."
 
 **Work score — "Statistical Theory: The Prequential Approach":**
 | Specificity | Depth | Currency | Influence | Classification |
 |-------------|-------|----------|-----------|----------------|
 | 4 | 4 | 3 | 5 | **Established** |
 
-Evidence: Specificity — precisely states the principle that a forecaster should be evaluated purely on the sequence of predictions and outcomes, not on how the forecasts were generated. Influence — this is JU-1's entire architecture: the judge sees only predictions, uncertainties, and outcomes, never model identity or internals.
+Evidence: Specificity — precisely states the principle that a forecaster should be evaluated purely on the sequence of predictions and outcomes, not on how the forecasts were generated. Depth — develops the principle into a general framework for sequential assessment, not a one-line maxim. Influence — this is JU-1's entire architecture: the judge sees only predictions, uncertainties, and outcomes, never model identity or internals.
 
 **Activation signals:** Prequential principle, evaluate forecasts not mechanisms, blind evaluation
 
@@ -172,14 +172,14 @@ Evidence: Specificity — precisely states the principle that a forecaster shoul
 |-----------|-------------|---------|----------|----------|----------------|
 | 4 | 4 | 5 | 4 | 4 | **Established** |
 
-Evidence: Authority — the standard practitioner-level textbook for forecast verification methodology, widely used in operational meteorology training. Publication — Wiley-Blackwell, 2nd edition. Breadth — comprehensive catalogue of verification measures across the whole field, not a single technique. Adoption — the reference text cited when someone needs "which measure applies to which kind of forecast."
+Evidence: Authority — the standard practitioner-level textbook for forecast verification methodology, widely used in operational meteorology training. Publication — Wiley-Blackwell, 2nd edition. Breadth — comprehensive catalogue of verification measures across the whole field, not a single technique. Adoption — the reference text cited when someone needs "which measure applies to which kind of forecast." Currency — the 2012 second edition remains the field's current practitioner reference.
 
 **Work score — *Forecast Verification* (2nd ed.):**
 | Specificity | Depth | Currency | Influence | Classification |
 |-------------|-------|----------|-----------|----------------|
 | 4 | 5 | 4 | 4 | **Established** |
 
-Evidence: Specificity — catalogues verification measures and their known failure traps in practical, applicable detail. Influence — the practitioner's-eye-view source behind this project's general awareness that verification measures have traps (e.g. JU-8's insistence on independent trials rather than pooled correlated steps is exactly the kind of trap this text catalogues).
+Evidence: Specificity — catalogues verification measures and their known failure traps in practical, applicable detail. Depth — chapter-length treatments per forecast type (binary, categorical, continuous, probabilistic, spatial), the most thorough practitioner coverage in the field. Influence — the practitioner's-eye-view source behind this project's general awareness that verification measures have traps (e.g. JU-8's insistence on independent trials rather than pooled correlated steps is exactly the kind of trap this text catalogues).
 
 **Activation signals:** Verification measure catalogue, practitioner traps in scoring, forecast evaluation methodology
 

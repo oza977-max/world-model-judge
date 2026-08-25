@@ -446,7 +446,7 @@ code {
 <tr>
 <td>Danijar Hafner et al.</td>
 <td>The Dreamer line</td>
-<td>Measured how prediction error grows with rollout length — prior art for the core measurement</td>
+<td>Reports how prediction error grows with rollout length — supporting analysis in a working system; the short-rollout argument itself is Janner et al.'s</td>
 </tr>
 <tr>
 <td>Sutton & Barto</td>
@@ -577,7 +577,7 @@ code {
 <div class="req-gloss"><span class="req-gloss-label">In plain words</span>
 <p>no model is ever tested starting from a point it already saw during training. Because these systems repeat themselves (foxes-and-rabbits cycles, the pendulum's energy shells), test states can still <em>resemble</em> training states by design — genuine novelty comes from the out-of-region starts in WD-5, not from this requirement, which only guards against literally re-using a training start.</p></div>
 </div>
-<span class="sidenote">Kapoor and Narayanan document this kind of leakage as the biggest cause of overstated results across machine-learning research. A judge whose subject was trained on the test set measures nothing at all.</span>
+<span class="sidenote">Kapoor and Narayanan document this kind of leakage as a major, underappreciated cause of overstated results across machine-learning research. A judge whose subject was trained on the test set measures nothing at all.</span>
 <div class="req"><div class="req-id">MU-8 <span class="priority must">Must</span></div>
 <p>Model training shall be seeded and reproducible, such that re-training from the same seed produces the same model and therefore the same verdict.</p>
 <div class="req-gloss"><span class="req-gloss-label">In plain words</span>
