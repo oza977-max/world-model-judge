@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>World Model Judge — Models Specification</title>
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+
+    body {
+      font-family: "ET Book", Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif;
+      color: #111;
+      background: #fffff8;
+      line-height: 1.6;
+      padding: 2rem 1rem 6rem;
+      max-width: 1480px;
+      margin: 0 auto;
+    }
+
+    /* ── Typography ── */
+    h1 {
+      font-size: 2.4rem;
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.4rem;
+      color: #111;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 400;
+      font-style: italic;
+      margin-top: 3rem;
+      margin-bottom: 1rem;
+      color: #111;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 0.3rem;
+    }
+
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-top: 2rem;
+      margin-bottom: 0.6rem;
+      color: #333;
+    }
+
+    h4 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-top: 1rem;
+      margin-bottom: 0.5rem;
+      color: #333;
+    }
+
+    p, li {
+      font-size: 1rem;
+      line-height: 1.7;
+      margin-bottom: 0.8rem;
+      max-width: 780px;
+    }
+
+    ul, ol { padding-left: 1.4rem; margin-bottom: 1.2rem; }
+    li { margin-bottom: 0.4rem; }
+
+    .subtitle {
+      font-size: 1.1rem;
+      font-style: italic;
+      color: #555;
+      margin-bottom: 2.5rem;
+      max-width: 780px;
+    }
+
+    .date {
+      font-size: 0.9rem;
+      color: #888;
+      margin-bottom: 0.2rem;
+    }
+
+    /* ── Floating TOC (Left Side) ── */
+    nav.toc {
+      position: fixed;
+      top: 2rem;
+      left: 2rem;
+      width: 220px;
+      max-height: calc(100vh - 4rem);
+      overflow-y: auto;
+      background: #fffff8;
+      border-right: 2px solid #ddd;
+      padding: 1rem 1rem 1rem 0;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      z-index: 100;
+    }
+
+    nav.toc .toc-title {
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #999;
+      margin-bottom: 0.6rem;
+    }
+
+    nav.toc a {
+      color: #555;
+      text-decoration: none;
+      display: block;
+      padding: 0.15rem 0;
+      transition: color 0.15s;
+    }
+
+    nav.toc a:hover { color: #111; }
+    nav.toc a.active { color: #111; font-weight: 600; }
+    nav.toc .toc-h3 { padding-left: 0.8rem; font-size: 0.78rem; color: #888; }
+    nav.toc .toc-h3:hover { color: #555; }
+
+    /* Offset main content for left TOC */
+    main {
+      margin-left: 260px;
+      max-width: 1000px;
+    }
+
+    /* ── Sidenotes (Right Margin) ── */
+    .sidenote {
+      float: right;
+      clear: right;
+      width: 220px;
+      margin-right: -260px;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      color: #666;
+      padding-left: 1rem;
+      border-left: 2px solid #e0e0e0;
+    }
+
+    /* ── Tables (Few's principles) ── */
+    table {
+      border-collapse: collapse;
+      margin: 1.5rem 0 2rem;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      width: auto;
+      min-width: 480px;
+    }
+
+    thead th {
+      text-align: left;
+      font-weight: 600;
+      padding: 0.5rem 1rem 0.5rem 0;
+      border-bottom: 2px solid #333;
+      color: #111;
+    }
+
+    tbody td {
+      padding: 0.45rem 1rem 0.45rem 0;
+      border-bottom: 1px solid #e8e8e8;
+      vertical-align: top;
+    }
+
+    tbody tr:last-child td { border-bottom: 2px solid #333; }
+    tbody tr:nth-child(even) { background: #f9f9f4; }
+
+    caption {
+      font-style: italic;
+      font-size: 0.88rem;
+      color: #666;
+      text-align: left;
+      margin-bottom: 0.4rem;
+    }
+
+    /* ── Inline Code ── */
+    code {
+      font-family: "Menlo", "Consolas", "Monaco", monospace;
+      font-size: 0.88rem;
+      background: #f0f0e8;
+      padding: 0.1rem 0.35rem;
+      border-radius: 2px;
+    }
+
+    /* ── GVM Attribution ── */
+    .gvm-attribution {
+      font-size: 0.75rem;
+      color: #999;
+      font-style: italic;
+      text-align: center;
+      margin-top: 3rem;
+      margin-bottom: 0;
+      max-width: none;
+    }
+
+    /* ── ADR (Architecture Decision Record) ── */
+    details.adr {
+      background: #f7f7f0;
+      border-left: 3px solid #669;
+      padding: 0;
+      margin: 1rem 0 1.2rem;
+      max-width: 860px;
+    }
+
+    details.adr summary {
+      padding: 0.8rem 1rem;
+      cursor: pointer;
+      list-style: none;
+    }
+
+    details.adr summary::-webkit-details-marker { display: none; }
+
+    details.adr summary::before {
+      content: '\25B8 ';
+      font-size: 0.85rem;
+      color: #999;
+    }
+
+    details.adr[open] summary::before {
+      content: '\25BE ';
+    }
+
+    .adr-id {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-right: 0.5rem;
+    }
+
+    .adr-title {
+      font-weight: 600;
+      color: #333;
+    }
+
+    .adr-status {
+      font-size: 0.75rem;
+      color: #999;
+      font-style: italic;
+      margin-left: 0.5rem;
+    }
+
+    .adr-body {
+      padding: 0 1rem 0.8rem;
+      border-top: 1px solid #e0e0e0;
+    }
+
+    .adr-body h4 {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #666;
+      margin: 0.6rem 0 0.3rem;
+    }
+
+    .adr-body p {
+      margin-bottom: 0.5rem;
+    }
+
+    .adr-body ul {
+      margin-bottom: 0.8rem;
+    }
+
+    .adr-body li {
+      margin-bottom: 0.3rem;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 1200px) {
+      nav.toc {
+        position: static;
+        width: 100%;
+        max-height: none;
+        border-right: none;
+        border-bottom: 1px solid #ddd;
+        padding: 1rem 0;
+        margin-bottom: 2rem;
+      }
+      main { margin-left: 0; }
+      .sidenote {
+        float: none;
+        width: 100%;
+        margin: 0.8rem 0;
+        padding: 0.6rem 0 0.6rem 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="toc" id="toc">
+    <div class="toc-title">Contents</div>
+  </nav>
+
+  <main>
+    <p class="date">25 August 2026</p>
+    <h1>World Model Judge — Models Specification</h1>
+    <p class="subtitle">Version 1.0 · 25 August 2026 · Domain 2 of Requirements v1.2 · References: cross-cutting spec v1.0, worlds spec v1.0</p>
+
+    <p><strong>What this document is.</strong> The design of everything the judge grades: the two dumb baselines, the three deliberately broken fixtures, and the two honest ("unrigged") models — plus the training recipe shape, the accuracy-matching rule, and the pre-registration mechanics that stop any of it being quietly tuned after the fact.</p>
+
+    <p><strong>In plain words:</strong> this spec builds the contestants. The baselines set the floor, the fixtures prove the judge's instruments work, and the two honest models are the actual experiment — matched on accuracy, different only in how they work out their confidence, with everything about them written down before the judge ever sees them.</p>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ddd;">
+
+    <h2 id="expert-panel">Expert Panel</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Expert</th>
+          <th>Work</th>
+          <th>Role in This Document</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Kapoor &amp; Narayanan</td>
+          <td><em>Leakage and the Reproducibility Crisis</em> (2023)</td>
+          <td>The disjoint train/eval rule (MU-7) and why it is structural, not courtesy</td>
+        </tr>
+        <tr>
+          <td>Balaji Lakshminarayanan, Alexander Pritzel &amp; Charles Blundell</td>
+          <td><em>Simple and Scalable Predictive Uncertainty Estimation using Deep Ensembles</em> (NeurIPS 2017)</td>
+          <td>The ensemble-disagreement uncertainty method Model B implements (discovered expert — see below)</td>
+        </tr>
+        <tr>
+          <td>D. A. Nix &amp; A. S. Weigend</td>
+          <td><em>Estimating the mean and variance of the target probability distribution</em> (IEEE ICNN 1994)</td>
+          <td>The direct variance-prediction method Model A implements (discovered expert — see below)</td>
+        </tr>
+        <tr>
+          <td>Kent Beck</td>
+          <td><em>Test-Driven Development: By Example</em></td>
+          <td>Gradient-check-first discipline for the hand-rolled MLP</td>
+        </tr>
+        <tr>
+          <td>Allan Murphy</td>
+          <td><em>What Is a Good Forecast?</em> (1993)</td>
+          <td>Skill scores as the matching currency for MU-5's margin</td>
+        </tr>
+        <tr>
+          <td>Michael Keeling</td>
+          <td><em>Design It!</em></td>
+          <td>ADR format</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 id="expert-discovery">Expert Discovery: Uncertainty Estimation</h3>
+
+    <p>The roster has no specialist for neural-network uncertainty quantification — the core of MU-5. Per the discovery protocol:</p>
+
+    <p><strong>Lakshminarayanan, Pritzel &amp; Blundell</strong> — "Simple and Scalable Predictive Uncertainty Estimation using Deep Ensembles", <em>NeurIPS 2017</em>. The standard citation for ensemble disagreement as predictive uncertainty: independently initialised networks, trained identically, whose spread of predictions estimates epistemic uncertainty — typically better-calibrated out-of-distribution than a single network's self-estimate. This published finding is exactly why MU-6's pre-registered ranking prediction is "reasonably predictable" (requirements, MU-6 rationale).</p>
+
+    <p><strong>Nix &amp; Weigend</strong> — "Estimating the mean and variance of the target probability distribution", <em>IEEE ICNN 1994</em>. The original formulation of a network with a second output head predicting its own error variance, trained under Gaussian negative log-likelihood — Model A's method, in its simplest honest form.</p>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ddd;">
+
+    <h2 id="purpose">1. Purpose</h2>
+
+    <p>Covers requirements <strong>MU-1 through MU-10</strong>. The models package (<code>wmj.models</code>) provides: the single model interface in the MU-1 fixed uncertainty format, the two baselines (MU-2), three fixtures with specified failure modes, labelled everywhere (MU-3, MU-4), two unrigged models matched on accuracy and differing on uncertainty method (MU-5), the pre-registration artefacts and their enforcement (MU-6), disjoint train/eval data (MU-7), seeded training (MU-8), and registry-only extensibility (MU-9). Large/pretrained models are excluded (MU-10, Won't).</p>
+
+    <h2 id="architecturally-significant">2. Architecturally Significant Requirements</h2>
+
+    <ul>
+      <li><strong>MU-9</strong> forces a <em>registry</em> architecture: a model is one file that registers a factory; the harness discovers models only through the registry, so adding one touches nothing else (TC-MU9-01's zero-diff check).</li>
+      <li><strong>MU-1 + WD-2</strong> force a small stateful-per-rollout interface (see ADR-M4): "carry on in a straight line" needs the previous state, and the interface must provide it without leaking anything to the judge.</li>
+      <li><strong>MU-6 + JU-11</strong> force pre-registration to be a <em>mechanically checkable</em> property of git history, implemented in the harness (the judge is pure and cannot read git — cross-cutting ADR-003).</li>
+      <li><strong>MU-8 + NF-1</strong> force training itself into the determinism regime: hand-rolled Adam, seeded init, fixed batch order.</li>
+    </ul>
+
+    <h2 id="design-decisions">3. Design Decisions</h2>
+
+    <details class="adr" id="adr-m1">
+      <summary>
+        <span class="adr-id">ADR-M1</span>
+        <span class="adr-title">The model interface: reset-then-predict, rollout-local memory allowed</span>
+        <span class="adr-status">Accepted</span>
+      </summary>
+      <div class="adr-body">
+        <h4>Context</h4>
+        <p>MU-1 fixes the prediction format (per-dimension mean + one standard deviation — cross-cutting data model). The linear-extrapolation baseline needs the previous state; a bare <code>predict(state, action)</code> cannot supply it.</p>
+
+        <h4>Options Considered</h4>
+        <p>(1) pass a history window in every call — bloats the interface every model must implement for the sake of one baseline; (2) <strong><code>reset()</code> at rollout start plus <code>predict(state, action) → Prediction</code>, with models permitted rollout-local memory</strong> — the harness calls <code>reset()</code> before each rollout; a model may remember what it has seen <em>within</em> that rollout and nothing across rollouts.</p>
+
+        <h4>Decision</h4>
+        <p>Option 2. The interface, complete:</p>
+
+        <pre><code>Model (protocol, wmj.models.base):
+  name: str                 # harness/reporting only — never reaches the judge (JU-1)
+  is_fixture: bool          # MU-4/RP-8 labelling flag, carried to every output surface
+  reset() -> None           # called by the harness at the start of every rollout
+  predict(state, action) -> Prediction   # mean: float64[d], spread: float64[d] (1 sd)</code></pre>
+
+        <h4>Consequences</h4>
+        <p>Rollout-local state is invisible to the judge (which sees only arrays) and harmless to determinism (reset() makes every rollout self-contained). TC-MU1-01/02 check the format and its cross-model identity; the registry (<code>wmj.models.registry.register(factory)</code>) is the only discovery path (MU-9).</p>
+
+        <p><strong>[Requirement: MU-1, MU-9, WD-2] [Test: TC-MU1-01, TC-MU1-02, TC-MU9-01]</strong></p>
+      </div>
+    </details>
+
+    <details class="adr" id="adr-m2">
+      <summary>
+        <span class="adr-id">ADR-M2</span>
+        <span class="adr-title">Baselines: persistence and linear extrapolation, with honest training-residual spreads</span>
+        <span class="adr-status">Accepted</span>
+      </summary>
+      <div class="adr-body">
+        <h4>Context</h4>
+        <p>MU-2 requires both baselines in every verdict. MU-1 requires <em>every</em> model under test to state uncertainty in the fixed format — baselines included, or the judge would need a special case, which JU-1's blindness forbids.</p>
+
+        <h4>Decision</h4>
+        <ul>
+          <li><strong>Persistence:</strong> mean = current state; spread = per-dimension standard deviation of one-step state <em>changes</em> over the training dataset (a constant vector, computed once at fit time). "Nothing changes, give or take how much things usually change."</li>
+          <li><strong>Linear extrapolation:</strong> mean = current + (current − previous) for the same dimension-wise step (first step of a rollout falls back to persistence, having no previous); spread = per-dimension standard deviation of that rule's own residuals on the training data.</li>
+          <li>Both are fitted (their spread constants) on exactly the training dataset the learned models use, so their calibration is honest rather than decorative.</li>
+        </ul>
+
+        <h4>Consequences</h4>
+        <p>Baselines participate in calibration and exception counting like everyone else — a learned model must beat persistence not only on error (TC-MU2-02's sanity floor) but visibly on the same charts. The judge refuses to run without both baselines present in its input (TC-MU2-01, cross-cutting error conventions).</p>
+
+        <p><strong>[Requirement: MU-2, MU-1] [Test: TC-MU2-01, TC-MU2-02]</strong></p>
+      </div>
+    </details>
+
+    <details class="adr" id="adr-m3">
+      <summary>
+        <span class="adr-id">ADR-M3</span>
+        <span class="adr-title">The two unrigged models: same network, two uncertainty methods</span>
+        <span class="adr-status">Accepted</span>
+      </summary>
+      <div class="adr-body">
+        <h4>Context</h4>
+        <p>MU-5 demands at least two non-engineered models, matched on accuracy to a pre-fixed margin, differing only in how they derive uncertainty: one predicting its own error bar, one small ensemble whose disagreement supplies it.</p>
+
+        <h4>Decision</h4>
+        <ul>
+          <li><strong>Model A — "direct" (Nix &amp; Weigend):</strong> one MLP taking <code>(state, action)</code> (normalised by the world's scale vector), outputting per-dimension <code>(Δmean, log σ)</code> — it predicts the state <em>change</em> plus its own per-dimension error bar. Trained with Gaussian negative log-likelihood. <code>mean = state + Δmean</code>, <code>spread = exp(log σ)</code>.</li>
+          <li><strong>Model B — "ensemble" (Lakshminarayanan et al.):</strong> <strong>K = 5</strong> MLPs with the same architecture minus the variance head (mean output only), identical training data, differing only in seeded initialisation and seeded batch shuffling. Pre-registered rules (the MU-5 clauses, fixed here and repeated in <code>prereg/recipe.md</code>):
+            <ul>
+              <li><strong>Point prediction:</strong> the arithmetic mean of the K member means.</li>
+              <li><strong>Spread mapping:</strong> per-dimension <code>spread = sqrt(1 + 1/K) × std(member_means, ddof=1)</code> — sample standard deviation with Bessel's correction, inflated by the standard <code>sqrt(1 + 1/K)</code> predictive-variance factor to correct small-ensemble underdispersion (the MU-5 correction clause; TC-MU5-03 checks it is applied).</li>
+            </ul>
+          </li>
+          <li><strong>Shared architecture (both models, both worlds):</strong> 2 hidden layers × 64 units, tanh activations, hand-rolled NumPy forward/backward, Adam (lr 1e-3, β₁ 0.9, β₂ 0.999), full-batch gradient checked against finite differences to 1e-6 relative before any training run (Beck: the failing test first — the gradient check is the MLP's first test).</li>
+          <li><strong>Stopping rule:</strong> fixed epoch count (pinned in <code>prereg/recipe.md</code>), no early stopping — early stopping peeks at validation loss, which adds a tuning channel MU-6 exists to close.</li>
+          <li><strong>Matching margin (the MU-5/TC-MU5-01 number):</strong> the two models' one-step skill scores (judge-spec definition), per task and per region, must differ by <strong>less than 0.05</strong> — recorded in <code>prereg/recipe.md</code> before training; if any pair exceeds the margin, judging refuses to proceed (the pre-registration is "not yet satisfied", TC-MU5-01's second branch — the remedy is revising the <em>recipe</em> openly and re-running, never nudging a trained model).</li>
+        </ul>
+
+        <h4>Options Considered for Model B's Spread</h4>
+        <p>raw <code>std(ddof=0)</code> — understates, exactly the artefact MU-5 forbids; <code>ddof=1</code> alone — better, still ignores mean-estimation variance; <strong><code>sqrt(1+1/K)</code>-inflated <code>ddof=1</code></strong> — accepted, standard, pre-registrable as one formula.</p>
+
+        <h4>Consequences</h4>
+        <p>The two models are identical everywhere except the uncertainty machinery — which is the entire experimental design. Both are deterministic under MU-8 (seeded init, seeded shuffle, single-threaded — TC-MU8-01's train-twice-identical check).</p>
+
+        <p><strong>[Requirement: MU-5, MU-6, MU-8] [Test: TC-MU5-01, TC-MU5-02, TC-MU5-03, TC-MU8-01]</strong></p>
+      </div>
+    </details>
+
+    <details class="adr" id="adr-m4">
+      <summary>
+        <span class="adr-id">ADR-M4</span>
+        <span class="adr-title">Fixtures: three wrappers around one honest core</span>
+        <span class="adr-status">Accepted</span>
+      </summary>
+      <div class="adr-body">
+        <h4>Context</h4>
+        <p>MU-3 specifies three failure modes; MU-4 demands the fixture label travel everywhere.</p>
+
+        <h4>Decision</h4>
+        <p>Each fixture wraps a copy of Model A (trained normally) and corrupts exactly one thing, so each failure mode is isolated and explainable:</p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Fixture</th>
+              <th>Corruption</th>
+              <th>What it proves the judge catches</th>
+              <th>Case</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>fx-overconfident</code></td>
+              <td>spread × 0.25, mean untouched</td>
+              <td>accurate but cocky → calibration fails despite good accuracy</td>
+              <td>TC-MU3-01</td>
+            </tr>
+            <tr>
+              <td><code>fx-honest-rough</code></td>
+              <td>mean + seeded noise (σ = 2× the model's spread), spread honestly widened to match the true resulting error</td>
+              <td>rougher but honest → calibration passes with worse accuracy</td>
+              <td>TC-MU3-02</td>
+            </tr>
+            <tr>
+              <td><code>fx-brittle</code></td>
+              <td>trained on a deliberately narrowed sub-region (half the training box); spread untouched</td>
+              <td>great at home, catastrophic away → only the in/out region split surfaces it</td>
+              <td>TC-MU3-03</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>All three set <code>is_fixture = True</code>; the flag flows through the harness into the verdict record and onto every chart (MU-4's three surfaces — code, record, rendered chart — are exactly TC-MU4-01's checklist; the rendering rule is the reporting spec's RP-8 section).</p>
+
+        <h4>Consequences</h4>
+        <p>Fixtures are one small wrapper module each; their corruption parameters are constants in the spec (this table), not tunables.</p>
+
+        <p><strong>[Requirement: MU-3, MU-4] [Test: TC-MU3-01, TC-MU3-02, TC-MU3-03, TC-MU4-01]</strong></p>
+      </div>
+    </details>
+
+    <details class="adr" id="adr-m5">
+      <summary>
+        <span class="adr-id">ADR-M5</span>
+        <span class="adr-title">Pre-registration mechanics: committed files, harness-enforced git ordering</span>
+        <span class="adr-status">Accepted</span>
+      </summary>
+      <div class="adr-body">
+        <h4>Context</h4>
+        <p>MU-6 requires recipe, margins, formats, and the ranking prediction committed before the first judged run of unrigged models; the enforcement must be mechanical (commit timestamps), and the judge itself cannot read git (JU-12).</p>
+
+        <h4>Decision</h4>
+        <p><code>prereg/</code> contains, each as one committed file: <code>recipe.md</code> (architecture, training data counts, epochs, seeds policy, matching margin, ensemble rules), <code>prediction.md</code> (the written ranking prediction), <code>thresholds.json</code> (JU-11's bands — owned by the judge spec, enforced by the same mechanism). The harness's <code>check_prereg</code> step (runs before any judged run of an unrigged model) asserts: every <code>prereg/</code> file is committed (not dirty), and its <em>first-added</em> commit timestamp strictly precedes the timestamp of any recorded judged-run artefact for unrigged models. Runs record their commit-of-record in the verdict metadata, making TC-JU11-02's after-the-fact edit detectable: a <code>prereg/</code> file whose first commit postdates a recorded run fails certification.</p>
+
+        <h4>Consequences</h4>
+        <p>Pre-registration violations stop the pipeline before output exists (cross-cutting error conventions). MU-6's publish-either-way clause (TC-MU6-02, judged) is procedural, not code — the spec records it as an owner obligation.</p>
+
+        <p><strong>[Requirement: MU-6, JU-11 (mechanics shared)] [Test: TC-MU6-01, TC-MU6-02, TC-JU11-01, TC-JU11-02]</strong></p>
+      </div>
+    </details>
+
+    <h2 id="component-design">4. Component Design</h2>
+
+    <pre><code>wmj/models/
+  base.py        # Model protocol, Prediction dataclass (re-exported from shared shapes)
+  registry.py    # register(factory) / all_models() — the only discovery path (MU-9)
+  baselines.py   # persistence, linear extrapolation (ADR-M2)
+  mlp.py         # hand-rolled MLP: forward, backward, Adam, gradient check hook
+  direct.py      # Model A (ADR-M3)
+  ensemble.py    # Model B (ADR-M3)
+  fixtures.py    # the three wrappers (ADR-M4)
+tests/models/    # gradient check, format checks, fixture behaviour, determinism</code></pre>
+
+    <p><strong>Training data (shape; final counts pinned in <code>prereg/recipe.md</code>):</strong> for each world, N trajectories of full horizon from seeded training-region starts with seeded trained-range action sequences; the train/eval split is by <em>starting condition</em> — no evaluation rollout starts from any training start (MU-7, TC-MU7-01), with the harness storing both sets' start lists and asserting disjointness at run time. Resemblance between train and eval states is expected and fine (the systems cycle); only literal start reuse is forbidden, per MU-7's own wording.</p>
+
+    <h2 id="api-boundary">5. API Boundary Contracts</h2>
+
+    <p>What the harness extracts from models for the judge — the only model-shaped data the judge ever sees (JU-1):</p>
+
+    <pre><code>{
+  "predictions": {"mean": "[T, d] float64", "spread": "[T, d] float64"},
+  "outcomes": "[T, d] float64",
+  "region_labels": {"start_in_region": true, "action_in_region": false, "axis": "action"},
+  "trial_boundaries": "[n_trials] int — where independent trials begin (JU-8)",
+  "is_fixture": "bool — carried for labelling only; stripped from JudgeInput, rejoined at reporting"
+}</code></pre>
+
+    <p><code>is_fixture</code> is <em>not</em> part of <code>JudgeInput</code> (the judge must stay blind); the harness holds the mapping and reporting rejoins it for labelling. Model <code>name</code> likewise never enters the judge (TC-JU1-01/02 in the judge spec).</p>
+
+    <h2 id="integration-points">6. Integration Points</h2>
+
+    <ul>
+      <li><strong>← worlds:</strong> training data generated through the world interface with the worlds spec's regions and action ranges; models never import world internals — they see <code>(state, action)</code> arrays.</li>
+      <li><strong>→ judge:</strong> the boundary contract above; the judge spec owns <code>JudgeInput</code>.</li>
+      <li><strong>→ harness:</strong> registry discovery, training orchestration, prereg checks, train/eval disjointness assertion.</li>
+    </ul>
+
+    <h2 id="error-handling">7. Error Handling &amp; Edge Cases</h2>
+
+    <ul>
+      <li>A model returning a malformed <code>Prediction</code> (wrong shape, non-positive spread, NaN) → <code>ModelContractError</code> naming the model and MU-1; the run aborts (no partial verdicts, TC-JU9-02 discipline).</li>
+      <li>Gradient check failure → training refuses to start.</li>
+      <li>Prereg violations → pipeline stops before judging (ADR-M5).</li>
+      <li>First-step linear extrapolation (no previous state) falls back to persistence — deterministic and documented, not an error.</li>
+    </ul>
+
+    <h2 id="testing-strategy">8. Testing Strategy</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Concern</th>
+          <th>Cases</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Uncertainty format fixed and identical</td>
+          <td>TC-MU1-01, TC-MU1-02</td>
+        </tr>
+        <tr>
+          <td>Baselines present and non-trivial</td>
+          <td>TC-MU2-01, TC-MU2-02</td>
+        </tr>
+        <tr>
+          <td>Fixtures fail as specified</td>
+          <td>TC-MU3-01, TC-MU3-02, TC-MU3-03</td>
+        </tr>
+        <tr>
+          <td>Fixture labels on all three surfaces</td>
+          <td>TC-MU4-01</td>
+        </tr>
+        <tr>
+          <td>Matching margin + pre-registered ensemble rules</td>
+          <td>TC-MU5-01, TC-MU5-02, TC-MU5-03</td>
+        </tr>
+        <tr>
+          <td>Prereg commit ordering, publish-either-way</td>
+          <td>TC-MU6-01, TC-MU6-02 (judged)</td>
+        </tr>
+        <tr>
+          <td>Train/eval disjointness</td>
+          <td>TC-MU7-01</td>
+        </tr>
+        <tr>
+          <td>Deterministic training</td>
+          <td>TC-MU8-01</td>
+        </tr>
+        <tr>
+          <td>Registry-only extensibility</td>
+          <td>TC-MU9-01</td>
+        </tr>
+        <tr>
+          <td>Plus: MLP gradient check (this spec's own addition, pre-TC discipline)</td>
+          <td>—</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ddd;">
+
+    <h2 id="changelog">Changelog</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Version</th>
+          <th>Date</th>
+          <th>Change</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1.0</td>
+          <td>2026-08-25</td>
+          <td>Initial version. Interface (reset+predict), baselines with honest spreads, direct-vs-ensemble design with pre-registered spread mapping, three one-corruption fixtures, prereg mechanics. Matching margin pinned at 0.05 skill-score difference.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ddd;">
+
+    <p class="gvm-attribution">Developed using the Grounded Vibe Methodology</p>
+  </main>
+
+  <script>
+    (function () {
+      const toc = document.getElementById('toc');
+      const headings = document.querySelectorAll('h2[id], h3[id]');
+      const links = [];
+
+      headings.forEach(function (h) {
+        const a = document.createElement('a');
+        a.href = '#' + h.id;
+        a.textContent = h.textContent;
+        if (h.tagName === 'H3') a.classList.add('toc-h3');
+        toc.appendChild(a);
+        links.push({ el: a, target: h });
+      });
+
+      function onScroll() {
+        let current = links[0];
+        for (let i = 0; i < links.length; i++) {
+          if (links[i].target.getBoundingClientRect().top <= 80) current = links[i];
+        }
+        links.forEach(function (l) { l.el.classList.remove('active'); });
+        if (current) {
+          current.el.classList.add('active');
+          const tocEl = document.getElementById('toc');
+          const elTop = current.el.offsetTop - tocEl.offsetTop;
+          const elBot = elTop + current.el.offsetHeight;
+          if (elTop < tocEl.scrollTop || elBot > tocEl.scrollTop + tocEl.clientHeight) {
+            tocEl.scrollTop = elTop - tocEl.clientHeight / 2;
+          }
+        }
+      }
+
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    })();
+  </script>
+</body>
+</html>
