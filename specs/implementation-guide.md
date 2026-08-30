@@ -1,10 +1,10 @@
 # World Model Judge — Implementation Guide
 
-Version 1.1 · 25 August 2026 · Bridges: all five specs v1.1 → `/gvm-build` · Requirements v1.2, Test Cases v1.0
+Version 1.2 · 30 August 2026 · Bridges: all five specs v1.2 → `/gvm-build` · Requirements v1.2, Test Cases v1.0
 
-> **Change note (v1.1).** Revised after `/gvm-design-review` design-review-001. Panel D confirmed P1-C02 is a genuine tracer bullet, but found the plan reverts to a fully horizontal build for essentially its entire remainder: Phases 2–5 build strictly by architectural layer (all worlds, then all models, then all judge logic, then all charts *against fixture verdict records, not the real pipeline*), so the only further user-visible capability doesn't land until chunk 19 of 23 (P6-C01) — exactly the pattern this guide's own MVP-1 rule exists to forbid, with no exemption declared. Fixed by adding **P2-C05**, a second thin vertical slice that renders one real chart from real data (persistence baseline, real LV world, the skill/CRPS code already built in P1-C02) as soon as both worlds exist — landing at position 8 of what is now 24 chunks, not position 19. Phase 5's later chart work extends this prototype to the full model roster and all four chart types rather than starting from nothing. See design-review-001.html for the full findings.
+> **Change note (v1.2).** Revised after `/gvm-design-review` design-review-002 (Round 2, independent re-check). Panel D confirmed **P2-C05 itself is sound** — a genuine, demonstrable second thin vertical slice, correctly wired — but found two things wrong with this guide's own bookkeeping around it. First, **the chunk count is wrong: independently recounted twice against the Dependency Network table below, the true total is 28, not the "24" stated four times in this document since v1.1** (and, tracing the same error backward, the true pre-P2-C05 total was 27, not the "23" v1.0 stated — this miscount predates v1.1's own fix and was never caught until Round 2's strict, from-scratch recount). Corrected everywhere below; the v1.0/v1.1 changelog rows are left as the historical record of what was claimed at the time. Second, **the "P2-C05 shares no files with any Phase 3 chunk" parallel-safety claim was false**: P2-C05 and P3-C02 both target `wmj/models/baselines.py` per the models spec's own component design and this guide's Wiring Matrix naming. Fixed by stating explicitly that P2-C05 creates the file with the persistence baseline only, P3-C02 sequentially extends it, and removing the incorrect parallel claim. See design-review-002.html for the full findings.
 
-**What this document is.** The build plan: six phases, twenty-four chunks, each sized to one context window, each with its tests co-located, with the dependency network, the critical path, the parallelism map, and the wiring matrix proving every built module has a path into the running product.
+**What this document is.** The build plan: six phases, twenty-eight chunks (design-review-002 correction — see change note above), each sized to one context window, each with its tests co-located, with the dependency network, the critical path, the parallelism map, and the wiring matrix proving every built module has a path into the running product.
 
 **In plain words:** this is the order of work. Every chunk says what it builds, which spec section it reads, which test cases it must pass, and which later chunk would fail without it — so nothing gets built that nothing uses, and nothing gets used that nothing built.
 
@@ -12,7 +12,7 @@ Version 1.1 · 25 August 2026 · Bridges: all five specs v1.1 → `/gvm-build` �
 
 ## Build Phases
 
-**MVP-1 check:** the first user-facing chunk is **P1-C02**, which delivers a runnable end-to-end product (`python -m wmj run --skeleton`: one world, one baseline, one skill score, one serialized output file, deterministic) — the smallest honest slice of the whole pipeline. **Second user-visible slice (design-review addition): P2-C05**, landing at chunk 8 rather than chunk 19 — one real rendered chart (error-vs-horizon) from real LV data and a real baseline, the first artefact in the whole build that looks like what Dev (the named target user) actually reads. No exemption needed for either slice; the sequencing itself was the fix.
+**MVP-1 check:** the first user-facing chunk is **P1-C02**, which delivers a runnable end-to-end product (`python -m wmj run --skeleton`: one world, one baseline, one skill score, one serialized output file, deterministic) — the smallest honest slice of the whole pipeline. **Second user-visible slice (design-review addition): P2-C05**, landing at chunk 8 rather than chunk 25 (design-review-002 correction: independently recounted from the Dependency Network table — the pre-fix plan's first further user-visible capability would have landed at chunk 25 of 27, not the previously-stated "chunk 19 of 23"; the position-8 claim for P2-C05 itself was always correct and is unaffected) — one real rendered chart (error-vs-horizon) from real LV data and a real baseline, the first artefact in the whole build that looks like what Dev (the named target user) actually reads. No exemption needed for either slice; the sequencing itself was the fix.
 
 **Phase numbering:** starts at P1 — `build/handovers/` does not exist and no prior implementation guide exists in this repository (checked at write time).
 
@@ -28,12 +28,12 @@ Version 1.1 · 25 August 2026 · Bridges: all five specs v1.1 → `/gvm-build` �
 - **P2-C02 · Pendulum full.** EOM, energy, regions, tasks, unwrapped angles. [Test: TC-WD1-01, TC-WD2-01, TC-WD7-01, TC-WD7-02] ∥
 - **P2-C03 · Divergence + drift artefacts.** Benchmark generator (64 starts/region, median curves), drift measurement vs the 1e-6 bound, curve sanity assertions. *Needs C01+C02.* [Test: TC-WD3-03, TC-WD4-01, TC-WD4-02]
 - **P2-C04 · Region labelling.** In/out labelling with axis attribution, boundary determinism. *Needs C01+C02.* [Test: TC-WD5-01, TC-WD5-02] ∥ *parallel with P2-C03.*
-- **P2-C05 · First real chart (user-facing, design-review addition).** A second, deliberately early thin vertical slice: wire the persistence baseline (models ADR-M2, minimal — just the spread-fitting logic, not the full models package) and P1-C02's existing `skill.py`/CRPS code to the LV world's real trajectories and P2-C03's real divergence curve, then render Chart 2 (error-vs-horizon, reporting ADR-R2) with a real caption (reporting ADR-R3) to `out/charts/lv-persistence-horizon.png`. This is *not* the full reporting package — just `reporting.style` (minimal) and `reporting.horizon_plot`, extended later in Phase 5 to cover every model and chart type. Acceptance: the rendered chart and caption exist, are non-empty, and the caption text matches the ADR-R3 template with real numbers substituted. *Needs P1-C02, P2-C03.* [Test: TC-RP2-01 (partial scope: one model, one world — extended to full scope in Phase 5)] ~1 session.
+- **P2-C05 · First real chart (user-facing, design-review addition).** A second, deliberately early thin vertical slice: creates `wmj/models/baselines.py` **containing only the persistence baseline's spread-fitting logic** (design-review-002 fix — this chunk creates the real file, not a throwaway stand-in; P3-C02 below sequentially extends it) and wires it plus P1-C02's existing `skill.py`/CRPS code to the LV world's real trajectories and P2-C03's real divergence curve, then renders Chart 2 (error-vs-horizon, reporting ADR-R2) with a real caption (reporting ADR-R3) to `out/charts/lv-persistence-horizon.png`. This is *not* the full reporting package — just `reporting.style` (minimal) and `reporting.horizon_plot`, extended later in Phase 5 to cover every model and chart type. Acceptance: the rendered chart and caption exist, are non-empty, and the caption text is the ADR-R3 template verbatim (design-review-002 fix — Chart 2's template has no numeric slots, unlike Charts 1 and 4, so "with real numbers substituted" overstated what this chunk's acceptance test actually checks). *Needs P1-C02, P2-C03.* [Test: TC-RP2-01 (partial scope: one model, one world — extended to full scope in Phase 5)] ~1 session.
 
 ### Phase 3 — Models (deliverable: all eight registered contestants + prereg tooling)
 
 - **P3-C01 · MLP core.** Forward/backward/Adam, gradient-check-first (the failing finite-difference test precedes backprop). *Spec: models ADR-M3 shared architecture.*
-- **P3-C02 · Baseline spreads.** Training-residual spread fitting for both baselines; registry wiring. [Test: TC-MU1-01/02 (baselines), TC-MU2-01] ∥ *parallel with P3-C01.*
+- **P3-C02 · Baseline spreads.** **Extends P2-C05's `wmj/models/baselines.py`** (design-review-002 fix — both chunks target the same file; this one is sequential after P2-C05, not parallel with it) with the linear-extrapolation baseline's training-residual spread fitting and registry wiring for both baselines. [Test: TC-MU1-01/02 (baselines), TC-MU2-01] ∥ *parallel with P3-C01, not with P2-C05.*
 - **P3-C03 · Model A (direct).** Variance head, Gaussian NLL training. *Needs C01.* [Test: TC-MU1-01/02] ∥
 - **P3-C04 · Model B (ensemble).** K=5, pre-registered point rule + `sqrt(1+1/K)`·std(ddof=1) spread mapping. *Needs C01.* [Test: TC-MU5-02, TC-MU5-03] ∥ *parallel with C03.*
 - **P3-C05 · Fixtures.** The three one-corruption wrappers, `is_fixture` flag. *Needs C03.* [Test: TC-MU3-01/02/03 (behavioural halves), TC-MU4-01 (code surface)]
@@ -77,7 +77,7 @@ Version 1.1 · 25 August 2026 · Bridges: all five specs v1.1 → `/gvm-build` �
 | P2-C04 | P2-C01, P2-C02 | P6-C01 | P2-C03 |
 | P2-C05 | P1-C02, P2-C03 | (demonstration only; extended by P5-C03) | P3 phase (not on critical path) |
 | P3-C01 | P1-C01 | P3-C03/04 | P3-C02, P3-C07 |
-| P3-C02 | P1-C02 | P6-C01 | P3-C01 |
+| P3-C02 | P1-C02, P2-C05 | P6-C01 | P3-C01, P3-C07 |
 | P3-C03 | P3-C01, P3-C06 | P3-C05 | P3-C04 |
 | P3-C04 | P3-C01, P3-C06 | P6-C01 | P3-C03 |
 | P3-C05 | P3-C03 | P6-C01 | P4-C01 |
@@ -139,7 +139,7 @@ P2-C01 ∥ P2-C02        P3-C01 ∥ P3-C02 ∥ P3-C07
 | `reporting.style.mark_fixture` (producer) | consumed by every chart renderer | P5-C02..C04 | P6-C01 (TC-RP8-01 fixture-label acceptance) |
 | `harness.serialize` (producer) | consumed by skeleton, thresholds writer, verdict writer, manifest | P1-C02, P3-C07, P5-C04 | P1-C03 (byte-identity gate is the serializer's failing consumer test) |
 | `judge.types` (producer) | consumed by every judge module + reporting reader | P4-C01, P5-C04 | P4-C01 (TC-JU1-01 structural-blindness test) |
-| `wmj.models.registry` (producer) | consumed by `harness.trials` discovery | P6-C01 | P6-C01 (TC-MU9-01 zero-diff acceptance uses registry discovery) |
+| `wmj.models.registry` (producer) | consumed by `harness.trials` discovery | P6-C01 | P6-C01 (TC-MU9-01 zero-diff acceptance, now via the named `tests/gates/test_registry_isolation.py` git-diff mechanism, design-review-002 — cross-cutting spec v1.2 ADR-003) |
 
 No row has an empty wiring-chunk or `Demanded by` cell; no exemptions claimed.
 
@@ -154,7 +154,7 @@ No row has an empty wiring-chunk or `Demanded by` cell; no exemptions claimed.
 
 ## Parallel Work Identification (share-nothing)
 
-Safe parallel sets (no shared files): {P2-C01, P2-C02} · {P3-C01, P3-C02, P3-C07} · {P3-C03, P3-C04} · {P4-C02, P4-C03, P4-C04, P4-C05} · {P5-C02, P5-C03, P5-C04}. P2-C05 (design-review addition) can run in parallel with all of Phase 3, since it depends only on P1-C02 and P2-C03 and shares no files with any Phase 3 chunk. Interface contracts at the boundaries are the specs' own (MU-1 Prediction, the divergence artefact JSON, the Verdict schema). Merge strategy: sequential merge in chunk-ID order within each parallel set; parallel chunks never modify the same file (each owns its module + its test file).
+Safe parallel sets (no shared files): {P2-C01, P2-C02} · {P3-C01, P3-C07} · {P3-C03, P3-C04} · {P4-C02, P4-C03, P4-C04, P4-C05} · {P5-C02, P5-C03, P5-C04}. **P2-C05 (design-review addition) can run in parallel with every Phase 3 chunk *except* P3-C02** (design-review-002 fix — the previous "shares no files with any Phase 3 chunk" claim was wrong: P2-C05 creates `wmj/models/baselines.py` with the persistence baseline only, and P3-C02 sequentially extends that same file with the linear-extrapolation baseline and registry wiring; P3-C02 now depends on P2-C05 per the Dependency Network table above). Interface contracts at the boundaries are the specs' own (MU-1 Prediction, the divergence artefact JSON, the Verdict schema). Merge strategy: sequential merge in chunk-ID order within each parallel set; parallel chunks never modify the same file (each owns its module + its test file).
 
 ## Integration Closure
 
@@ -167,7 +167,8 @@ Deferred seams and their closing chunks: model training deferred from P3 rollout
 | Version | Date | Change |
 |---|---|---|
 | 1.0 | 2026-08-25 | Initial version. Starts at P1 — no prior build phases or implementation guide exist in this repository. 6 phases, 23 chunks, MVP-1 satisfied by P1-C02, wiring matrix complete with no exemptions. |
-| 1.1 | 2026-08-25 | Design-review fix (design-review-001): added P2-C05, a second thin vertical slice (one real chart from real data) landing at chunk 8 rather than the previous plan's first further user-visible capability at chunk 19 — Phases 2–5 had otherwise reverted to a fully horizontal, layer-by-layer build after P1-C02, which the guide's own MVP-1 rule exists to forbid. 6 phases, 24 chunks. |
+| 1.1 | 2026-08-25 | Design-review fix (design-review-001): added P2-C05, a second thin vertical slice (one real chart from real data) landing at chunk 8 rather than the previous plan's first further user-visible capability at chunk 19 (this "23"/"19" arithmetic was itself later found wrong in design-review-002 — see v1.2 row) — Phases 2–5 had otherwise reverted to a fully horizontal, layer-by-layer build after P1-C02, which the guide's own MVP-1 rule exists to forbid. 6 phases, "24" chunks (later corrected). |
+| 1.2 | 2026-08-30 | Design-review fixes (design-review-002, Round 2): corrected the chunk count everywhere in this document (true total 28, not 24; true pre-P2-C05 total 27, not 23 — an arithmetic error present since v1.0 and never caught until an independent recount); fixed the false "P2-C05 shares no files with any Phase 3 chunk" parallel-safety claim (both target `wmj/models/baselines.py`) by making P3-C02 sequentially extend P2-C05's file instead; corrected P2-C05's acceptance criterion (Chart 2's caption template has no numeric slots to substitute); named the concrete `test_registry_isolation.py` mechanism for TC-MU9-01. |
 
 ---
 

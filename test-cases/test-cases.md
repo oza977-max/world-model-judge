@@ -188,9 +188,9 @@ When a model is trained twice from that seed,
 Then the two resulting models are identical (and therefore produce identical verdicts).
 
 **TC-MU9-01** · scenario test · executable
-Given a new model implementing only the MU-1 interface,
-When it is added to the harness,
-Then a repository diff (before vs. after) shows changes confined to the new model's own file(s) — zero lines changed under the judge, worlds, or reporting packages.
+Given a new model implementing only the MU-1 interface, added to a scratch git worktree checked out at the current commit and committed there (the mechanism named in cross-cutting spec v1.2 ADR-003, `tests/gates/test_registry_isolation.py` — design-review-002 update: Round 2 found this was the one MU-9-adjacent gate with no described enforcement mechanism, unlike NF-6's AST walk or NF-4's scan),
+When `git diff --stat` is computed between the two commits,
+Then the diff shows changes confined to exactly one new path under `wmj/models/` — zero lines changed under the judge, worlds, or reporting packages.
 
 ---
 
@@ -249,7 +249,7 @@ Then the invariant used for conditioning is re-measured from the true trajectory
 **TC-JU7-01** · scenario test · executable
 Given a computed trust horizon,
 When it is reported anywhere in the verdict record or on a chart,
-Then it always appears with its task name and tolerance attached, and never as a bare number.
+Then it always appears with its task name, its region, and tolerance attached (design-review-002 update: region added — judge spec v1.2 §5), and never as a bare number.
 
 **TC-JU7-02** · scenario test · executable
 Given a trust horizon computed in steps,
@@ -274,7 +274,7 @@ Then it is flagged as a fault via the sharpness cross-check (JU-5), not silently
 **TC-JU9-01** · scenario test · executable
 Given a completed judging run,
 When the verdict record is produced,
-Then it contains all six required fields (skill scores, error-vs-horizon with divergence benchmark, calibration+sharpness in/out of region, exception counts vs. thresholds, per-task trust horizons, not-tested list) in one structured record.
+Then it contains all eight required field groups (design-review-002 update: `trials` and `climatology` were added to the Verdict schema in v1.1 but omitted from this list until Round 2 found the gap — judge spec v1.2 §5) — skill scores, error-vs-horizon with divergence benchmark, calibration+sharpness in/out of region, exception counts vs. thresholds, per-trial outcome/band/exception data, conditioned-climatology agreement, per-task-and-region trust horizons, not-tested list — in one structured record.
 
 **TC-JU9-02 (negative/phantom-gate)** · mutation test · executable
 Given a judging run where one required field (e.g. the calibration data) cannot be computed,
@@ -385,8 +385,8 @@ When compared against `<spec-value: the technical spec's named minimal package l
 Then no dependency outside that named list is present. (Unbuildable until the technical spec declares the list — flagged here rather than assumed.)
 
 **TC-NF4-01** · scenario test · executable
-Given the full repository text,
-When scanned for a maintained list of forbidden terms (employer name, internal team/committee names — the list itself declared and kept current in the technical spec),
+Given the full repository text **and its commit-message history** (design-review-002 update: cross-cutting spec v1.2's scan mechanism now covers `git log` as well as tracked file content — Round 2's Security panel found a term typed into a commit message and later removed from file content would otherwise remain permanently visible on a public repo, uncaught),
+When scanned for a maintained list of forbidden terms (employer name, internal team/committee names — the list itself declared and kept current in the technical spec, in a gitignored local file per the v1.2 mechanism, never in a tracked one),
 Then no match is found — the one place this project's honesty requirements have real, checkable teeth on a public, first-commit repo.
 
 **TC-NF4-02** · scenario test · judged

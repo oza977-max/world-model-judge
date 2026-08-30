@@ -1,8 +1,8 @@
 # World Model Judge — Models Specification
 
-Version 1.1 · 25 August 2026 · Domain 2 of Requirements v1.2 · References: cross-cutting spec v1.1, worlds spec v1.1
+Version 1.2 · 30 August 2026 · Domain 2 of Requirements v1.2 · References: cross-cutting spec v1.2, worlds spec v1.2
 
-> **Change note (v1.1).** Revised after `/gvm-design-review` design-review-001. ADR-M3 previously left four numbers/formulas that would each produce a different trained model from the same seed — weight initialization, Model A's exact NLL loss, whether training is full-batch or mini-batch, and Adam's ε — all now pinned. `fx-honest-rough`'s spread-widening was prose ("widened to match the true resulting error"); now a formula. `fx-brittle`'s "half the training box" is now a specific, named split. Added a cross-rollout isolation test for `reset()` (§8) — the exact "a model remembers something across rollouts" risk this project's own architecture is designed to prevent had no test checking it actually holds. §5's boundary contract dropped the undefined `trial_boundaries` field (judge spec v1.1 explains why: the pre-shaped `[n_trials, H, d]` array design makes a separate boundary marker unnecessary) and now points at the harness-owned envelope (judge spec v1.1 §5) instead of a separately-described "map." ADR-M5 now explicitly lists the MU-1 uncertainty format among `prereg/recipe.md`'s contents, closing a traceability gap. See design-review-001.html for the full findings.
+> **Change note (v1.2).** Revised after `/gvm-design-review` design-review-002 (Round 2, new Security panel). ADR-M5's residual-risk paragraph now names a second, distinct disclosed gap alongside the existing git-rewritability one: MU-6's "publish either way" clause has no mechanism proving a judged run of the unrigged models actually happened and was not quietly discarded before an unfavourable result could be published — nothing in the design detects non-publication. Named explicitly rather than left implicit, matching this project's own disclosure discipline. See design-review-002.html for the full findings.
 
 **What this document is.** The design of everything the judge grades: the two dumb baselines, the three deliberately broken fixtures, and the two honest ("unrigged") models — plus the training recipe shape, the accuracy-matching rule, and the pre-registration mechanics that stop any of it being quietly tuned after the fact.
 
@@ -129,6 +129,8 @@ All three set `is_fixture = True`; the flag flows through the harness into the v
 
 **Consequences:** Pre-registration violations stop the pipeline before output exists (cross-cutting error conventions). MU-6's publish-either-way clause (TC-MU6-02, judged) is procedural, not code — the spec records it as an owner obligation. **A named residual risk (design-review addition):** "append-only" `prereg/` history is a convention this mechanism relies on, not a technical control — git history is rewritable by the same single author JU-10's disclosure #3 already discloses as a limitation. This is not a defect to fix (no technical control fully closes it without infrastructure this toy-scale project doesn't otherwise need) but is named here explicitly rather than left implicit, in the same spirit as JU-10's other disclosures.
 
+**A second, distinct residual risk (design-review-002 addition — Round 2's Security panel):** MU-6's publish-either-way clause is procedural in a stronger sense than the paragraph above covers — nothing in this design detects *non-publication*. A judged run of the unrigged models could be executed, its result observed as unfavourable, and simply never committed; there is no artefact, log, or check anywhere in the pipeline that proves a judged run occurred if its output was withheld, since the only record of anything is what actually gets committed. This is a different failure mode from git-history rewriting (which alters a committed record) — this is a record that never gets made in the first place. No JU-10 disclosure covers this specific scenario (checked against all seven verbatim strings in judge spec ADR-J7). As with the git-rewritability risk, no technical control in a single-author, offline, no-server-side-witness project fully closes this; it is disclosed here rather than presented as solved.
+
 ## 4. Component Design
 
 ```
@@ -147,7 +149,7 @@ tests/models/    # gradient check, format checks, fixture behaviour, determinism
 
 ## 5. API Boundary Contracts
 
-What the harness extracts from models for the judge — the only model-shaped data the judge ever sees (JU-1). Arrays are pre-shaped `[n_trials, H, d]` (judge spec v1.1 §4); a trial's own row in that first axis is its boundary, so there is no separate boundary-marker field (design-review fix — v1.0 named a `trial_boundaries: [n_trials] int` field here that judge.md's own array shapes made undefined and redundant; removed):
+What the harness extracts from models for the judge — the only model-shaped data the judge ever sees (JU-1). Arrays are pre-shaped `[n_trials, H, d]` (judge spec v1.2 §4); a trial's own row in that first axis is its boundary, so there is no separate boundary-marker field (design-review fix — v1.0 named a `trial_boundaries: [n_trials] int` field here that judge.md's own array shapes made undefined and redundant; removed):
 
 ```json
 {
@@ -157,7 +159,7 @@ What the harness extracts from models for the judge — the only model-shaped da
 }
 ```
 
-`is_fixture` and the model's `name` are *not* part of `JudgeInput` (the judge must stay blind) and are never computed by anything in this package's own model code — the harness assembles them into the harness-owned envelope (judge spec v1.1 §5) alongside the judge's pure `Verdict` once judging completes, which is what reporting actually consumes (design-review fix: v1.0 described this as the harness holding "a mapping" reporting separately "rejoins"; the envelope is the single object that replaces both, per Keeling's single-producer-per-fact principle applied in the judge spec).
+`is_fixture` and the model's `name` are *not* part of `JudgeInput` (the judge must stay blind) and are never computed by anything in this package's own model code — the harness assembles them into the harness-owned envelope (judge spec v1.2 §5) alongside the judge's pure `Verdict` once judging completes, which is what reporting actually consumes (design-review fix: v1.0 described this as the harness holding "a mapping" reporting separately "rejoins"; the envelope is the single object that replaces both, per Keeling's single-producer-per-fact principle applied in the judge spec).
 
 ## 6. Integration Points
 
@@ -196,6 +198,7 @@ What the harness extracts from models for the judge — the only model-shaped da
 |---|---|---|
 | 1.0 | 2026-08-25 | Initial version. Interface (reset+predict), baselines with honest spreads, direct-vs-ensemble design with pre-registered spread mapping, three one-corruption fixtures, prereg mechanics. Matching margin pinned at 0.05 skill-score difference. |
 | 1.1 | 2026-08-25 | Design-review fixes (design-review-001): pinned weight initialization, Model A's exact NLL formula, resolved the full-batch/mini-batch contradiction (mini-batch 32, gradient check separately full-batch), pinned Adam's ε; `fx-honest-rough`'s spread now an exact formula; `fx-brittle`'s "half the training box" now names the specific axis and split; added TC-MU1-03 (reset-isolation test); §5 dropped the undefined `trial_boundaries` field and now points at the judge spec's harness-owned envelope; ADR-M5 traces the MU-1 format explicitly into `prereg/recipe.md`. |
+| 1.2 | 2026-08-30 | Design-review fix (design-review-002, Round 2): named a second residual risk in ADR-M5 — non-publication of an unfavourable judged run is undetectable by any mechanism in this design, distinct from the existing git-rewritability disclosure. |
 
 ---
 

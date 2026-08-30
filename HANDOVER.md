@@ -2,37 +2,44 @@
 
 ## CURRENT STATE
 
-**Phase:** Technical specification complete **and design-reviewed**, all
-seven documents at **v1.1**. `/gvm-tech-spec` ran in full and every spec
-was approved individually. Then `/gvm-design-review` ran (quick-scan
-depth, 4 parallel defect-class panels — Requirements Coverage, Interface
-Contracts, Structural Soundness, Implementability) and found 10 Critical
-and 16 Important findings: a genuinely valuable result, not a failure —
-this is what the review is for. The user chose "fix everything before
-build"; all 26 findings were patched directly into the specs in the same
-session (see `design-review/design-review-001.html` and
-`reviews/calibration.md` for the full record). Coverage audit re-run
-after the fixes: still clean, 45/45 requirements and 70/70 test cases
-(one new case, TC-MU1-03, added for a gap the review found with no other
-fix available).
-**Important honesty note, carried in `reviews/calibration.md`:** the
-fixes were applied by the same agent that found them, in the same
-session, and have **not** been independently re-verified by a second
-pass. This mirrors the test-cases stage's own pattern (self-fix, then an
-independent monitor re-checks) — that second step has not yet happened
-here. Whoever picks this up should treat that as the single most
-valuable next check before trusting the specs completely, ahead of
-fresh discovery work.
+**Phase:** Technical specification complete and **twice design-reviewed**,
+all seven documents at **v1.2**. `/gvm-tech-spec` ran in full; Round 1 of
+`/gvm-design-review` (quick-scan, 4 panels) found 10 Critical + 16
+Important findings, all patched into v1.1. **Round 2** then ran as a
+genuinely independent re-check (full-depth, strict criteria, the newly
+imported `gvm-graph`-orchestrated skill with two brand-new panel types —
+Security, and two ATAM-utility-tree Quality-Attribute sub-panels for
+reproducibility and separability) specifically to close the honesty gap
+Round 1 left open: were the v1.1 fixes real, or self-graded homework?
+**Result: mostly real (16 of 26 Round 1 findings held cleanly), but not
+entirely** — 3 Round-1 "fixes" were only partial or had regressed (most
+seriously, the double-pendulum equations of motion, rewritten to fix a
+Round 1 finding, contained a wrong coefficient that was self-consistently
+baked into its own reference test values). Round 2 also surfaced 8 new
+Critical and 9 new Important findings the two new panel types and the
+stricter re-scan caught fresh — a defect population comparable in size to
+Round 1's, despite a full prior fix pass. The user again chose "fix
+everything before build"; all of it is patched into v1.2 (see
+`design-review/design-review-002.html` and `reviews/calibration.md`).
+**The same honesty gap is open a second time, and is explicitly named as
+such in `reviews/calibration.md`:** the Round 2 fixes were applied by the
+same agent that found them, in the same session, not independently
+re-verified. Two of them — the double-pendulum EOM correction and the
+NF-4 confidentiality-scan redesign — are exactly the kind of fix (a
+physics formula; a security mechanism) where a confident self-fix is
+least trustworthy, and are flagged in calibration.md as the highest-value
+thing a Round 3 could check first.
 **Code written:** none. Deliberately. Still true — specs only.
-**Blocked on:** nothing. Next step is either a light independent
-re-verification pass (recommended, given the note above) or straight to
-`/gvm-build` starting at Phase 1 / P1-C01 (the walking skeleton) followed
-immediately by the new P1-C02→P2-C05 sequence (the design review added
-P2-C05, a second early real-chart slice, so the build has two
-demonstrable milestones early rather than one, per the guide's own
-MVP-1 rule).
+**Blocked on:** nothing. Next step is a genuine choice between: (a) a
+Round 3 design review — likely with real dual/blind review this time,
+since shared rule 16 activates it at round 3+ — prioritising re-verification
+of the two fixes named above; or (b) accepting the residual self-verification
+risk and proceeding to `/gvm-build` starting at Phase 1 / P1-C01, followed by
+the P1-C02 → P2-C05 sequence (28 chunks total as of v1.2's implementation-guide
+correction — the "24"/"23" counts in earlier versions were themselves wrong,
+caught only by Round 2's independent recount).
 
-Last updated 2026-08-25 (design-review-001 fixes).
+Last updated 2026-08-30 (design-review-002 fixes).
 
 ---
 
@@ -46,15 +53,16 @@ Last updated 2026-08-25 (design-review-001 fixes).
 | `requirements/wordsareamenu.html` | The source essay, now draft v2.7. Also revised post-review: narrowed novelty claim, corrected two factual errors (flight-simulator framing, SR 11-7 currency), added the employer disclaimer and an AI-assistance transparency note. |
 | `risks/risk-assessment.md` | Four product risks, written before requirements. Still references essay draft v2.1 deliberately — the historical record of what it was written against. |
 | `test-cases/test-cases.md` | v1.0. 69 cases, one `TC-{REQ-ID}-{NN}` per requirement minimum, more for credibility-fatal ones. Includes 5 negative/phantom-gate cases (proving WD-3, WD-7, NF-1, JU-9, JU-11's automated checks can actually fail, not just always pass) and 5 property-based cases. Full traceability matrix at the end — zero orphan requirements, zero orphan cases, every count independently grep-verified against the document body. |
-| `specs/cross-cutting.md` (+.html) | v1.0. Stack (pure NumPy, hand-rolled MLPs — user's explicit choice over PyTorch/stdlib-only), the four-rule determinism strategy, five-package structure with the judge importing nothing, error-handling conventions, the two-package dependency budget (`numpy`, `matplotlib`). |
-| `specs/worlds.md` (+.html) | v1.0. LV and double-pendulum constants fully pinned (dt, horizons, scale vectors, regions, actions). Shared fixed-step RK4 with a 1e-6 relative drift bound (ADR-W1). Divergence benchmark: 64 seeded starts, median curve per region (ADR-W3). |
-| `specs/models.md` (+.html) | v1.0. Baselines with honest training-residual spreads. Three one-corruption fixtures. The direct-vs-ensemble unrigged pair (Nix & Weigend / Lakshminarayanan et al., both newly discovered experts) with a pre-registered `sqrt(1+1/K)`-corrected spread mapping and a 0.05 matching margin. Pre-registration enforced by git commit ordering. |
-| `specs/judge.md` (+.html) | v1.0. CRPS as the scoring rule. Settles Open Questions 1/2: **N=200 independent trials, bands green [12,29] / amber [8,11]∪[30,35] / red beyond**, derived from the exact binomial CDF and verified computationally in-session (not eyeballed). Settles OQ-5's runtime half: 600s budget. Full verdict JSON schema. |
-| `specs/reporting.md` (+.html) | v1.0. All four required charts designed down to authored caption templates. Fixture labelling centralised so it survives a screenshot. `wmj run` / `wmj verify` command pair. |
-| `specs/architecture-overview.md` (+.html, with an inline C4 container SVG) | v1.0. Synthesis of all five specs + a Brooks conceptual-integrity review — found and resolved one real tension (NF-1's byte-identity scope vs PNG rendering; resolved by disclosure, no spec change needed). |
-| `specs/implementation-guide.md` (+.html) | v1.1. 6 phases, **24 chunks** (design review added P2-C05, a second early real-chart slice, at position 8 — the plan had otherwise reverted to a fully horizontal build with no further user-visible milestone until chunk 19). Full dependency network, critical path, parallel-work sets, and a complete wiring matrix — no empty `Demanded by` cells, no exemptions needed. |
-| `design-review/design-review-001.html` | Round 1 design review. 4 parallel panels, 10 Critical + 16 Important findings, all fixed same-session. Verdict was "Do not build" pre-fix — read this before trusting the specs are actually consistent; the fixes are self-verified, not independently re-checked. |
-| `reviews/calibration.md` | GVM review-calibration record. Score history, anchor examples, and — importantly — the explicit note that round 1's fixes were applied by the same agent that found them and should be independently re-verified before full trust. |
+| `specs/cross-cutting.md` (+.html) | v1.2. Stack (pure NumPy, hand-rolled MLPs — user's explicit choice over PyTorch/stdlib-only), the four-rule determinism strategy, five-package structure with the judge importing nothing, error-handling conventions, the two-package dependency budget (`numpy`, `matplotlib`). The import-graph gate now also blocks ambient reads and dynamic imports; the NF-4 scan is redesigned around a gitignored local terms file (Round 2 fix). |
+| `specs/worlds.md` (+.html) | v1.2. LV and double-pendulum constants fully pinned (dt, horizons, scale vectors, regions, actions). Shared fixed-step RK4 with a 1e-6 relative drift bound (ADR-W1). Divergence benchmark: 64 seeded starts, median curve per region (ADR-W3). **Round 2 fixed a coefficient error in the double-pendulum EOM** (v1.1's explicit formula was wrong; the reference constant needs recomputing before TC-WD1-01 can be implemented). |
+| `specs/models.md` (+.html) | v1.2. Baselines with honest training-residual spreads. Three one-corruption fixtures. The direct-vs-ensemble unrigged pair (Nix & Weigend / Lakshminarayanan et al., both newly discovered experts) with a pre-registered `sqrt(1+1/K)`-corrected spread mapping and a 0.05 matching margin. Pre-registration enforced by git commit ordering; a second disclosed residual risk (undetectable non-publication of an unfavourable run) added in Round 2. |
+| `specs/judge.md` (+.html) | v1.2. CRPS as the scoring rule. Settles Open Questions 1/2: **N=200 independent trials, bands green [12,29] / amber [8,11]∪[30,35] / red beyond**, derived from the exact binomial CDF and verified computationally in-session (not eyeballed). Settles OQ-5's runtime half: 600s budget. Full verdict JSON schema, now 8 mandatory field groups with trust horizons carrying a region field (Round 2 fixes). |
+| `specs/reporting.md` (+.html) | v1.2. All four required charts designed down to authored caption templates. Fixture labelling centralised so it survives a screenshot. `wmj run` / `wmj verify` command pair. Chart 1/2/3 data-contract gaps and Chart 4's region breakdown fixed in Round 2. |
+| `specs/architecture-overview.md` (+.html, with an inline C4 container SVG) | v1.2. Synthesis of all five specs + a Brooks conceptual-integrity review — found and resolved one real tension (NF-1's byte-identity scope vs PNG rendering; resolved by disclosure, no spec change needed). Round 2 found no new conceptual-integrity defect here. |
+| `specs/implementation-guide.md` (+.html) | v1.2. 6 phases, **28 chunks** (Round 2 corrected an arithmetic error present since v1.0 — the "24"/"23" counts were wrong). P2-C05, a second early real-chart slice, still lands at position 8 — the plan had otherwise reverted to a fully horizontal build with no further user-visible milestone until chunk 25. Full dependency network, critical path, parallel-work sets, and a complete wiring matrix — no empty `Demanded by` cells, no exemptions needed. |
+| `design-review/design-review-001.html` | Round 1 design review. 4 parallel panels, 10 Critical + 16 Important findings, all fixed same-session (v1.1). Superseded as the current-trust record by Round 2 below — kept as historical record. |
+| `design-review/design-review-002.html` | Round 2 design review — independent re-check of the v1.1 fixes under strict criteria, plus two new panel types (Security; ATAM Quality-Attribute sub-panels for reproducibility and separability). 16 of 26 Round 1 findings held cleanly; 3 were only partially resolved or regressed; 8 new Critical + 9 new Important findings surfaced. All patched into v1.2, same-session, again self-verified. Verdict was "Do not build" pre-fix. |
+| `reviews/calibration.md` | GVM review-calibration record. Score history across both rounds, anchor examples, and the explicit, twice-repeated note that each round's fixes were applied by the same agent that found them and should be independently re-verified before full trust — Round 3 (or build) inherits this open item. |
 
 ## What does not exist
 
@@ -121,9 +129,9 @@ Full table with reasoning is in `CLAUDE.md`. In short:
 
 ## What comes next
 
-Two reasonable options, in order of recommendation:
-1. **A light independent re-verification** of the design-review fixes (a fresh monitor, not the same agent that wrote them) — cheaper than a full Round 2 design review, but closes the honesty gap `reviews/calibration.md` names explicitly.
-2. **`/gvm-build`**, starting at Phase 1 / chunk P1-C01 (foundations: scaffold, serializer, seed plumbing), followed by P1-C02 (the walking-skeleton MVP slice) and P2-C05 (the second early real-chart slice, added by the design review).
+Round 2 already happened — this is what Round 1's handover recommended, and it found a real, comparable-sized new defect population even after a full v1.1 fix pass. Two reasonable options remain, in order of recommendation:
+1. **A Round 3 design review**, prioritising independent re-verification of the two Round 2 fixes least trustworthy as self-graded work (the double-pendulum EOM correction; the NF-4 scan redesign) ahead of fresh discovery — shared rule 16 means Round 3 is where genuine dual/blind review activates, which would finally close the honesty gap both `reviews/calibration.md` rounds have named and neither has closed.
+2. **`/gvm-build`**, accepting the residual self-verification risk, starting at Phase 1 / chunk P1-C01 (foundations: scaffold, serializer, seed plumbing), followed by P1-C02 (the walking-skeleton MVP slice) and P2-C05 (the second early real-chart slice) — 28 chunks total per the v1.2-corrected implementation guide.
 
 The GVM skill files are now committed in this repo's own `.claude/skills/`
 (no longer an external-availability gap — resolved a few sessions back,

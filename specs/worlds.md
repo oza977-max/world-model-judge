@@ -1,6 +1,8 @@
 # World Model Judge — Worlds Specification
 
-Version 1.1 · 25 August 2026 · Domain 1 of Requirements v1.2 · References: cross-cutting spec v1.1
+Version 1.2 · 30 August 2026 · Domain 1 of Requirements v1.2 · References: cross-cutting spec v1.2
+
+> **Change note (v1.2).** Revised after `/gvm-design-review` design-review-002 (Round 2, independent re-check under strict criteria). **The v1.1 double-pendulum equations of motion, written out explicitly to fix a Round 1 finding, contained a coefficient error**: re-deriving the equal-mass case from the Euler–Lagrange equations shows `denom1`, `denom2`, and θ̈₁'s leading gravity term all need the coefficient `(2m₁+m₂)`, which specializes to **3·m** for equal masses — the v1.1 text used `2·m` in all three places (θ̈₂'s numerator, which needs the different `(m₁+m₂)=2m` coefficient, was already correct). Because the reference implementation and TC-WD1-01's hand-verified 15-significant-digit constants were both stated to be computed from the v1.1 (buggy) formula, **the previous reference constants are invalid and must be recomputed from the corrected formula below before TC-WD1-01 can be implemented** — this is flagged explicitly rather than silently carried forward, since no test in the suite as designed could have caught the original error (it was self-consistently wrong). See design-review-002.html for the full findings.
 
 > **Change note (v1.1).** Revised after `/gvm-design-review` design-review-001. Fixed: ADR-W1's integrator gate described comparing "the model-rollout driver's integrator" against the world's — but no model under test (models spec ADR-M1–M4) ever calls an integrator, so that component didn't exist; restated as two checks that do exist (ground-truth generator consistency, model rollout dt-alignment). The double pendulum's equations of motion, given only as "textbook" in v1.0, are now written out explicitly with a named sign convention, since TC-WD1-01's hand-verified reference values need one unambiguous source. The LV clamp-handling rule (§4.1 vs §7) is now stated once, consistently. Added the conditioned-climatology table's producer contract to §5 (judge spec v1.1 ADR-J5 needed a source for it) and a worked pendulum region-key example. See design-review-001.html for the full findings.
 
@@ -122,17 +124,17 @@ The negative test proves check 1 fails on a mismatched `dt` between two ground-t
 ```
 Δ = θ₁ − θ₂
 
-denom1 = l·(2·m − m·cos(2Δ))
-denom2 = l·(2·m − m·cos(2Δ))   # same closed form, second link
+denom1 = l·(3·m − m·cos(2Δ))
+denom2 = l·(3·m − m·cos(2Δ))   # same closed form, second link
 
-θ̈₁ = ( −g·(2·m)·sin(θ₁) − m·g·sin(θ1 − 2·θ2)
+θ̈₁ = ( −g·(3·m)·sin(θ₁) − m·g·sin(θ1 − 2·θ2)
         − 2·sin(Δ)·m·(ω₂²·l + ω₁²·l·cos(Δ)) ) / denom1
 
 θ̈₂ = ( 2·sin(Δ)·(ω₁²·l·(2·m) + g·(2·m)·cos(θ1)
         + ω₂²·l·m·cos(Δ)) ) / denom2
 ```
 
-(the standard equal-mass, equal-length double pendulum EOM, as derived via the Euler–Lagrange equations for this coordinate/sign convention — the exact form above, not a differently-signed equivalent, is what the reference implementation and the hand-verified TC-WD1-01 constants are computed from).
+(the standard equal-mass, equal-length double pendulum EOM, as derived via the Euler–Lagrange equations for this coordinate/sign convention — the exact form above, not a differently-signed equivalent, is what the reference implementation and the hand-verified TC-WD1-01 constants are computed from. **Design-review-002 correction:** the general-mass formula's denominator and θ̈₁'s leading gravity term carry the coefficient `(2m₁+m₂)`, not `(m₁+m₂)` — for equal masses this is `3·m`, not `2·m`. θ̈₂'s numerator genuinely does use `(m₁+m₂)=2·m` and was already correct in v1.1; only `denom1`, `denom2`, and θ̈₁'s first term changed. Verified independently by re-deriving from the Euler–Lagrange equations and by cross-checking against the general two-mass form specialised to `m₁=m₂=m`.)
 
 **Energy, explicitly:**
 
@@ -198,7 +200,7 @@ The divergence artefact — the shape the judge and reporting consume (produced 
 }
 ```
 
-Field names, nesting, and units are fixed here; the judge spec references this contract rather than restating it. A trajectory artefact is simply `float64[H+1, d]` plus the action sequence `float64[H, a]`. Note the `steps` array runs 0..H inclusive (`H+1` entries) — judge spec v1.1 §4 matches this exactly rather than the earlier, mismatched `[H]` shape, so every step-indexed curve in the system (divergence, error-vs-horizon) shares one zero-based origin.
+Field names, nesting, and units are fixed here; the judge spec references this contract rather than restating it. A trajectory artefact is simply `float64[H+1, d]` plus the action sequence `float64[H, a]`. Note the `steps` array runs 0..H inclusive (`H+1` entries) — judge spec §4 matches this exactly rather than the earlier, mismatched `[H]` shape, so every step-indexed curve in the system (divergence, error-vs-horizon) shares one zero-based origin.
 
 **The region-name join key (design-review fix):** every trial the harness hands to the judge carries a region label naming exactly one of the keys in the `regions` object above (`"training"`, `"out-high-amplitude"` for LV; `"training"`, `"out-near-inverted"` for the pendulum) — never a bare in/out boolean. This is what lets the judge and reporting pick the correct divergence curve and climatology bin table for a given trial even though each world currently declares only one out-region; the mechanism generalises without change if a world later declares more.
 
@@ -243,7 +245,7 @@ Field names and the unbounded-outer-bin convention are fixed here; the judge spe
 | Task distinctness + boundary determinism | TC-WD6-01, TC-WD6-02 |
 | Byte-identical trajectories | TC-WD7-01, TC-WD7-02 (negative) |
 
-Hand-verified reference values for TC-WD1-01: one LV step from (4.0, 2.5) with u=0 and one pendulum step from (0.1, 0.1, 0, 0) with u=0, computed independently (symbolic/high-precision) and embedded as constants with 15 significant digits.
+Hand-verified reference values for TC-WD1-01: one LV step from (4.0, 2.5) with u=0 and one pendulum step from (0.1, 0.1, 0, 0) with u=0, computed independently (symbolic/high-precision) and embedded as constants with 15 significant digits. **The pendulum reference value must be (re-)computed from the design-review-002-corrected EOM above (§4.2) before this case can be implemented** — any value computed from the v1.1 formula's `2·m` coefficients is wrong and must not be reused; the LV reference value is unaffected.
 
 ---
 
@@ -253,6 +255,7 @@ Hand-verified reference values for TC-WD1-01: one LV step from (4.0, 2.5) with u
 |---|---|---|
 | 1.0 | 2026-08-25 | Initial version. All world constants pinned; integrator ADR decided (RK4 fixed-step, drift bound 1e-6 relative). |
 | 1.1 | 2026-08-25 | Design-review fixes (design-review-001): WD-3's gate restated as two real checks (ground-truth call-site identity; model dt-alignment) since no model calls an integrator; double-pendulum EOM and energy written out explicitly with a named sign convention; LV clamp-handling unified into one rule with no run-type exceptions; named every region (including the pendulum's out-region, previously unnamed) as the join key judge/models specs use; added the conditioned-climatology table's producer contract to §5. |
+| 1.2 | 2026-08-30 | Design-review fixes (design-review-002, Round 2): corrected a coefficient error in the v1.1 double-pendulum EOM (`denom1`/`denom2`/θ̈₁'s gravity term needed `3·m`, not `2·m`, for equal masses) — the v1.1 formula was self-consistently wrong and undetectable by any test as designed; flagged the TC-WD1-01 pendulum reference constant as invalid and requiring recomputation from the corrected formula. |
 
 ---
 
