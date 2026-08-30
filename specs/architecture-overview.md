@@ -1,6 +1,8 @@
 # World Model Judge — Architecture Overview
 
-Version 1.0 · 25 August 2026 · Synthesises: cross-cutting v1.0, worlds v1.0, models v1.0, judge v1.0, reporting v1.0
+Version 1.1 · 25 August 2026 · Synthesises: cross-cutting v1.1, worlds v1.1, models v1.1, judge v1.1, reporting v1.1
+
+> **Change note (v1.1).** Revised after `/gvm-design-review` design-review-001, whose Panel C specifically re-checked this document's own conceptual-integrity claims against the specs rather than taking them at face value — and found the "no second metric exists anywhere" line was factually wrong against the same document set: CRPS and the shared RMS distance are both genuinely in use, for different purposes. Corrected below. The container view's data flow also updated to reflect judge spec v1.1's harness-owned envelope, replacing the separately-described "verdicts + name/fixture map." See design-review-001.html for the full findings.
 
 **What this document is.** The one-page-up view: how the pieces fit, the decisions that matter most, and an honest check that the whole thing coheres as one design rather than five documents stapled together.
 
@@ -36,11 +38,15 @@ One deployable unit; the containers are the five packages plus two artefact stor
 ```
 [worlds]────trajectories, tasks,──────▶┌─────────┐
             divergence curves          │ harness │────JudgeInput────▶[judge]
-[models]────predictions + spreads─────▶│  (hub)  │◀───Verdict────────  pure,
+[models]────predictions + spreads─────▶│  (hub)  │◀───pure Verdict───  pure,
                                        └─────────┘                    no I/O
-[prereg/]──recipe, thresholds,             │
-           git timestamps─────────────────▶│────verdicts + name/fixture map───▶[reporting]───▶[out/]
+[prereg/]──recipe, thresholds,             │ harness wraps the pure
+           git timestamps─────────────────▶│ Verdict in a {model_ref, name,
+                                            │ is_fixture, verdict, meta} envelope
+                                            └────────────▶[reporting]───▶[out/]
 ```
+
+(design-review fix: the judge returns only a pure `Verdict`; the harness — never the judge — attaches identity and run metadata, per judge spec v1.1 §5.)
 
 - **`wmj.worlds`** — LV + pendulum, shared RK4 integrator, divergence benchmark, regions, tasks. Pure functions of (state, action).
 - **`wmj.models`** — baselines, fixtures, the direct/ensemble pair; registry-only discovery. Sees `(state, action)` arrays, never world internals.
@@ -64,7 +70,8 @@ The judge's isolation is the load-bearing wall: everything else may know about t
 | ADR-M5 | Pre-registration enforced by git commit ordering | models |
 | ADR-J1 | CRPS (closed-form Gaussian) as the strictly proper score; skill vs both baselines | judge |
 | ADR-J4 | N=200 independent trials; exact-binomial bands green [12,29] / amber / red, derived and committed | judge |
-| ADR-J5 | Per-task climate switch at divergence-exceeds-tolerance; conditioned climatology re-measured from the true trajectory | judge |
+| ADR-J5 | Per-task climate switch at divergence-exceeds-tolerance; conditioned climatology re-measured from the true trajectory; 16 equal-population bins, out-of-range and no-switch cases defined | judge |
+| ADR-J7 | The seven JU-10 limitations disclosures, authored verbatim (design-review addition) | judge |
 | ADR-R3 | Captions authored as templates in the spec, not improvised at render time | reporting |
 | ADR-R5 | `wmj run` / `wmj verify` command pair; byte-identity scoped to verdicts + manifest | reporting |
 
@@ -91,7 +98,7 @@ The judge's isolation is the load-bearing wall: everything else may know about t
 
 Does it cohere as one design? The checks, run across all five specs:
 
-- **One distance, everywhere.** The normalised RMS distance defined in worlds ADR-W3 is the divergence measure, the judge's error metric, the tolerance unit, and the chart axis. No second metric exists anywhere. ✓
+- **One distance for error/tolerance/divergence, and one separate, deliberately different metric for anti-gaming scoring — corrected (design-review fix: the previous "no second metric exists anywhere" line was checked against the specs by Panel C and found false).** The normalised RMS distance defined in worlds ADR-W3 is the divergence measure, the tolerance unit, the trust-horizon cutoff, and the chart axis — one metric, restated explicitly in judge spec v1.1 ADR-J5 rather than only asserted here. CRPS (judge spec ADR-J1) is a genuinely different metric, used only for the JU-4(b) anti-gaming skill summary, because that job specifically needs a strictly proper scoring rule over the full predictive distribution — a job RMS point-distance cannot do. Two metrics, two distinct and non-overlapping jobs, both named here so the claim is checkable rather than asserted. ✓ (corrected)
 - **One uncertainty vocabulary.** Per-dimension mean + one standard deviation (MU-1), from the baselines to the fixtures to both unrigged models to every judge computation. ✓
 - **One serializer.** Every byte-compared artefact goes through the cross-cutting canonical serializer; reporting adds none of its own. ✓
 - **One refusal discipline.** Missing baseline, missing verdict field, prereg violation, gate failure — all stop the run before output exists; nothing degrades silently. ✓
@@ -108,6 +115,7 @@ Verdict: the system reads as one mind's design. The single idea it expresses eve
 | Version | Date | Change |
 |---|---|---|
 | 1.0 | 2026-08-25 | Initial version, synthesised after all four domain specs were individually approved. |
+| 1.1 | 2026-08-25 | Design-review fixes (design-review-001): corrected the "no second metric exists anywhere" overclaim (CRPS and RMS distance are both genuinely in use, for distinct purposes); updated the container view to the harness-owned envelope; added ADR-J7 to Key Decisions. |
 
 ---
 

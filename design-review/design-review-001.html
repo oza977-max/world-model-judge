@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>World Model Judge — Design Review 001</title>
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+
+    body {
+      font-family: "ET Book", Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif;
+      color: #111;
+      background: #fffff8;
+      line-height: 1.6;
+      padding: 2rem 1rem 6rem;
+      max-width: 1480px;
+      margin: 0 auto;
+    }
+
+    /* ── Typography ── */
+    h1 {
+      font-size: 2.4rem;
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.4rem;
+      color: #111;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 400;
+      font-style: italic;
+      margin-top: 3rem;
+      margin-bottom: 1rem;
+      color: #111;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 0.3rem;
+    }
+
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-top: 2rem;
+      margin-bottom: 0.6rem;
+      color: #333;
+    }
+
+    p, li {
+      font-size: 1rem;
+      line-height: 1.7;
+      margin-bottom: 0.8rem;
+      max-width: 1000px;
+    }
+
+    ul, ol { padding-left: 1.4rem; margin-bottom: 1.2rem; }
+    li { margin-bottom: 0.4rem; }
+
+    .subtitle {
+      font-size: 1.1rem;
+      font-style: italic;
+      color: #555;
+      margin-bottom: 2.5rem;
+      max-width: 1000px;
+    }
+
+    .date {
+      font-size: 0.9rem;
+      color: #888;
+      margin-bottom: 0.2rem;
+    }
+
+    /* ── Floating TOC (Left Side) ── */
+    nav.toc {
+      position: fixed;
+      top: 2rem;
+      left: 2rem;
+      width: 220px;
+      max-height: calc(100vh - 4rem);
+      overflow-y: auto;
+      background: #fffff8;
+      border-right: 2px solid #ddd;
+      padding: 1rem 1rem 1rem 0;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      z-index: 100;
+    }
+
+    nav.toc .toc-title {
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #999;
+      margin-bottom: 0.6rem;
+    }
+
+    nav.toc a {
+      color: #555;
+      text-decoration: none;
+      display: block;
+      padding: 0.15rem 0;
+      transition: color 0.15s;
+    }
+
+    nav.toc a:hover { color: #111; }
+    nav.toc a.active { color: #111; font-weight: 600; }
+    nav.toc .toc-h3 { padding-left: 0.8rem; font-size: 0.78rem; color: #888; }
+    nav.toc .toc-h3:hover { color: #555; }
+
+    /* Offset main content for left TOC */
+    main {
+      margin-left: 260px;
+      max-width: 1000px;
+    }
+
+    /* ── Sidenotes (Right Margin) ── */
+    .sidenote {
+      float: right;
+      clear: right;
+      width: 220px;
+      margin-right: -260px;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      color: #666;
+      padding-left: 1rem;
+      border-left: 2px solid #e0e0e0;
+    }
+
+    /* ── Tables (Few's principles) ── */
+    table {
+      border-collapse: collapse;
+      margin: 1.5rem 0 2rem;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      width: auto;
+      min-width: 480px;
+    }
+
+    thead th {
+      text-align: left;
+      font-weight: 600;
+      padding: 0.5rem 1rem 0.5rem 0;
+      border-bottom: 2px solid #333;
+      color: #111;
+    }
+
+    tbody td {
+      padding: 0.45rem 1rem 0.45rem 0;
+      border-bottom: 1px solid #e8e8e8;
+      vertical-align: top;
+    }
+
+    tbody tr:last-child td { border-bottom: 2px solid #333; }
+    tbody tr:nth-child(even) { background: #f9f9f4; }
+
+    caption {
+      font-style: italic;
+      font-size: 0.88rem;
+      color: #666;
+      text-align: left;
+      margin-bottom: 0.4rem;
+    }
+
+    /* ── Requirement Blocks ── */
+    .req {
+      background: #f7f7f0;
+      border-left: 3px solid #999;
+      padding: 0.8rem 1rem;
+      margin: 1rem 0 1.2rem;
+      max-width: 1000px;
+    }
+
+    .req-id {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.2rem;
+    }
+
+    .req p { margin-bottom: 0.3rem; }
+
+    /* ── Inline Code ── */
+    code {
+      font-family: "Menlo", "Consolas", "Monaco", monospace;
+      font-size: 0.88rem;
+      background: #f0f0e8;
+      padding: 0.1rem 0.35rem;
+      border-radius: 2px;
+    }
+
+    /* ── Verdict Box (review components) ── */
+    .verdict {
+      border: 2px solid #333;
+      padding: 1.2rem 1.5rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+    }
+
+    .verdict-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+      margin-bottom: 0.3rem;
+    }
+
+    .verdict-text {
+      font-size: 1.3rem;
+      font-weight: 400;
+      color: #111;
+      margin-bottom: 0.4rem;
+    }
+
+    .verdict-basis {
+      font-size: 0.88rem;
+      color: #555;
+      max-width: 1000px;
+    }
+
+    .verdict.ready { border-color: #27ae60; background: #f0faf4; }
+    .verdict.ready .verdict-text { color: #27ae60; }
+
+    .verdict.caveats { border-color: #e67e22; background: #fef8f0; }
+    .verdict.caveats .verdict-text { color: #e67e22; }
+
+    .verdict.not-ready { border-color: #c0392b; background: #fdf0ef; }
+    .verdict.not-ready .verdict-text { color: #c0392b; }
+
+    /* ── Review Components (score card, issues, criteria) ── */
+    .score-card {
+      background: #f7f7f0;
+      border: 2px solid #333;
+      padding: 1.5rem 2rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+      text-align: center;
+    }
+
+    .overall-score {
+      font-size: 2.4rem;
+      font-weight: 400;
+      color: #111;
+      margin-bottom: 0.8rem;
+    }
+
+    .score-breakdown {
+      display: flex;
+      justify-content: space-around;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .score-item {
+      font-size: 0.88rem;
+      color: #555;
+    }
+
+    .issue {
+      border-left: 3px solid;
+      padding: 0.8rem 1rem;
+      margin: 0.8rem 0;
+      max-width: 1000px;
+    }
+
+    .issue.critical {
+      border-left-color: #c0392b;
+      background: #fdf0ef;
+    }
+
+    .issue.important {
+      border-left-color: #e67e22;
+      background: #fef8f0;
+    }
+
+    .issue.minor {
+      border-left-color: #7f8c8d;
+      background: #f7f7f4;
+    }
+
+    .issue-title {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 0.3rem;
+    }
+
+    .issue-detail {
+      font-size: 0.92rem;
+      color: #555;
+      margin-bottom: 0.3rem;
+    }
+
+    .issue-location {
+      font-size: 0.78rem;
+      color: #999;
+      font-style: italic;
+    }
+
+    .criterion {
+      display: flex;
+      align-items: baseline;
+      gap: 0.8rem;
+      margin: 0.6rem 0;
+      max-width: 1000px;
+    }
+
+    .criterion-name {
+      font-weight: 600;
+      color: #333;
+      min-width: 160px;
+    }
+
+    .criterion-score {
+      font-size: 0.85rem;
+      font-weight: 600;
+      min-width: 40px;
+    }
+
+    .criterion-score.high { color: #27ae60; }
+    .criterion-score.mid { color: #e67e22; }
+    .criterion-score.low { color: #c0392b; }
+
+    .criterion-note {
+      font-size: 0.88rem;
+      color: #666;
+    }
+
+    /* ── GVM Attribution ── */
+    .gvm-attribution {
+      font-size: 0.75rem;
+      color: #999;
+      font-style: italic;
+      text-align: center;
+      margin-top: 3rem;
+      margin-bottom: 0;
+      max-width: none;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 1200px) {
+      nav.toc {
+        position: static;
+        width: 100%;
+        max-height: none;
+        border-right: none;
+        border-bottom: 1px solid #ddd;
+        padding: 1rem 0;
+        margin-bottom: 2rem;
+      }
+      main { margin-left: 0; }
+      .sidenote {
+        float: none;
+        width: 100%;
+        margin: 0.8rem 0;
+        padding: 0.6rem 0 0.6rem 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="toc" id="toc">
+    <div class="toc-title">Contents</div>
+  </nav>
+
+  <main>
+    <p class="date">Round 1 (no prior calibration) · Quick-scan depth · 4 parallel defect-class panels · 25 August 2026</p>
+    <h1>World Model Judge — Design Review 001</h1>
+    <p class="subtitle">Deterministic harness for evaluating learned simulators — design review assessment of seven technical specification documents.</p>
+
+    <h2 id="verdict">Verdict</h2>
+    <div class="verdict not-ready">
+      <div class="verdict-label">Verdict</div>
+      <div class="verdict-text">Do not build</div>
+      <p class="verdict-basis">From the seven tech specs as currently written: 10 Critical findings, 16 Important findings, well past the "Not ready" threshold (any Critical, or &gt;6 Important). This is Round 1's expected and valuable outcome: every finding below is cheaper to fix in a spec paragraph than in code, and none of them touches a settled scope decision — they are gaps in the specs' own internal consistency, not requirements problems.</p>
+    </div>
+
+    <h2 id="executive-summary">Executive Summary</h2>
+    <p>Four panels (A: Requirements Coverage, B: Interface Contracts, C: Structural Soundness, D: Implementability) each scanned all seven tech-spec documents for one defect class, in parallel, with no shared context. 45/45 requirements have <em>some</em> design representation (Panel A found zero requirements entirely Missing) — but three defects were independently rediscovered by two or more panels working blind to each other, which is the strongest possible signal they are real: the <code>is_fixture</code> field's conflicting sources of truth, the WD-3 integrator gate's inapplicability to any model actually being built, and the LV state-floor clamp-handling contradiction.</p>
+
+    <p><strong>Capture-recapture estimate (Lincoln-Petersen, averaged across panel pairs with overlap):</strong> ~121 total defects estimated in the population; 33 unique defects found this round → <strong>~27% coverage</strong>. This is below the 80% threshold the methodology uses to decide whether a second round is warranted — largely because the four panels' defect classes were so orthogonal that overlap counts are small (1–2 shared findings per pair), which makes the Lincoln-Petersen estimate itself statistically unstable (three pairwise estimates ranged from 76 to 187). Read this as "the panels barely stepped on each other's toes, so we don't have strong evidence about what's left, not proof that ~90 more defects exist." A second liberal round is defensible if you want higher confidence before build, but given the cost concern already raised this session, my recommendation is: fix the findings below (which already give the build team a much sounder base), then move to build and let <code>/gvm-code-review</code> catch what a design review at this depth can't see — rather than spending another quick-scan round chasing a statistically shaky estimate.</p>
+
+    <h2 id="requirements-coverage-matrix">Requirements Coverage Matrix (Panel A)</h2>
+    <p>43 of 45 requirements: <strong>Covered</strong>. 2: <strong>Partial</strong> (JU-10, NF-4). 0: <strong>Missing</strong>.</p>
+
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Status</th><th>Note</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>WD-1..WD-5, WD-7</td><td>Covered</td><td>—</td></tr>
+        <tr><td>WD-6</td><td>Covered</td><td>No dedicated ADR tag, but concrete tolerance values given in task tables</td></tr>
+        <tr><td>WD-8 (Won't)</td><td>Covered</td><td>Correctly excluded</td></tr>
+        <tr><td>MU-1..MU-5, MU-7..MU-9</td><td>Covered</td><td>—</td></tr>
+        <tr><td>MU-6</td><td>Covered <code>[BORDERLINE]</code></td><td>MU-1 uncertainty format isn't traceably inside the <code>prereg/</code> mechanism, though it is fixed elsewhere before any run</td></tr>
+        <tr><td>MU-10 (Won't)</td><td>Covered</td><td>—</td></tr>
+        <tr><td>JU-1..JU-9, JU-11..JU-13</td><td>Covered</td><td>JU-9's <code>not_tested</code> example list is truncated with "..." — <code>[BORDERLINE]</code> Minor</td></tr>
+        <tr><td><strong>JU-10</strong></td><td><strong>Partial</strong></td><td>The seven required limitations disclosures are named by count everywhere but their actual text is never authored — only a placeholder string appears in the Verdict schema</td></tr>
+        <tr><td>RP-1..RP-8</td><td>Covered</td><td>—</td></tr>
+        <tr><td>NF-1..NF-3, NF-5, NF-6</td><td>Covered</td><td>—</td></tr>
+        <tr><td><strong>NF-4</strong></td><td><strong>Partial</strong></td><td>The forbidden-terms list itself is never declared anywhere, despite TC-NF4-01 explicitly promising it will be</td></tr>
+      </tbody>
+    </table>
+
+    <p>All 45 requirement IDs appear in at least one spec section; the coverage gaps found are in <em>concreteness</em>, not <em>absence</em>.</p>
+
+    <h2 id="critical-findings">Critical Findings</h2>
+
+    <div class="issue critical">
+      <div class="issue-title">C1 — <code>is_fixture</code> has conflicting producers</div>
+      <p class="issue-detail"><em>found independently by Panels B and C</em></p>
+      <p class="issue-detail">models.md says <code>is_fixture</code> never enters <code>JudgeInput</code> and is rejoined only at reporting via a harness-owned side map — but judge.md's own Verdict schema (which <code>verdict.py</code> is said to assemble) includes <code>"is_fixture": false</code> as a top-level field, and reporting.md is told to treat <em>both</em> the Verdict and the side map as sources for it, with no rule for which wins if they disagree. This sits directly on the JU-1 blindness guarantee.</p>
+      <p class="issue-detail"><em>Fix:</em> Remove <code>is_fixture</code>/<code>model_ref</code>/<code>meta</code> from the judge-owned Verdict; have the harness wrap it in an outer envelope (<code>JudgedResult{verdict, model_ref, is_fixture, meta}</code>) so there is exactly one producer of each fact.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C2 — Verdict's <code>meta</code> block requires exactly the ambient access JU-12 forbids</div>
+      <p class="issue-detail"><em>Panel C</em></p>
+      <p class="issue-detail"><code>meta.platform</code> and <code>meta.prereg_commit</code> are environment/filesystem reads, assigned by cross-cutting's own ADR-002 to "orchestration and reporting layers, at the edges" — not to <code>verdict.py</code>, which imports only <code>numpy, math, dataclasses, typing</code>. As written, either the judge is smuggling in ambient access (violating JU-12) or an unspecified second assembly stage patches the "pure" Verdict after the fact (making JU-9's "one structured record" claim untrue). Also duplicates <code>run-manifest.json</code>'s content with no single source of truth.</p>
+      <p class="issue-detail"><em>Fix:</em> Move <code>meta</code> out of the judge-produced Verdict entirely into the harness-owned envelope/manifest.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C3 — Chart 1 (the primary chart, RP-1) needs data the Verdict schema doesn't carry, and three of its own drawing rules are undefined</div>
+      <p class="issue-detail"><em>Panel B found the missing data; Panel D independently found three sub-issues in the same chart</em></p>
+      <p class="issue-detail">Reporting.md declares the exception plot scatters all 200 individual trial outcomes and bands, but its own stated inputs are "Verdict records only" — and the Verdict's <code>exceptions</code> block contains only aggregate counts, no per-trial array. Separately and independently, Panel D found: (a) no rule for collapsing a multi-dimensional per-dimension prediction into the single scalar Y-value and band the chart draws; (b) JU-8 defines its 200 trials <em>per region</em>, but Chart 1's "200 trials" x-axis doesn't say which region(s) it covers or how; (c) "ordered by start-state position along the region" names no actual projection for a 2–4 dimensional starting box.</p>
+      <p class="issue-detail"><em>Fix:</em> Add a per-trial array (<code>outcome</code>, <code>band_lo</code>, <code>band_hi</code>, <code>is_exception</code>) to the Verdict, or explicitly source Chart 1 from raw harness rollout data instead. Then pin the aggregation rule, the region scope, and the ordering projection explicitly.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C4 — The conditioned-climatology mechanism is underspecified on three independent axes</div>
+      <p class="issue-detail"><em>found by all three of Panels B, C, and D, each from a different angle</em></p>
+      <p class="issue-detail">Panel B: no spec section anywhere gives the climatology table's actual field names/shape (worlds.md §5, the section reserved for exactly this, only has the divergence-curve JSON). Panel C: no defined behaviour when a compared step's invariant value falls outside the bins built from reference runs (a real case — WD-5's out-of-region starts and JU-6's own action-driven excursions both anticipate exactly this), and no defined behaviour when a task's divergence curve never crosses tolerance (switch_step undefined, breaking JU-7's horizon-capping formula). Panel D: the bin-edge rule (equal-width vs. equal-population) and the reference-run length are both unstated numbers in a document that otherwise pins numbers precisely (N=200, the exact-binomial bands).</p>
+      <p class="issue-detail"><em>Fix:</em> Add the climatology-table JSON contract to worlds.md §5; define out-of-range and no-switch-step behaviour explicitly (worlds.md ADR-W4's boundary-inclusion treatment is the right model to follow); pin the bin-edge method and reference-run length as concrete numbers.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C5 — WD-3's integrator-match gate names a component that doesn't exist in any model actually being built</div>
+      <p class="issue-detail"><em>found independently by Panels C and D</em></p>
+      <p class="issue-detail">"The world's and the model-rollout driver's integrator are the same function object" (worlds.md) describes a gate that can only compare two integrator-calling code paths — but none of the eight contestants (2 baselines, Model A, Model B, 3 fixtures — models.md ADR-M1–M4) ever call an integrator; they're all direct function approximators of the transition, which is the entire point of a learned world model. TC-WD3-01 as literally written cannot be implemented without inventing a component the rest of the spec suite never mentions.</p>
+      <p class="issue-detail"><em>Fix:</em> Restate WD-3's actual enforceable property — most plausibly that the harness's ground-truth generator uses one <code>rk4_step</code> call site everywhere (training data, benchmarks, evaluation truth), and that models are checked for <code>dt</code>-alignment via their rollout loop's step-count mapping, not "same code object."</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C6 — Double pendulum equations of motion are named ("textbook"), not written down</div>
+      <p class="issue-detail">Panel D</p>
+      <p class="issue-detail">The double pendulum has multiple standard parameterizations with different sign conventions on the coupled angular-acceleration terms — physically equivalent, numerically different. WD-3/WD-7 demand byte-identical determinism and TC-WD1-01 requires 15-significant-digit hand-verified reference values; whoever derives those values is silently choosing the convention for the whole project, with nothing else to check against.</p>
+      <p class="issue-detail"><em>Fix:</em> Write out the explicit θ̈₁, θ̈₂ and energy formulas in worlds.md §4.2, or cite one specific unambiguous source with the exact sign convention.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C7 — The standard-normal quantile function (z_p) is used everywhere but never computable from what's specified</div>
+      <p class="issue-detail">Panel D</p>
+      <p class="issue-detail"><code>math.erf</code> gives the forward normal CDF, not its inverse. Four confidence levels (50/80/90/95%) are used repeatedly (ADR-J2/J3, JU-8's 90% interval) — a developer could hardcode the four known z-multipliers instead of implementing a general inverse-CDF, but the spec never says this is the intended approach.</p>
+      <p class="issue-detail"><em>Fix:</em> State explicitly: "z_p for {0.50, 0.80, 0.90, 0.95} are fixed constants: 0.6745, 1.2816, 1.6449, 1.9600," or specify the inversion algorithm if a general one is actually wanted.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C8 — Fixture <code>fx-honest-rough</code>'s spread-widening rule is prose, not a formula</div>
+      <p class="issue-detail">Panel D</p>
+      <p class="issue-detail">"Spread honestly widened to match the true resulting error" gives no formula — empirical post-hoc fit, or an analytic combination? Over what dataset, fixed once or per-rollout?</p>
+      <p class="issue-detail"><em>Fix:</em> Give the exact formula (e.g. <code>spread ← sqrt(base_spread² + noise_σ²)</code>) or the precise empirical-fit procedure.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C9 — The implementation guide's own build sequence violates the MVP-1 rule it claims to satisfy</div>
+      <p class="issue-detail">Panel D, MVP-1/Tracer-Bullet Assessment</p>
+      <p class="issue-detail">P1-C02 is a genuine tracer bullet (real world, real baseline, real judge computation, real serialized output). But Phases 2–5 (18 of 23 chunks) build strictly by architectural layer — all of worlds, then all of models, then all of judge, then all of reporting <em>against fixture verdict records, not the real pipeline</em> — with the first (and only) further user-visible capability not landing until chunk 19 of 23 (P6-C01). This is precisely the horizontal-build pattern the gvm-tech-spec skill's own MVP-1 Hard Gate exists to catch, and no exemption was declared for it.</p>
+      <p class="issue-detail"><em>Fix:</em> Either declare and justify an MVP-1 exemption for this project shape, or resequence so at least one more user-visible slice (e.g. "one chart, from real data, for the LV skeleton") lands well before chunk 19.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C10 — MU-6's headline experiment (MU-5's model-training recipe) has four unstated numeric/algorithmic choices that would each produce a different trained model from the same seed</div>
+      <p class="issue-detail"><em>cluster of Panel D findings D5, D6, D7, D8 — grouped because they all threaten the same MU-8/MU-6 determinism-and-comparability guarantee</em></p>
+      <p class="issue-detail">Weight initialization scheme: unspecified. Model A's Gaussian NLL loss: named, not written out (unlike CRPS, which gets a full closed form). Batching: "full-batch gradient check" vs. "seeded batch shuffling" contradict each other without saying which describes actual training. Adam's ε: never given. Two implementers following this recipe with the same seed would not produce the same trained model — which breaks MU-8's entire premise and puts a question mark over whether the pre-registered MU-5 matching margin was ever measuring a well-defined pair of models.</p>
+      <p class="issue-detail"><em>Fix:</em> Pin all four: initialization formula, exact NLL expression, full-batch-vs-mini-batch (and batch size if mini-batch), and ε — in <code>prereg/recipe.md</code>'s described contents (models.md ADR-M5), at the same precision CRPS already gets.</p>
+    </div>
+
+    <h2 id="important-findings">Important Findings (16)</h2>
+
+    <div class="issue important">
+      <div class="issue-title">1. Divergence-curve array length/indexing mismatch</div>
+      <p class="issue-detail">worlds.md's artefact is <code>H+1</code> entries (0-indexed); judge.md's <code>JudgeInput</code> says <code>[H]</code>; <code>error_vs_horizon.steps</code> starts at 1. Three different origins for curves that RP-2 requires "on the same axes." <em>(Panel B)</em></p>
+    </div>
+
+    <div class="issue important">
+      <div class="issue-title">2. <code>exceptions.per_task</code> has no <code>region</code> field</div>
+      <p class="issue-detail">despite ADR-J4's trials being explicitly per-region, unlike <code>calibration</code> and <code>error_vs_horizon</code> which both carry one. <em>(Panel B)</em></p>
+    </div>
+
+    <div class="issue important">
+      <div class="issue-title">3. Trust horizon's third unit (<code>natural_units</code>) is in the Verdict schema but never rendered</div>
+      <p class="issue-detail">reporting.md's Chart 4 column spec names only steps + world-time, silently dropping the JU-7-mandated cycle-fraction field from "the headline result." <em>(Panel B)</em></p>
+    </div>
+
+    <div class="issue important">
+      <div class="issue-title">4. The "one distance everywhere" claim is asserted in the judge spec, never shown</div>
+      <p class="issue-detail">judge.md's own component design never states or cites the ADR-W3 RMS-normalised-distance formula for the "median normalised error" it reports, unlike CRPS which gets a full derivation. <em>(Panel B)</em></p>
+    </div>
+
+    <div class="issue important">
+      <div class="issue-title">5. No join key between the divergence artefact's named regions and the boolean region-label flags</div>
+      <p class="issue-detail">works today because each world has exactly one out-region, but WD-5 explicitly permits more than one, which would break this silently. <em>(Panel B, borderline)</em></p>
+    </div>
+
+    <div class="issue important">
+      <div class="issue-title">6. Architecture overview's own conceptual-integrity self-check is factually wrong</div>
+      <p class="issue-detail">"no second metric exists anywhere" is contradicted by the same document set (CRPS for the anti-gaming skill summary vs. RMS distance for horizon/tolerance/divergence) — a defensible design, but the self-audit's absolute claim doesn't survive checking against its own specs. <em>(Panel C)</em></p>
+    </div>
+
+    <div class="issue important">
+      <div class="issue-title">7. JU-8's hedging cross-flag ("bottom-decile sharpness") has no defined reference population</div>
+      <p class="issue-detail">and with ~8 contestants per (model, world, region), a decile isn't statistically meaningful anyway. <em>(Panel C)</em></p>
+    </div>
+
+    <div class="issue important">
+      <div class="issue-title">8. Contradictory clamp-event handling</div>
+      <p class="issue-detail"><em>found independently by Panels C and D</em> — worlds.md §4.1 says clamp activations are merely "logged"; §7 says a clamped trajectory in a "benchmark or judged run" aborts loudly. Whether training-data generation counts as one of those scopes, or silently tolerates unphysical clamped states baked into training data, is never stated — directly threatening MU-7/MU-8's honesty guarantees if the wrong reading is implemented.</p>
+    </div>
+
+    <div class="issue important">
+      <div class="issue-title">9. <code>reset()</code>'s cross-rollout isolation is never tested</div>
+      <p class="issue-detail">the exact "model remembers something across rollouts" risk this project's own architecture is designed to prevent (models.md ADR-M1) has no corresponding TC-ID checking it actually holds, which would silently corrupt JU-8's independence assumption if violated. <em>(Panel C, borderline)</em></p>
+    </div>
+
+    <div class="issue important">
+      <div class="issue-title">10. Pre-registration integrity rests on an unstated trust assumption</div>
+      <p class="issue-detail">"append-only" <code>prereg/</code> history is a convention, not a technical control; git history is rewritable by the same single author JU-10 already discloses as a limitation. Worth naming alongside JU-10's other disclosures rather than left implicit. <em>(Panel C, borderline)</em></p>
+    </div>
+
+    <div class="issue important">
+      <div class="issue-title">11. Fixture <code>fx-brittle</code>'s "half the training box" is ambiguous</div>
+      <p class="issue-detail">for a multi-dimensional box (2D LV / 4D pendulum) — halve one axis, all axes, or by volume? Changes what the fixture actually demonstrates. <em>(Panel D)</em></p>
+    </div>
+
+    <div class="issue important">
+      <div class="issue-title">12. Trust horizon has no stated convention for h=1 failing tolerance</div>
+      <p class="issue-detail">"the largest h ≤ switch_step such that error stays within τ" has no solution if h=1 already fails; presumably 0, but never stated. <em>(Panel D, borderline)</em></p>
+    </div>
+
+    <div class="issue important">
+      <div class="issue-title">13. Φ/φ's array-vectorization strategy over NumPy is unaddressed</div>
+      <p class="issue-detail">and φ is described as derived "from erf" when it's actually from <code>exp</code> — harmless imprecision, but the vectorization question (scalar-only <code>math.erf</code> vs. array-shaped <code>JudgeInput</code>) is a real implementation decision left silent. <em>(Panel D)</em></p>
+    </div>
+
+    <div class="issue important">
+      <div class="issue-title">14. JU-10's seven limitations disclosures are counted everywhere, authored nowhere</div>
+      <p class="issue-detail">only a placeholder string appears in the Verdict schema; contrast with reporting.md's caption templates, which this project's own pattern says should be authored in the spec, not improvised at build time, specifically because they're credibility-critical. <em>(Panel A)</em></p>
+    </div>
+
+    <div class="issue important">
+      <div class="issue-title">15. NF-4's forbidden-terms list is referenced by three separate spec sections and declared in none of them</div>
+      <p class="issue-detail">TC-NF4-01 explicitly promises this list will be "declared and kept current in the technical spec"; that promise is unmet. <em>(Panel A)</em></p>
+    </div>
+
+    <div class="issue important">
+      <div class="issue-title">16. MU-6's <code>prereg/recipe.md</code> doesn't explicitly list the MU-1 uncertainty format as one of its contents</div>
+      <p class="issue-detail">even though MU-6's own text names it — likely satisfied in substance (the format is fixed in cross-cutting.md before any run) but not traceably inside the mechanism the rest of MU-6/JU-11 relies on. <em>(Panel A, borderline)</em></p>
+    </div>
+
+    <h2 id="minor-suggestion">Minor / Suggestion (grouped, 6)</h2>
+
+    <ul>
+      <li><code>Action</code> typed as <code>float64[a]</code> in cross-cutting vs. bare scalar <code>u</code> throughout worlds.md — resolvable by inspection, worth a one-line clarification. <em>(Panel B)</em></li>
+      <li>No worked API-contract example for the pendulum's out-of-region key name (only LV's is shown). <em>(Panel B)</em></li>
+      <li>JU-9's <code>not_tested</code> example list is truncated with "..." rather than fully enumerated — soft gap, JU-9 only requires "an explicit list." <em>(Panel A)</em></li>
+      <li>SVG chart duplicates and <code>results.html</code> aren't traced to any requirement ID — reasonable engineering choices, but worth a light trace note per this project's own traceability discipline. <em>(Panel A)</em></li>
+      <li>NF-1's full-scope verification is only possible at the very last integration chunk (P6-C01) — expected for a genuinely cross-cutting NF, not a process gap, but worth naming since MU-6/NF-4's judged halves show the same "final chunk only" pattern. <em>(Panel A, no fix needed)</em></li>
+      <li>P1-C02 is labelled "user-facing" but its only output is a JSON file — the project's actual named user (Dev) explicitly reads charts, not source or JSON. More accurately "developer/pipeline-facing." <em>(Panel D)</em></li>
+    </ul>
+
+    <h2 id="cross-panel-themes">Cross-Panel Themes</h2>
+
+    <h3 id="theme-1">1. The Verdict schema was written before its consumers' exact needs were re-checked against it.</h3>
+    <p>C1, C2, C3, and Important #1–3 are all instances of the same root cause: judge.md's §5 example schema was authored once and never re-verified against what reporting.md's chart designs and cross-cutting's purity rule actually require. A single pass reconciling the Verdict schema against every consumer (reporting.md's four charts, JU-12's purity boundary) would likely resolve 6 of the 26 Critical+Important findings at once.</p>
+
+    <h3 id="theme-2">2. The climatology mechanism (JU-6/ADR-J5) is the single most underspecified part of the whole suite</h3>
+    <p>flagged from three independent angles (missing contract, undefined edge cases, unpinned constants) by three different panels using three different defect-class lenses. This is exactly the "architecturally risky, novel part" Fairbanks' risk-driven principle says deserves the most design depth, and it currently has the least.</p>
+
+    <h3 id="theme-3">3. Numeric/formula precision is inconsistent across the judge spec</h3>
+    <p>CRPS gets a full closed-form derivation; z_p, φ's vectorization, the climatology binning, and Model A's NLL loss do not. The spec's own best moments (CRPS, the exact-binomial band derivation) show the right level of precision is achievable; it just wasn't applied uniformly.</p>
+
+    <h2 id="borderline-filter-results">Borderline Filter Results (R1)</h2>
+    <p>12 findings were tagged <code>[BORDERLINE]</code> by their panels. After applying the consumer-impact test: 8 kept as reported findings above (MU-6 prereg traceability, JU-9 truncated list, NF-1 final-chunk-only, distance-formula-not-restated, no-join-key, clamp-handling ambiguity's softer reading, reset-isolation-untested, git-history-trust-assumption, trust-horizon-h=1). 4 discarded as pure polish with no stated consumer consequence (kept internal to panel reports, not reproduced here). Filter ratio: 8/12 kept (67%).</p>
+
+    <h2 id="score-per-defect-class">Score per Defect Class (0–10)</h2>
+
+    <table>
+      <thead>
+        <tr><th>Panel</th><th>Score</th><th>What prevents a higher score</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>A — Requirements Coverage</td>
+          <td style="text-align: center;"><strong>8</strong></td>
+          <td>43/45 fully concrete; the two Partial requirements (JU-10, NF-4) are both credibility-critical items whose actual content was never written, not just gapped-and-minor.</td>
+        </tr>
+        <tr>
+          <td>B — Interface Contracts</td>
+          <td style="text-align: center;"><strong>4</strong></td>
+          <td>Three Critical-tier producer/consumer mismatches on the single most important boundary in the project (the Verdict schema), plus five further Important-tier inconsistencies on the same schema and its neighbours.</td>
+        </tr>
+        <tr>
+          <td>C — Structural Soundness</td>
+          <td style="text-align: center;"><strong>5</strong></td>
+          <td>Two Critical purity/blindness violations on requirements (JU-1, JU-12) this project treats as its core credibility mechanism; the architecture-overview's own self-check missed a real inconsistency it was specifically designed to catch.</td>
+        </tr>
+        <tr>
+          <td>D — Implementability</td>
+          <td style="text-align: center;"><strong>4</strong></td>
+          <td>Four Critical-tier "cannot build without guessing" gaps (pendulum EOM, z_p, fixture formula, and the MVP-1 sequencing violation) plus nine further Important-tier unpinned constants in the models spec specifically — the one place this project's own determinism guarantee (NF-1/MU-8) is put at risk by the spec itself, not just by an implementer's mistake.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="what-prevents-higher-score">What Prevents a Higher Score</h2>
+    <p>Every dimension above 4 is prevented from a 10 by concrete, named gaps, not structural ceilings — nothing here is "acceptable trade-off," everything is fixable directly in the spec text with no re-architecture required. The Verdict schema (B, C) and the models/judge numeric precision (D) are the two places worth fixing first, since they're both cross-cutting: fixing the Verdict schema once resolves findings in three different specs at once, and pinning the four training constants (C10) resolves the single biggest threat to this project's own headline determinism claim.</p>
+
+    <h2 id="expert-panel">Expert Panel (this review)</h2>
+
+    <table>
+      <thead>
+        <tr><th>Expert</th><th>Work</th><th>Role in this review</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Karl Wiegers</td>
+          <td><em>Software Requirements</em> (3rd ed.)</td>
+          <td>Panel A — requirement-to-design traceability</td>
+        </tr>
+        <tr>
+          <td>Mike Cohn</td>
+          <td><em>Agile Estimating and Planning</em>, <em>User Stories Applied</em></td>
+          <td>Panel A — INVEST chunk decomposition check</td>
+        </tr>
+        <tr>
+          <td>Michael Keeling</td>
+          <td><em>Design It!</em></td>
+          <td>Panel B — boundary-decision capture and consistency</td>
+        </tr>
+        <tr>
+          <td>Martin Kleppmann</td>
+          <td><em>Designing Data-Intensive Applications</em></td>
+          <td>Panel B — schema/encoding consistency across non-networked package boundaries</td>
+        </tr>
+        <tr>
+          <td>Bass, Clements & Kazman</td>
+          <td><em>Software Architecture in Practice</em> (4th ed.)</td>
+          <td>Panel C — quality-attribute tactics vs. stated goals</td>
+        </tr>
+        <tr>
+          <td>Martin Fowler</td>
+          <td>patterns, refactoring</td>
+          <td>Panel C — pattern-consistency across packages</td>
+        </tr>
+        <tr>
+          <td>Frederick Brooks</td>
+          <td><em>The Mythical Man-Month</em>, <em>The Design of Design</em></td>
+          <td>Panel C — conceptual-integrity self-check verification</td>
+        </tr>
+        <tr>
+          <td>George Fairbanks</td>
+          <td><em>Just Enough Software Architecture</em></td>
+          <td>Panel C — risk-proportional design depth</td>
+        </tr>
+        <tr>
+          <td>Steve McConnell</td>
+          <td><em>Code Complete</em> (2nd ed.)</td>
+          <td>Panel D — implementability without guessing</td>
+        </tr>
+        <tr>
+          <td>Andrew Hunt & David Thomas</td>
+          <td><em>The Pragmatic Programmer</em></td>
+          <td>Panel D — tracer-bullet / MVP-1 assessment</td>
+        </tr>
+        <tr>
+          <td>Luciano Ramalho; Harry Percival & Bob Gregory</td>
+          <td><em>Fluent Python</em>; <em>Architecture Patterns with Python</em></td>
+          <td>Panel D — Python/NumPy stack fit</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p class="gvm-attribution">Developed using the Grounded Vibe Methodology</p>
+  </main>
+
+  <script>
+    (function () {
+      const toc = document.getElementById('toc');
+      const headings = document.querySelectorAll('h2[id], h3[id]');
+      const links = [];
+
+      headings.forEach(function (h) {
+        const a = document.createElement('a');
+        a.href = '#' + h.id;
+        a.textContent = h.textContent;
+        if (h.tagName === 'H3') a.classList.add('toc-h3');
+        toc.appendChild(a);
+        links.push({ el: a, target: h });
+      });
+
+      function onScroll() {
+        let current = links[0];
+        for (let i = 0; i < links.length; i++) {
+          if (links[i].target.getBoundingClientRect().top <= 80) current = links[i];
+        }
+        links.forEach(function (l) { l.el.classList.remove('active'); });
+        if (current) {
+          current.el.classList.add('active');
+          const tocEl = document.getElementById('toc');
+          const elTop = current.el.offsetTop - tocEl.offsetTop;
+          const elBot = elTop + current.el.offsetHeight;
+          if (elTop < tocEl.scrollTop || elBot > tocEl.scrollTop + tocEl.clientHeight) {
+            tocEl.scrollTop = elTop - tocEl.clientHeight / 2;
+          }
+        }
+      }
+
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    })();
+  </script>
+</body>
+</html>

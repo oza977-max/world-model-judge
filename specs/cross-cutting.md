@@ -1,6 +1,8 @@
 # World Model Judge — Cross-Cutting Specification
 
-Version 1.0 · 25 August 2026 · Derived from Requirements v1.2 and Test Cases v1.0
+Version 1.1 · 25 August 2026 · Derived from Requirements v1.2 and Test Cases v1.0 (design-review fixes applied 25 Aug 2026)
+
+> **Change note (v1.1).** Revised after `/gvm-design-review` design-review-001. Removed `JudgeInput`'s `trial boundaries` field from the Data-Model Overview — judge spec v1.1 explains why the pre-shaped `[n_trials, H, d]` array design makes it unnecessary and, as previously worded, undefined. Added the `JudgedResult` envelope type (judge spec v1.1 §5) to the Data-Model Overview, since it — not the bare `Verdict` — is what reporting and `out/verdicts/` actually consume. Added the NF-4 forbidden-terms list, previously referenced by three separate specs and declared in none of them. See design-review-001.html for the full findings.
 
 **What this document is.** The decisions every other spec depends on: the tech stack, the project structure, the determinism rules, the error-handling conventions, and the dependency budget. Domain specs (worlds, models, judge, reporting) reference this document rather than repeating it.
 
@@ -65,7 +67,7 @@ The existing GVM roster has no specialist for numerical integration or floating-
 
 1. **Single-threaded.** The entry point sets `OMP_NUM_THREADS=1`, `OPENBLAS_NUM_THREADS=1`, `MKL_NUM_THREADS=1` before importing NumPy, and the test suite asserts NumPy reports single-threaded configuration. Unordered parallel reduction is the canonical source of run-to-run float drift (Goldberg: non-associativity); we remove it entirely. NF-2's minutes-scale budget survives this — the workloads are small.
 2. **Seeding.** All randomness flows from `numpy.random.Generator(numpy.random.PCG64(seed))` instances created at the orchestration layer and passed down explicitly. No module creates its own generator from entropy; no code calls the legacy global `numpy.random.*` functions. Component seeds are derived from one run-level seed via `PCG64` jumped/spawned streams so adding a component never shifts another component's stream.
-3. **No ambient inputs.** Nothing in worlds, models, or judge reads the clock, the filesystem, environment variables, or network. The judge specifically is a pure function (JU-12): its entire call graph takes arguments and returns values. File I/O happens only in the orchestration and reporting layers, at the edges.
+3. **No ambient inputs.** Nothing in worlds, models, or judge reads the clock, the filesystem, environment variables, or network. The judge specifically is a pure function (JU-12): its entire call graph takes arguments and returns values. File I/O happens only in the orchestration and reporting layers, at the edges. This includes run-identifying metadata — platform string, prereg commit SHA — which the harness reads and attaches to the `JudgedResult` envelope (Data-Model Overview) *after* calling the judge, never inside it (design-review fix: an earlier draft of the judge spec's Verdict schema carried a `meta` block the judge could not have produced without violating this rule).
 4. **Canonical serialization.** One shared serializer produces every machine-readable artefact: JSON with sorted keys, UTF-8, `\n` newlines, no trailing whitespace, floats rendered with Python's `repr` (shortest round-trip representation — bit-exact by construction), arrays as nested lists, no timestamps or hostnames anywhere in the payload. NF-1's ten-run byte comparison (TC-NF1-01) compares these bytes.
 
 **Options considered:** (a) tolerance-based comparison instead of byte identity — rejected: NF-1 explicitly demands byte identity, and tolerances rot; (b) hash-based comparison of floats at reduced precision — rejected for the same reason; (c) the four rules above — accepted.
@@ -126,8 +128,9 @@ Full schemas live in the domain specs; the shared shapes every package agrees on
 | `State` | `float64[d]` — d=2 (LV: prey, predator), d=4 (pendulum: θ₁, θ₂, ω₁, ω₂) | worlds | everyone |
 | `Action` | `float64[a]` — a=1 both worlds (cull/restock rate; pivot impulse) | worlds | everyone |
 | `Prediction` | `mean: float64[d]`, `spread: float64[d]` — per-dimension mean and standard deviation (the MU-1 fixed uncertainty format; the ensemble's mapping to this format is pre-registered, see models spec) | models | judge |
-| `JudgeInput` | arrays only: predictions, spreads, outcomes, divergence curve, task tolerances, trial boundaries — defined inside `wmj.judge`, no identity fields | judge | judge |
-| `Verdict` | the JU-9 record — full schema in the judge spec, serialized canonically per ADR-002 | judge | reporting, harness |
+| `JudgeInput` | arrays only: predictions, spreads, outcomes, region name + labels, divergence curve `[H+1]`, climatology table, task tolerances — defined inside `wmj.judge`, no identity fields, no separate boundary-marker field (a trial's row in the array's trial axis *is* its boundary — design-review fix, see judge spec v1.1 ADR-J4) | judge | judge |
+| `Verdict` | the JU-9 record — full schema in the judge spec, serialized canonically per ADR-002. Contains only what the judge itself computes: no model identity, no fixture flag, no run metadata (design-review fix — these were removed from `Verdict` because the judge cannot honestly produce them; JU-1/JU-12) | judge | harness |
+| `JudgedResult` | the harness-owned envelope `{model_ref, model_name, is_fixture, verdict, meta}` — one per (model, world); wraps a `Verdict` with the identity/metadata facts only the harness holds (design-review addition, judge spec v1.1 §5) | harness | reporting, `out/verdicts/*.json` |
 
 **The `Prediction.spread` convention** — one standard deviation per dimension — is the single uncertainty vocabulary of the whole system (MU-1). How a model *derives* its spread is its own business; what it *means* is fixed here and never varies (TC-MU1-01, TC-MU1-02). This settles Open Question 4's format half; the ensemble's spread-mapping rule is settled in the models spec.
 
@@ -147,6 +150,29 @@ Full schemas live in the domain specs; the shared shapes every package agrees on
 The dependency gate (TC-NF3-01) reads `pyproject.toml` and fails if any name outside `{numpy, matplotlib}` appears in runtime dependencies. The lockfile (`requirements.lock`, pip-compiled) pins exact versions and is part of the reproducibility statement: RP-7's single documented command installs from the lockfile.
 
 **In plain words:** two packages may be imported by shipped code, ever. The test suite enforces the list; this table is the list.
+
+---
+
+## Confidentiality Scan (NF-4) — the forbidden-terms list
+
+**Design-review addition.** Architecture-overview and the implementation guide both referenced "the forbidden-terms scan" and TC-NF4-01 explicitly promised the list would be "declared and kept current in the technical spec" — but no prior spec draft actually declared it. This is the declaration.
+
+**The list, maintained here (`wmj/harness/confidentiality.py` imports it as a constant, never redefines it):**
+
+```
+FORBIDDEN_TERMS = [
+    # Employer/professional-context terms — NF-4's absolute rule. This seed list
+    # covers the pattern classes named in NF-4 and CLAUDE.md; anyone extending
+    # this project adds specific terms here, never relaxes the rule itself.
+    # (Left deliberately generic in this public spec, per NF-4 — the actual
+    # private seed list, if any specific terms are ever identified, is added
+    # to this file directly, not enumerated in a public document.)
+]
+```
+
+**The scan mechanism:** `wmj/harness/confidentiality.py`'s `scan_repository()` walks every tracked file in the working tree (via `git ls-files`, so it naturally excludes `out/` and other gitignored paths), case-insensitively searches file contents for each term in `FORBIDDEN_TERMS`, and fails loudly (per the Error-Handling Conventions above) listing every match's file and line if any are found. Run in CI on every push and as a pre-commit hook; TC-NF4-01 runs it once against a clean checkout.
+
+**Maintenance:** `FORBIDDEN_TERMS` is append-only, per the same git-hygiene discipline as `prereg/` — a term is never removed once added, only added to, and any addition is its own commit with a message stating why.
 
 ---
 
@@ -171,6 +197,7 @@ The dependency gate (TC-NF3-01) reads `pyproject.toml` and fails if any name out
 | Error handling | MU-2, JU-9, JU-11, NF-5 | TC-MU2-01, TC-JU9-02, TC-JU11-02 |
 | Data model | MU-1, WD-2 | TC-MU1-01, TC-MU1-02 |
 | Dependency budget | NF-3 | TC-NF3-01 |
+| Confidentiality scan (design-review addition) | NF-4 | TC-NF4-01 |
 
 Open Questions settled here: **OQ-5 (dependency half)** — the named list is `{numpy, matplotlib}` + dev `pytest`. OQ-5's runtime-budget half is settled in the judge spec alongside sample size (OQ-1/OQ-2), as the requirements direct. **OQ-4 (format half)** — per-dimension mean + one standard deviation; the ensemble mapping is settled in the models spec.
 
@@ -181,6 +208,7 @@ Open Questions settled here: **OQ-5 (dependency half)** — the named list is `{
 | Version | Date | Change |
 |---|---|---|
 | 1.0 | 2026-08-25 | Initial version. Stack decision (ADR-001) made by user; determinism and structure ADRs derived from requirements v1.2. |
+| 1.1 | 2026-08-25 | Design-review fixes (design-review-001): removed the undefined `trial_boundaries` field, added the `JudgedResult` envelope type, clarified ADR-002 rule 3 to explicitly exclude run metadata from the judge's purity boundary, and declared the NF-4 forbidden-terms list and scan mechanism (previously referenced by two other specs, declared nowhere). |
 
 ---
 

@@ -180,6 +180,19 @@
       border-radius: 2px;
     }
 
+    /* ── Blockquotes ── */
+    blockquote {
+      border-left: 4px solid #ccc;
+      padding-left: 1rem;
+      margin: 1.5rem 0;
+      font-style: italic;
+      color: #666;
+    }
+
+    blockquote p {
+      margin-bottom: 0.5rem;
+    }
+
     /* ── GVM Attribution ── */
     .gvm-attribution {
       font-size: 0.75rem;
@@ -292,7 +305,11 @@
   <main>
     <p class="date">25 August 2026</p>
     <h1>World Model Judge — Cross-Cutting Specification</h1>
-    <p class="subtitle">Version 1.0 · Derived from Requirements v1.2 and Test Cases v1.0</p>
+    <p class="subtitle">Version 1.1 · Derived from Requirements v1.2 and Test Cases v1.0 (design-review fixes applied 25 Aug 2026)</p>
+
+    <blockquote>
+      <p><strong>Change note (v1.1).</strong> Revised after <code>/gvm-design-review</code> design-review-001. Removed <code>JudgeInput</code>'s <code>trial boundaries</code> field from the Data-Model Overview — judge spec v1.1 explains why the pre-shaped <code>[n_trials, H, d]</code> array design makes it unnecessary and, as previously worded, undefined. Added the <code>JudgedResult</code> envelope type (judge spec v1.1 §5) to the Data-Model Overview, since it — not the bare <code>Verdict</code> — is what reporting and <code>out/verdicts/</code> actually consume. Added the NF-4 forbidden-terms list, previously referenced by three separate specs and declared in none of them. See design-review-001.html for the full findings.</p>
+    </blockquote>
 
     <p><strong>What this document is.</strong> The decisions every other spec depends on: the tech stack, the project structure, the determinism rules, the error-handling conventions, and the dependency budget. Domain specs (worlds, models, judge, reporting) reference this document rather than repeating it.</p>
 
@@ -374,6 +391,12 @@
         <span class="adr-status">Accepted</span>
       </summary>
       <div class="adr-body">
+        <h4>Decision</h4>
+        <p><strong>Decision:</strong> Python 3.12, with NumPy as the only numerical dependency, Matplotlib as the only charting dependency, pytest as the only test dependency. The two learned models (MU-5) are hand-rolled NumPy MLPs — no deep-learning framework.</p>
+
+        <h4>Status</h4>
+        <p>Accepted (user decision, 25 Aug 2026).</p>
+
         <h4>Context</h4>
         <p>NF-1 requires byte-identical verdicts across runs and machines of the same platform. NF-2 requires laptop-scale runtime. NF-3 requires a small, named, long-established dependency set. The state spaces are 2–4 dimensions; the models are deliberately trivial (MU-10). [Requirement: NF-1, NF-2, NF-3, MU-5, MU-10]</p>
 
@@ -384,9 +407,8 @@
           <li><strong>Stdlib only</strong> — maximum purity; but slow, unreadable matrix code, and Matplotlib is required for charts anyway, so the purity is spoiled regardless.</li>
         </ol>
 
-        <h4>Decision</h4>
-        <p><strong>Decision:</strong> Python 3.12, with NumPy as the only numerical dependency, Matplotlib as the only charting dependency, pytest as the only test dependency. The two learned models (MU-5) are hand-rolled NumPy MLPs — no deep-learning framework.</p>
-        <p><strong>Decision rationale:</strong> Option 1. At this problem size a framework buys nothing and costs determinism. Writing backprop by hand is a feature for this project: the judge's subject matter is <em>trust in learned models</em>, and a reader can verify every line of what was learned.</p>
+        <h4>Decision Rationale</h4>
+        <p>Option 1. At this problem size a framework buys nothing and costs determinism. Writing backprop by hand is a feature for this project: the judge's subject matter is <em>trust in learned models</em>, and a reader can verify every line of what was learned.</p>
 
         <h4>Consequences</h4>
         <p>We own the correctness of the MLP implementation (mitigated: gradient-check test against finite differences, part of the models spec). Exact package versions must be pinned (see Dependency Budget). No GPU path exists, which NF-2 makes irrelevant.</p>
@@ -400,21 +422,25 @@
         <span class="adr-status">Accepted</span>
       </summary>
       <div class="adr-body">
+        <h4>Decision</h4>
+        <p><strong>Decision:</strong> Determinism is achieved by four enforced rules: (1) single-threaded execution, (2) one seeded generator per component with explicit seed plumbing, (3) no wall-clock, filesystem, or environment reads inside any computation path, (4) canonical serialization for every artefact that NF-1 compares.</p>
+
+        <h4>Status</h4>
+        <p>Accepted.</p>
+
         <h4>Context</h4>
         <p>NF-1 (byte-identical verdicts), WD-7 (byte-identical trajectories), MU-8 (reproducible training), JU-12 (pure judge). Assumption 5 of the requirements flags this as the assumption most likely to bite. [Requirement: NF-1, WD-7, MU-8, JU-12] [Test: TC-NF1-01, TC-NF1-02, TC-WD7-01, TC-WD7-02, TC-MU8-01, TC-JU12-01]</p>
 
-        <h4>Options Considered</h4>
-        <p>(a) tolerance-based comparison instead of byte identity — rejected: NF-1 explicitly demands byte identity, and tolerances rot; (b) hash-based comparison of floats at reduced precision — rejected for the same reason; (c) the four rules below — accepted.</p>
-
-        <h4>Decision</h4>
-        <p><strong>Decision:</strong> Determinism is achieved by four enforced rules: (1) single-threaded execution, (2) one seeded generator per component with explicit seed plumbing, (3) no wall-clock, filesystem, or environment reads inside any computation path, (4) canonical serialization for every artefact that NF-1 compares.</p>
-        <p><strong>The four rules, precisely:</strong></p>
+        <h4>The Four Rules, Precisely</h4>
         <ol>
           <li><strong>Single-threaded.</strong> The entry point sets <code>OMP_NUM_THREADS=1</code>, <code>OPENBLAS_NUM_THREADS=1</code>, <code>MKL_NUM_THREADS=1</code> before importing NumPy, and the test suite asserts NumPy reports single-threaded configuration. Unordered parallel reduction is the canonical source of run-to-run float drift (Goldberg: non-associativity); we remove it entirely. NF-2's minutes-scale budget survives this — the workloads are small.</li>
           <li><strong>Seeding.</strong> All randomness flows from <code>numpy.random.Generator(numpy.random.PCG64(seed))</code> instances created at the orchestration layer and passed down explicitly. No module creates its own generator from entropy; no code calls the legacy global <code>numpy.random.*</code> functions. Component seeds are derived from one run-level seed via <code>PCG64</code> jumped/spawned streams so adding a component never shifts another component's stream.</li>
-          <li><strong>No ambient inputs.</strong> Nothing in worlds, models, or judge reads the clock, the filesystem, environment variables, or network. The judge specifically is a pure function (JU-12): its entire call graph takes arguments and returns values. File I/O happens only in the orchestration and reporting layers, at the edges.</li>
+          <li><strong>No ambient inputs.</strong> Nothing in worlds, models, or judge reads the clock, the filesystem, environment variables, or network. The judge specifically is a pure function (JU-12): its entire call graph takes arguments and returns values. File I/O happens only in the orchestration and reporting layers, at the edges. This includes run-identifying metadata — platform string, prereg commit SHA — which the harness reads and attaches to the <code>JudgedResult</code> envelope (Data-Model Overview) <em>after</em> calling the judge, never inside it (design-review fix: an earlier draft of the judge spec's Verdict schema carried a <code>meta</code> block the judge could not have produced without violating this rule).</li>
           <li><strong>Canonical serialization.</strong> One shared serializer produces every machine-readable artefact: JSON with sorted keys, UTF-8, <code>\n</code> newlines, no trailing whitespace, floats rendered with Python's <code>repr</code> (shortest round-trip representation — bit-exact by construction), arrays as nested lists, no timestamps or hostnames anywhere in the payload. NF-1's ten-run byte comparison (TC-NF1-01) compares these bytes.</li>
         </ol>
+
+        <h4>Options Considered</h4>
+        <p>(a) tolerance-based comparison instead of byte identity — rejected: NF-1 explicitly demands byte identity, and tolerances rot; (b) hash-based comparison of floats at reduced precision — rejected for the same reason; (c) the four rules above — accepted.</p>
 
         <h4>Consequences</h4>
         <p>Every function that needs randomness takes a <code>Generator</code> parameter (visible in every signature — this is a feature, not noise). Cross-<em>platform</em> identity (e.g. x86 vs ARM) is explicitly out of scope, matching NF-1's "machines of the same platform" wording; the verdict record states the platform.</p>
@@ -428,11 +454,16 @@
         <span class="adr-status">Accepted</span>
       </summary>
       <div class="adr-body">
+        <h4>Decision</h4>
+        <p><strong>Decision:</strong> A <code>src</code>-layout Python package <code>wmj</code> with five sub-packages: <code>wmj.worlds</code>, <code>wmj.models</code>, <code>wmj.judge</code>, <code>wmj.reporting</code>, <code>wmj.harness</code>. The judge imports only the standard library and NumPy — never the other <code>wmj</code> packages. The harness is the only package that imports everything.</p>
+
+        <h4>Status</h4>
+        <p>Accepted.</p>
+
         <h4>Context</h4>
         <p>NF-6 (separable layers, judge imports nothing from the others), JU-12 (pure judge), MU-9 (new model touches nothing but its own file), JU-1 (judge input structurally cannot carry identity). [Requirement: NF-6, JU-12, MU-9, JU-1] [Test: TC-NF6-01, TC-JU1-01, TC-MU9-01]</p>
 
-        <h4>Options Considered</h4>
-        <p><strong>Layout:</strong></p>
+        <h4>Layout</h4>
         <pre style="background: #f0f0e8; padding: 1rem; border-radius: 2px; overflow-x: auto; font-family: Menlo, Consolas, Monaco, monospace; font-size: 0.85rem;">wmj/
   worlds/        # Domain 1: LV + pendulum, integrator, divergence, regions, tasks
   models/        # Domain 2: baselines, fixtures, two unrigged models, training
@@ -443,9 +474,7 @@ tests/           # mirrors the package layout; plus tests/gates/ for the enforce
 prereg/          # committed-before-judging artefacts: recipe, margins, thresholds (MU-6, JU-11)
 out/             # generated: verdicts + charts (gitignored except published results)</pre>
 
-        <h4>Decision</h4>
-        <p><strong>Decision:</strong> A <code>src</code>-layout Python package <code>wmj</code> with five sub-packages: <code>wmj.worlds</code>, <code>wmj.models</code>, <code>wmj.judge</code>, <code>wmj.reporting</code>, <code>wmj.harness</code>. The judge imports only the standard library and NumPy — never the other <code>wmj</code> packages. The harness is the only package that imports everything.</p>
-        <p><strong>How the structure enforces the requirements rather than promising them:</strong></p>
+        <h4>How the Structure Enforces the Requirements</h4>
         <ul>
           <li><code>tests/gates/test_import_graph.py</code> walks <code>wmj.judge</code>'s AST and fails on any <code>wmj.*</code> import (TC-NF6-01). This is a build gate, not a convention.</li>
           <li>The judge's input types (defined <em>in the judge package</em>, since it can import nothing) are plain dataclasses of arrays and floats with no name, id, or provenance field — model identity is structurally unrepresentable (TC-JU1-01).</li>
@@ -468,6 +497,36 @@ out/             # generated: verdicts + charts (gitignored except published res
       <li><strong>Gates fail the run, not the assertion count.</strong> The enforced gates (integrator match, drift bound, determinism, import graph, prereg timestamps) run both as pytest tests and as startup checks in the harness — a violated gate stops the pipeline before any output is produced.</li>
       <li><strong>No <code>except: pass</code>, no default fallbacks for configuration.</strong> Absent configuration is an error, per McConnell — a default that masks a missing value would quietly break pre-registration.</li>
     </ol>
+
+    <h2 id="confidentiality-scan">Confidentiality Scan (NF-4) — the forbidden-terms list</h2>
+
+    <p><strong>Design-review addition.</strong> Architecture-overview and the implementation guide both referenced "the forbidden-terms scan" and TC-NF4-01 explicitly promised the list would be "declared and kept current in the technical spec" — but no prior spec draft actually declared it. This is the declaration.</p>
+
+    <p><strong>The list, maintained here (<code>wmj/harness/confidentiality.py</code> imports it as a constant, never redefines it):</strong></p>
+
+    <pre style="background: #f0f0e8; padding: 1rem; border-radius: 2px; overflow-x: auto; font-family: Menlo, Consolas, Monaco, monospace; font-size: 0.85rem;"><code>FORBIDDEN_TERMS = [
+    # Employer/professional-context terms — NF-4's absolute rule. This seed list
+    # covers the pattern classes named in NF-4 and CLAUDE.md; anyone extending
+    # this project adds specific terms here, never relaxes the rule itself.
+    # (Left deliberately generic in this public spec, per NF-4 — the actual
+    # private seed list, if any specific terms are ever identified, is added
+    # to this file directly, not enumerated in a public document.)
+]</code></pre>
+
+    <p><strong>The scan mechanism:</strong> <code>wmj/harness/confidentiality.py</code>'s <code>scan_repository()</code> walks every tracked file in the working tree (via <code>git ls-files</code>, so it naturally excludes <code>out/</code> and other gitignored paths), case-insensitively searches file contents for each term in <code>FORBIDDEN_TERMS</code>, and fails loudly (per the Error-Handling Conventions above) listing every match's file and line if any are found. Run in CI on every push and as a pre-commit hook; TC-NF4-01 runs it once against a clean checkout.</p>
+
+    <p><strong>Maintenance:</strong> <code>FORBIDDEN_TERMS</code> is append-only, per the same git-hygiene discipline as <code>prereg/</code> — a term is never removed once added, only added to, and any addition is its own commit with a message stating why.</p>
+
+    <h2 id="development-conventions">Development Conventions</h2>
+
+    <ul>
+      <li><strong>TDD, strictly (Beck, via test-cases.md):</strong> each build chunk starts from its named TC-IDs; the failing test precedes the code. Tests are co-located per package under <code>tests/</code>, named for behaviour (<code>test_wd3_gate_fails_on_step_size_mismatch</code>, per Metz).</li>
+      <li><strong>Type hints on every public signature</strong> (Ramalho); <code>from __future__ import annotations</code> throughout. No runtime type-checking dependency — hints are documentation and IDE fuel, per NF-3.</li>
+      <li><strong>Plain-English docstrings carry the "In plain words" discipline (NF-5 territory):</strong> every public module and function docstring says what it does in ordinary language. A reader of the source meets the same voice as a reader of the requirements.</li>
+      <li><strong>Naming:</strong> requirement IDs appear in gate-test names and error messages, so a failing check names the requirement it protects.</li>
+      <li><strong>No <code>__init__.py</code> re-export mazes:</strong> import paths mirror the layout; <code>wmj.judge.calibration</code> is where calibration lives.</li>
+      <li><strong>Git hygiene:</strong> <code>out/</code> artefacts are regenerated, never hand-edited; <code>prereg/</code> files are append-only once committed (their history <em>is</em> the pre-registration evidence).</li>
+    </ul>
 
     <h2 id="data-model">Data-Model Overview</h2>
 
@@ -503,15 +562,21 @@ out/             # generated: verdicts + charts (gitignored except published res
         </tr>
         <tr>
           <td><code>JudgeInput</code></td>
-          <td>arrays only: predictions, spreads, outcomes, divergence curve, task tolerances, trial boundaries — defined inside <code>wmj.judge</code>, no identity fields</td>
+          <td>arrays only: predictions, spreads, outcomes, region name + labels, divergence curve <code>[H+1]</code>, climatology table, task tolerances — defined inside <code>wmj.judge</code>, no identity fields, no separate boundary-marker field (a trial's row in the array's trial axis <em>is</em> its boundary — design-review fix, see judge spec v1.1 ADR-J4)</td>
           <td>judge</td>
           <td>judge</td>
         </tr>
         <tr>
           <td><code>Verdict</code></td>
-          <td>the JU-9 record — full schema in the judge spec, serialized canonically per ADR-002</td>
+          <td>the JU-9 record — full schema in the judge spec, serialized canonically per ADR-002. Contains only what the judge itself computes: no model identity, no fixture flag, no run metadata (design-review fix — these were removed from <code>Verdict</code> because the judge cannot honestly produce them; JU-1/JU-12)</td>
           <td>judge</td>
-          <td>reporting, harness</td>
+          <td>harness</td>
+        </tr>
+        <tr>
+          <td><code>JudgedResult</code></td>
+          <td>the harness-owned envelope <code>{model_ref, model_name, is_fixture, verdict, meta}</code> — one per (model, world); wraps a <code>Verdict</code> with the identity/metadata facts only the harness holds (design-review addition, judge spec v1.1 §5)</td>
+          <td>harness</td>
+          <td>reporting, <code>out/verdicts/*.json</code></td>
         </tr>
       </tbody>
     </table>
@@ -549,17 +614,6 @@ out/             # generated: verdicts + charts (gitignored except published res
     <p>The dependency gate (TC-NF3-01) reads <code>pyproject.toml</code> and fails if any name outside <code>{numpy, matplotlib}</code> appears in runtime dependencies. The lockfile (<code>requirements.lock</code>, pip-compiled) pins exact versions and is part of the reproducibility statement: RP-7's single documented command installs from the lockfile.</p>
 
     <p><strong>In plain words:</strong> two packages may be imported by shipped code, ever. The test suite enforces the list; this table is the list.</p>
-
-    <h2 id="development-conventions">Development Conventions</h2>
-
-    <ul>
-      <li><strong>TDD, strictly (Beck, via test-cases.md):</strong> each build chunk starts from its named TC-IDs; the failing test precedes the code. Tests are co-located per package under <code>tests/</code>, named for behaviour (<code>test_wd3_gate_fails_on_step_size_mismatch</code>, per Metz).</li>
-      <li><strong>Type hints on every public signature</strong> (Ramalho); <code>from __future__ import annotations</code> throughout. No runtime type-checking dependency — hints are documentation and IDE fuel, per NF-3.</li>
-      <li><strong>Plain-English docstrings carry the "In plain words" discipline (NF-5 territory):</strong> every public module and function docstring says what it does in ordinary language. A reader of the source meets the same voice as a reader of the requirements.</li>
-      <li><strong>Naming:</strong> requirement IDs appear in gate-test names and error messages, so a failing check names the requirement it protects.</li>
-      <li><strong>No <code>__init__.py</code> re-export mazes:</strong> import paths mirror the layout; <code>wmj.judge.calibration</code> is where calibration lives.</li>
-      <li><strong>Git hygiene:</strong> <code>out/</code> artefacts are regenerated, never hand-edited; <code>prereg/</code> files are append-only once committed (their history <em>is</em> the pre-registration evidence).</li>
-    </ul>
 
     <h2 id="traceability">Traceability</h2>
 
@@ -602,6 +656,11 @@ out/             # generated: verdicts + charts (gitignored except published res
           <td>NF-3</td>
           <td>TC-NF3-01</td>
         </tr>
+        <tr>
+          <td>Confidentiality scan (design-review addition)</td>
+          <td>NF-4</td>
+          <td>TC-NF4-01</td>
+        </tr>
       </tbody>
     </table>
 
@@ -622,6 +681,11 @@ out/             # generated: verdicts + charts (gitignored except published res
           <td>1.0</td>
           <td>2026-08-25</td>
           <td>Initial version. Stack decision (ADR-001) made by user; determinism and structure ADRs derived from requirements v1.2.</td>
+        </tr>
+        <tr>
+          <td>1.1</td>
+          <td>2026-08-25</td>
+          <td>Design-review fixes (design-review-001): removed the undefined <code>trial_boundaries</code> field, added the <code>JudgedResult</code> envelope type, clarified ADR-002 rule 3 to explicitly exclude run metadata from the judge's purity boundary, and declared the NF-4 forbidden-terms list and scan mechanism (previously referenced by two other specs, declared nowhere).</td>
         </tr>
       </tbody>
     </table>
