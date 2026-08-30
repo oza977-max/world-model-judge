@@ -1,6 +1,8 @@
 # World Model Judge — Implementation Guide
 
-Version 1.2 · 30 August 2026 · Bridges: all five specs v1.2 → `/gvm-build` · Requirements v1.2, Test Cases v1.0
+Version 1.3 · 30 August 2026 · Bridges: all specs v1.3 → `/gvm-build` · Requirements v1.2, Test Cases v1.0 (79 cases)
+
+> **Change note (v1.3).** Revised after `/gvm-design-review` design-review-003 (Round 3, dual/blind). Corrected the stated "critical path (11 chunks)" — it both miscounted its own named chunks (10, not 11) and omitted P3-C05, which the Dependency Network table itself names as a hard prerequisite of P6-C01; the corrected path has 9 chunks across two equal-length branches. No other chunk content changed — `fx-brittle`'s Round 3 redesign (models spec v1.3) removed the extra training-pipeline dependency Round 2's version would have needed, so P3-C05's existing dependency row required no change. See design-review-003.html for the full findings.
 
 > **Change note (v1.2).** Revised after `/gvm-design-review` design-review-002 (Round 2, independent re-check). Panel D confirmed **P2-C05 itself is sound** — a genuine, demonstrable second thin vertical slice, correctly wired — but found two things wrong with this guide's own bookkeeping around it. First, **the chunk count is wrong: independently recounted twice against the Dependency Network table below, the true total is 28, not the "24" stated four times in this document since v1.1** (and, tracing the same error backward, the true pre-P2-C05 total was 27, not the "23" v1.0 stated — this miscount predates v1.1's own fix and was never caught until Round 2's strict, from-scratch recount). Corrected everywhere below; the v1.0/v1.1 changelog rows are left as the historical record of what was claimed at the time. Second, **the "P2-C05 shares no files with any Phase 3 chunk" parallel-safety claim was false**: P2-C05 and P3-C02 both target `wmj/models/baselines.py` per the models spec's own component design and this guide's Wiring Matrix naming. Fixed by stating explicitly that P2-C05 creates the file with the persistence baseline only, P3-C02 sequentially extends it, and removing the incorrect parallel claim. See design-review-002.html for the full findings.
 
@@ -117,7 +119,7 @@ P2-C01 ∥ P2-C02        P3-C01 ∥ P3-C02 ∥ P3-C07
                            P6-C01 ─ P6-C02 ─ P6-C03
 ```
 
-**Critical path (11 chunks):** P1-C01 → P1-C02 → P2-C01 → P2-C03 → *(with P3-C01→P3-C06→P3-C03 running in parallel)* → P4-C01 → P4-C05 → P4-C06 → P6-C01 → P6-C02 → P6-C03.
+**Critical path (9 chunks — design-review-003 correction: the previous "11 chunks" line both miscounted its own named chunks, 10 not 11, and omitted P3-C05, which the Dependency Network table above names as a hard prerequisite of P6-C01; independently recounted twice, matching both the raw dependency table and a from-scratch longest-path trace):** P1-C01 → P1-C02 → P2-C01 → *(two branches of equal length, both required before P6-C01 since it needs all of P2–P5; either may be the actual bottleneck depending on session-to-session variance)* — **judge branch:** P2-C03 → P4-C05 → P4-C06; **models branch:** P3-C06 → P3-C03 → P3-C05 — → P6-C01 → P6-C02 → P6-C03.
 
 ---
 
@@ -139,7 +141,7 @@ P2-C01 ∥ P2-C02        P3-C01 ∥ P3-C02 ∥ P3-C07
 | `reporting.style.mark_fixture` (producer) | consumed by every chart renderer | P5-C02..C04 | P6-C01 (TC-RP8-01 fixture-label acceptance) |
 | `harness.serialize` (producer) | consumed by skeleton, thresholds writer, verdict writer, manifest | P1-C02, P3-C07, P5-C04 | P1-C03 (byte-identity gate is the serializer's failing consumer test) |
 | `judge.types` (producer) | consumed by every judge module + reporting reader | P4-C01, P5-C04 | P4-C01 (TC-JU1-01 structural-blindness test) |
-| `wmj.models.registry` (producer) | consumed by `harness.trials` discovery | P6-C01 | P6-C01 (TC-MU9-01 zero-diff acceptance, now via the named `tests/gates/test_registry_isolation.py` git-diff mechanism, design-review-002 — cross-cutting spec v1.2 ADR-003) |
+| `wmj.models.registry` (producer) | consumed by `harness.trials` discovery | P6-C01 | P6-C01 (TC-MU9-01 zero-diff acceptance, now via the named `tests/gates/test_registry_isolation.py` git-diff mechanism, design-review-002 — cross-cutting spec v1.3 ADR-003) |
 
 No row has an empty wiring-chunk or `Demanded by` cell; no exemptions claimed.
 
@@ -169,6 +171,7 @@ Deferred seams and their closing chunks: model training deferred from P3 rollout
 | 1.0 | 2026-08-25 | Initial version. Starts at P1 — no prior build phases or implementation guide exist in this repository. 6 phases, 23 chunks, MVP-1 satisfied by P1-C02, wiring matrix complete with no exemptions. |
 | 1.1 | 2026-08-25 | Design-review fix (design-review-001): added P2-C05, a second thin vertical slice (one real chart from real data) landing at chunk 8 rather than the previous plan's first further user-visible capability at chunk 19 (this "23"/"19" arithmetic was itself later found wrong in design-review-002 — see v1.2 row) — Phases 2–5 had otherwise reverted to a fully horizontal, layer-by-layer build after P1-C02, which the guide's own MVP-1 rule exists to forbid. 6 phases, "24" chunks (later corrected). |
 | 1.2 | 2026-08-30 | Design-review fixes (design-review-002, Round 2): corrected the chunk count everywhere in this document (true total 28, not 24; true pre-P2-C05 total 27, not 23 — an arithmetic error present since v1.0 and never caught until an independent recount); fixed the false "P2-C05 shares no files with any Phase 3 chunk" parallel-safety claim (both target `wmj/models/baselines.py`) by making P3-C02 sequentially extend P2-C05's file instead; corrected P2-C05's acceptance criterion (Chart 2's caption template has no numeric slots to substitute); named the concrete `test_registry_isolation.py` mechanism for TC-MU9-01. |
+| 1.3 | 2026-08-30 | Design-review fix (design-review-003, Round 3, dual/blind): corrected the critical-path line — 9 chunks across two equal-length branches, not "11" (which both miscounted its own list and omitted P3-C05). |
 
 ---
 

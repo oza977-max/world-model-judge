@@ -1,8 +1,10 @@
 # World Model Judge — Architecture Overview
 
-Version 1.2 · 30 August 2026 · Synthesises: cross-cutting v1.2, worlds v1.2, models v1.2, judge v1.2, reporting v1.2
+Version 1.3 · 30 August 2026 · Synthesises: cross-cutting v1.3, worlds v1.2, models v1.3, judge v1.3, reporting v1.3
 
-> **Change note (v1.2).** Revised after `/gvm-design-review` design-review-002 (Round 2). No conceptual-integrity claim in §6 was found false this round (Round 1's correction held under independent re-check). Updated version references throughout to the v1.2 spec suite, and the NF-4 mention in §4 now reflects the redesigned local-terms-file scan mechanism (cross-cutting v1.2) rather than the v1.1 mechanism Round 2 found self-defeating. See design-review-002.html for the full findings.
+> **Change note (v1.3).** Revised after `/gvm-design-review` design-review-003 (Round 3, dual/blind — 14 independent reviewers). Version references updated to the v1.3 spec suite. No new conceptual-integrity finding this round — Rounds 1–2's fixes to this document held under independent re-check. See design-review-003.html for the full findings, including the two Build Checks promoted to `reviews/calibration.md` (schema/consumer granularity mismatch; self-verified enforcement-mechanism fixes requiring adversarial pressure-testing).
+
+> **Change note (v1.2).** Revised after `/gvm-design-review` design-review-002 (Round 2). No conceptual-integrity claim in §6 was found false this round (Round 1's correction held under independent re-check). Updated version references throughout to the v1.2 spec suite, and the NF-4 mention in §4 now reflects the redesigned local-terms-file scan mechanism (cross-cutting v1.3) rather than the v1.1 mechanism Round 2 found self-defeating. See design-review-002.html for the full findings.
 
 **What this document is.** The one-page-up view: how the pieces fit, the decisions that matter most, and an honest check that the whole thing coheres as one design rather than five documents stapled together.
 
@@ -46,7 +48,7 @@ One deployable unit; the containers are the five packages plus two artefact stor
                                             └────────────▶[reporting]───▶[out/]
 ```
 
-(design-review fix: the judge returns only a pure `Verdict`; the harness — never the judge — attaches identity and run metadata, per judge spec v1.2 §5, and writes the resulting envelope through the same canonical serializer as every other byte-compared artefact, cross-cutting v1.2 ADR-002 rule 4.)
+(design-review fix: the judge returns only a pure `Verdict`; the harness — never the judge — attaches identity and run metadata, per judge spec v1.3 §5, and writes the resulting envelope through the same canonical serializer as every other byte-compared artefact, cross-cutting v1.3 ADR-002 rule 4.)
 
 - **`wmj.worlds`** — LV + pendulum, shared RK4 integrator, divergence benchmark, regions, tasks. Pure functions of (state, action).
 - **`wmj.models`** — baselines, fixtures, the direct/ensemble pair; registry-only discovery. Sees `(state, action)` arrays, never world internals.
@@ -78,7 +80,7 @@ The judge's isolation is the load-bearing wall: everything else may know about t
 ## 4. Quality Attributes (how the ASRs are answered)
 
 - **Reproducibility (NF-1, WD-7, MU-8):** the four ADR-002 rules + the ten-run byte gate + `wmj verify`. Platform-scoped, stated in the manifest.
-- **Credibility (NF-4, NF-5, MU-4, JU-10):** fixture labels burned into images; limitations as fixed constants in the judge; the forbidden-terms scan (a gitignored local terms file checked pre-commit, with the CI-vs-local enforcement gap disclosed rather than hidden — cross-cutting v1.2); the agreement-case caption that declines to manufacture a punchline.
+- **Credibility (NF-4, NF-5, MU-4, JU-10):** fixture labels burned into images; limitations as fixed constants in the judge; the forbidden-terms scan (a gitignored local terms file checked pre-commit, with the CI-vs-local enforcement gap disclosed rather than hidden — cross-cutting v1.3); the agreement-case caption that declines to manufacture a punchline.
 - **Separability (NF-6, JU-12, JU-1):** enforced by import-graph AST test, purity-under-blocked-environment test, and identity-free types.
 - **Adaptability (MU-9):** registry + one-interface rule; the zero-diff-outside-own-file test is the contract Mor checks.
 - **Performance (NF-2):** 600-second budget with envelope math (judge spec ADR-J6); single-threaded by design and still two orders of magnitude inside budget.
@@ -117,6 +119,7 @@ Verdict: the system reads as one mind's design. The single idea it expresses eve
 | 1.0 | 2026-08-25 | Initial version, synthesised after all four domain specs were individually approved. |
 | 1.1 | 2026-08-25 | Design-review fixes (design-review-001): corrected the "no second metric exists anywhere" overclaim (CRPS and RMS distance are both genuinely in use, for distinct purposes); updated the container view to the harness-owned envelope; added ADR-J7 to Key Decisions. |
 | 1.2 | 2026-08-30 | Design-review-002 (Round 2): version references updated to the v1.2 spec suite; NF-4 description updated to the redesigned local-terms-file scan; no new conceptual-integrity finding — Round 1's fix held under independent re-check. |
+| 1.3 | 2026-08-30 | Design-review-003 (Round 3, dual/blind): version references updated to the v1.3 spec suite; no new conceptual-integrity finding. |
 
 ---
 

@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>World Model Judge — Design Review 003</title>
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+
+    body {
+      font-family: "ET Book", Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif;
+      color: #111;
+      background: #fffff8;
+      line-height: 1.6;
+      padding: 2rem 1rem 6rem;
+      max-width: 1480px;
+      margin: 0 auto;
+    }
+
+    /* ── Typography ── */
+    h1 {
+      font-size: 2.4rem;
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.4rem;
+      color: #111;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 400;
+      font-style: italic;
+      margin-top: 3rem;
+      margin-bottom: 1rem;
+      color: #111;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 0.3rem;
+    }
+
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-top: 2rem;
+      margin-bottom: 0.6rem;
+      color: #333;
+    }
+
+    p, li {
+      font-size: 1rem;
+      line-height: 1.7;
+      margin-bottom: 0.8rem;
+      max-width: 1000px;
+    }
+
+    ul, ol { padding-left: 1.4rem; margin-bottom: 1.2rem; }
+    li { margin-bottom: 0.4rem; }
+
+    .subtitle {
+      font-size: 1.1rem;
+      font-style: italic;
+      color: #555;
+      margin-bottom: 2.5rem;
+      max-width: 1000px;
+    }
+
+    .date {
+      font-size: 0.9rem;
+      color: #888;
+      margin-bottom: 0.2rem;
+    }
+
+    /* ── Floating TOC (Left Side) ── */
+    nav.toc {
+      position: fixed;
+      top: 2rem;
+      left: 2rem;
+      width: 220px;
+      max-height: calc(100vh - 4rem);
+      overflow-y: auto;
+      background: #fffff8;
+      border-right: 2px solid #ddd;
+      padding: 1rem 1rem 1rem 0;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      z-index: 100;
+    }
+
+    nav.toc .toc-title {
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #999;
+      margin-bottom: 0.6rem;
+    }
+
+    nav.toc a {
+      color: #555;
+      text-decoration: none;
+      display: block;
+      padding: 0.15rem 0;
+      transition: color 0.15s;
+    }
+
+    nav.toc a:hover { color: #111; }
+    nav.toc a.active { color: #111; font-weight: 600; }
+    nav.toc .toc-h3 { padding-left: 0.8rem; font-size: 0.78rem; color: #888; }
+    nav.toc .toc-h3:hover { color: #555; }
+
+    /* Offset main content for left TOC */
+    main {
+      margin-left: 260px;
+      max-width: 1000px;
+    }
+
+    /* ── Sidenotes (Right Margin) ── */
+    .sidenote {
+      float: right;
+      clear: right;
+      width: 220px;
+      margin-right: -260px;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      color: #666;
+      padding-left: 1rem;
+      border-left: 2px solid #e0e0e0;
+    }
+
+    /* ── Tables (Few's principles) ── */
+    table {
+      border-collapse: collapse;
+      margin: 1.5rem 0 2rem;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      width: auto;
+      min-width: 480px;
+    }
+
+    thead th {
+      text-align: left;
+      font-weight: 600;
+      padding: 0.5rem 1rem 0.5rem 0;
+      border-bottom: 2px solid #333;
+      color: #111;
+    }
+
+    tbody td {
+      padding: 0.45rem 1rem 0.45rem 0;
+      border-bottom: 1px solid #e8e8e8;
+      vertical-align: top;
+    }
+
+    tbody tr:last-child td { border-bottom: 2px solid #333; }
+    tbody tr:nth-child(even) { background: #f9f9f4; }
+
+    caption {
+      font-style: italic;
+      font-size: 0.88rem;
+      color: #666;
+      text-align: left;
+      margin-bottom: 0.4rem;
+    }
+
+    /* ── Requirement Blocks ── */
+    .req {
+      background: #f7f7f0;
+      border-left: 3px solid #999;
+      padding: 0.8rem 1rem;
+      margin: 1rem 0 1.2rem;
+      max-width: 1000px;
+    }
+
+    .req-id {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.2rem;
+    }
+
+    .req p { margin-bottom: 0.3rem; }
+
+    /* ── Inline Code ── */
+    code {
+      font-family: "Menlo", "Consolas", "Monaco", monospace;
+      font-size: 0.88rem;
+      background: #f0f0e8;
+      padding: 0.1rem 0.35rem;
+      border-radius: 2px;
+    }
+
+    /* ── Verdict Box (review components) ── */
+    .verdict {
+      border: 2px solid #333;
+      padding: 1.2rem 1.5rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+    }
+
+    .verdict-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+      margin-bottom: 0.3rem;
+    }
+
+    .verdict-text {
+      font-size: 1.3rem;
+      font-weight: 400;
+      color: #111;
+      margin-bottom: 0.4rem;
+    }
+
+    .verdict-basis {
+      font-size: 0.88rem;
+      color: #555;
+      max-width: 1000px;
+    }
+
+    .verdict.ready { border-color: #27ae60; background: #f0faf4; }
+    .verdict.ready .verdict-text { color: #27ae60; }
+
+    .verdict.caveats { border-color: #e67e22; background: #fef8f0; }
+    .verdict.caveats .verdict-text { color: #e67e22; }
+
+    .verdict.not-ready { border-color: #c0392b; background: #fdf0ef; }
+    .verdict.not-ready .verdict-text { color: #c0392b; }
+
+    /* ── Review Components (score card, issues, criteria) ── */
+    .score-card {
+      background: #f7f7f0;
+      border: 2px solid #333;
+      padding: 1.5rem 2rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+      text-align: center;
+    }
+
+    .overall-score {
+      font-size: 2.4rem;
+      font-weight: 400;
+      color: #111;
+      margin-bottom: 0.8rem;
+    }
+
+    .score-breakdown {
+      display: flex;
+      justify-content: space-around;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .score-item {
+      font-size: 0.88rem;
+      color: #555;
+    }
+
+    .issue {
+      border-left: 3px solid;
+      padding: 0.8rem 1rem;
+      margin: 0.8rem 0;
+      max-width: 1000px;
+    }
+
+    .issue.critical {
+      border-left-color: #c0392b;
+      background: #fdf0ef;
+    }
+
+    .issue.important {
+      border-left-color: #e67e22;
+      background: #fef8f0;
+    }
+
+    .issue.minor {
+      border-left-color: #7f8c8d;
+      background: #f7f7f4;
+    }
+
+    .issue-title {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 0.3rem;
+    }
+
+    .issue-detail {
+      font-size: 0.92rem;
+      color: #555;
+      margin-bottom: 0.3rem;
+    }
+
+    .issue-location {
+      font-size: 0.78rem;
+      color: #999;
+      font-style: italic;
+    }
+
+    .criterion {
+      display: flex;
+      align-items: baseline;
+      gap: 0.8rem;
+      margin: 0.6rem 0;
+      max-width: 1000px;
+    }
+
+    .criterion-name {
+      font-weight: 600;
+      color: #333;
+      min-width: 160px;
+    }
+
+    .criterion-score {
+      font-size: 0.85rem;
+      font-weight: 600;
+      min-width: 40px;
+    }
+
+    .criterion-score.high { color: #27ae60; }
+    .criterion-score.mid { color: #e67e22; }
+    .criterion-score.low { color: #c0392b; }
+
+    .criterion-note {
+      font-size: 0.88rem;
+      color: #666;
+    }
+
+    /* ── GVM Attribution ── */
+    .gvm-attribution {
+      font-size: 0.75rem;
+      color: #999;
+      font-style: italic;
+      text-align: center;
+      margin-top: 3rem;
+      margin-bottom: 0;
+      max-width: none;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 1200px) {
+      nav.toc {
+        position: static;
+        width: 100%;
+        max-height: none;
+        border-right: none;
+        border-bottom: 1px solid #ddd;
+        padding: 1rem 0;
+        margin-bottom: 2rem;
+      }
+      main { margin-left: 0; }
+      .sidenote {
+        float: none;
+        width: 100%;
+        margin: 0.8rem 0;
+        padding: 0.6rem 0 0.6rem 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="toc" id="toc">
+    <div class="toc-title">Contents</div>
+  </nav>
+
+  <main>
+    <p class="date">Round 3 (dual/blind review) · 7 panels × 2 (calibrated + blind) · 30 August 2026</p>
+    <h1>World Model Judge — Design Review 003</h1>
+    <p class="subtitle">Independent dual/blind re-scan of all seven specification documents. Verification that Round 2's high-priority fixes (EOM, chunk count, AST gate, NF-4 scan) hold under adversarial pressure-testing. Discovery of 12 new Critical and 14 new Important findings, dominated by a structural theme.</p>
+
+    <h2 id="verdict">Verdict</h2>
+    <div class="verdict not-ready">
+      <div class="verdict-label">Verdict</div>
+      <div class="verdict-text">Do not build</div>
+      <p class="verdict-basis">This is the third consecutive "Do not build" verdict, with both good and sobering news. The two fixes Round 2 flagged as least trustworthy — the physics correction and the security mechanism — both held under independent re-derivation, term for term. The rest surfaced a large new defect population dominated by one recurring structural theme: six instances of "a metric needs keys (task, region, step) but the schema is missing one." Every enforcement mechanism introduced in Round 2 has a real gap: the NF-4 scan's pre-commit hook has no installation path; the AST gate has multiple evasion routes (alias indirection, getattr, exec); the TC-MU9-01 registry test is tautological. Most importantly, patching the specific instance a review names does not close the category the instance came from. A structural fix — one canonical multi-key schema shape and adversarial pressure-testing of enforcement mechanisms before marking them resolved — would likely close most of both families.</p>
+    </div>
+
+    <h2 id="executive-summary">Executive Summary</h2>
+    <p>Fourteen independent reviewers (seven defect-class panels, each run twice: once calibrated with prior-round knowledge, once fully blind with none) scanned all specifications under the methodology's strict dual/blind protocol, which triggers automatically at 2+ prior rounds.</p>
+
+    <p>The positive signal: both highest-priority verification targets held. Two independent reviewers each re-derived the double-pendulum equations from Euler–Lagrange and confirmed the v1.2 correction exactly, term for term. Two independent reviewers each recounted the implementation guide's chunk total from the dependency table and got 28 both times. These are the two critical passes this round was explicitly designed to run.</p>
+
+    <p>The pattern shift from Rounds 1–2: defects have moved from <em>incompleteness</em> (missing constants, unnamed edge cases) through <em>inconsistency</em> (the same fact defined differently in different places) to <em>systematicity</em>. Most new Critical findings are instances of one design principle applied inconsistently: "every fact keyed by (task, region, step) needs matching keys in the schema." Round 1 found it on Chart 1. Round 2 found it on Chart 2 and 3. Round 3 finds it on six more blocks. This is not six bugs; it is one rule that has never been applied systematically.</p>
+
+    <p>The confidence signal: thirteen of ~24 new findings were independently discovered by two or more of the fourteen reviewers with zero shared context between calibrated and blind runs — the methodology's strongest available confidence form.</p>
+
+    <h2 id="round-2-fix-verification">Round 2 Fix Verification</h2>
+
+    <h3 id="confirmed-resolved">Confirmed-Resolved (holds cleanly under independent dual/blind re-check)</h3>
+
+    <table>
+      <caption>Table 1 — Round 2 findings verified independently to hold after v1.2 fixes</caption>
+      <thead>
+        <tr><th>Item</th><th>Verified by</th><th>Method</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Double-pendulum EOM coefficient correction (<code>2·m</code>→<code>3·m</code>)</td><td><strong>D-calibrated AND D-blind, both independent</strong></td><td>Re-derived from Euler–Lagrange, term-by-term match</td></tr>
+        <tr><td>TC-WD1-01 pendulum reference constant correctly flagged invalid</td><td>D-calibrated</td><td>Regenerated from corrected formula</td></tr>
+        <tr><td>Implementation-guide chunk count (28)</td><td><strong>D-calibrated AND D-blind, both independent</strong></td><td>Recounted from raw Dependency Network table</td></tr>
+        <tr><td><code>is_fixture</code>/<code>model_ref</code>/<code>meta</code> envelope split</td><td>F2-calibrated</td><td>Single producer confirmed, no model-identity branching</td></tr>
+        <tr><td><code>trials.is_exception</code>/<code>exceptions.per_task.observed</code> definition consistency</td><td>B-calibrated, C-calibrated</td><td>Definition copied correctly, enforcement gap noted separately</td></tr>
+        <tr><td><code>outcome_distance</code> field name; Chart 1 X-ordering rule</td><td>B-calibrated</td><td>Present in schema and reporting</td></tr>
+        <tr><td><code>trust_horizons.per_task.region</code> field and Chart 4 citation</td><td>B-calibrated</td><td>Data exists; column-mapping rule gap found (new finding)</td></tr>
+        <tr><td><code>calibration.n_trials</code> field</td><td>B-calibrated</td><td>Present and cited correctly</td></tr>
+        <tr><td>JU-9 eight-mandatory-field list</td><td>A-calibrated, C-calibrated</td><td>Consistent with schema and verdict.py refusal behavior</td></tr>
+        <tr><td>Reporting's full-envelope-set input contract</td><td>B-calibrated</td><td>Chart 2 baseline curves present</td></tr>
+        <tr><td>NF-4 self-defeating "write term into tracked file" instruction gone</td><td>E-calibrated, E-blind</td><td>Replaced by precondition gate</td></tr>
+        <tr><td>AST gate: bare <code>import os</code> and <code>importlib.import_module</code> coverage</td><td>F1-calibrated</td><td>Three literal evasions caught by three checks</td></tr>
+        <tr><td>AST gate three-check cohesive mechanism</td><td>C-calibrated</td><td>Sound architecture, not over-scoped</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="partially-resolved">Partially Resolved / New Gap in Same Location</h3>
+
+    <table>
+      <caption>Table 2 — Round 2 findings with gaps discovered in Round 3</caption>
+      <thead>
+        <tr><th>Item</th><th>New gap found by</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>NF-4 mechanism</td><td>See Critical findings NC-1, NC-2 below</td></tr>
+        <tr><td>AST gate dynamic-import and ambient coverage</td><td>See Critical findings NC-3, NC-4 below</td></tr>
+        <tr><td>TC-MU9-01 registry-isolation mechanism</td><td>See Critical finding NC-5 below</td></tr>
+        <tr><td><code>fx-brittle</code> training split (Round 1 ambiguity → Round 2 "fix" → Round 3 regression)</td><td>See Critical finding NC-6 below</td></tr>
+        <tr><td><code>trust_horizons.region</code> data exists, but chart-building rule missing</td><td>C-calibrated; see NI-7 below</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="new-findings-critical">New Findings — Critical (12)</h2>
+
+    <div class="issue critical">
+      <div class="issue-title">NC-1 — NF-4's pre-commit hook has no described installation mechanism</div>
+      <p class="issue-detail"><em>E-calibrated, E-blind, A-calibrated (3 independent panels)</em></p>
+      <p class="issue-detail">Git hooks live in <code>.git/hooks/</code>, which <code>git clone</code> never populates. No document names a <code>pre-commit install</code> step, a <code>.githooks/</code> directory, or any wiring. <code>implementation-guide.md</code> P6-C02 treats the whole confidentiality scan as a <strong>runtime</strong> check (<code>python -m wmj run</code>), not a commit-time one — directly contradicting cross-cutting.md's own "pre-commit hook" framing. On a fresh clone, there is no hook to fail loudly with — the guarantee the v1.2 redesign exists to provide may simply never fire.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">NC-2 — NF-4 scan never covers historical file-content blobs</div>
+      <p class="issue-detail"><em>E-calibrated, E-blind (2 independent panels)</em></p>
+      <p class="issue-detail">Round 2 fixed the identical failure mode for commit messages — a term typed and removed remains visible via <code>git log</code>. The same reasoning applies to file content: a term committed and removed in the next commit is permanently visible via <code>git log -p</code>/<code>git show</code>. The current mechanism (<code>git ls-files</code> — current tree only) never checks it, leaving the more common channel open.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">NC-3 — AST gate's dynamic-import coverage is a closed syntactic enumeration, evadable multiple ways</div>
+      <p class="issue-detail"><em>E-calibrated, E-blind, F1-blind (3 independent panels)</em></p>
+      <p class="issue-detail">Alias indirection (<code>import importlib as il; il.import_module(...)</code>), <code>getattr</code>-indirection, and <code>exec</code>/<code>eval</code> on a constructed string all reach another package's code without matching any of the three enumerated <code>Call</code>-target shapes. This is the textbook LANGSEC failure for a denylist-of-known-shapes approach.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">NC-4 — AST gate does not catch <code>numpy.random.*</code> legacy-global calls</div>
+      <p class="issue-detail"><em>F1-calibrated</em></p>
+      <p class="issue-detail"><code>numpy</code> is the one module the judge is required to import and therefore cannot appear on a forbidden-import list. A call like <code>numpy.random.rand()</code> is an attribute-call on a legitimate import — none of the three checks would fire — yet ADR-002 rule 2 forbids exactly this, with this gate as its sole enforcement. The mechanism does not enforce the rule it claims to enforce.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">NC-5 — TC-MU9-01 mechanism is structurally incapable of ever failing</div>
+      <p class="issue-detail"><em>F2-blind, F2-calibrated (2 independent panels)</em></p>
+      <p class="issue-detail">The test stages, commits, and diffs a fixture file it fully controls end-to-end — the diff can only show the file it chose to write, providing zero information about a real contributor's changeset. Compounding: no mechanism explains how a new model file's <code>register()</code> call executes, given cross-cutting.md's own ban on <code>__init__.py</code> re-export mazes.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">NC-6 — <code>fx-brittle</code> contradicts ADR-M4; its footprint has no relationship to the world region label (regression)</div>
+      <p class="issue-detail"><em>A-blind, C-blind, C-calibrated (3 independent panel-runs)</em></p>
+      <p class="issue-detail">ADR-M4 states "each fixture wraps a copy of Model A (trained normally)" — true for others, false for <code>fx-brittle</code>, which requires from-scratch training on narrowed data. Worse: roughly half of what gets labelled "in-region" for <code>fx-brittle</code> (the untrained lower half) is territory the fixture never saw, directly undermining MU-3's whole point. Round 1 flagged the ambiguity; Round 2 "fixed" it by naming a split; Round 3 finds the split reveals a structural contradiction Round 2 didn't check for.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">NC-7 / NC-8 — <code>calibration</code> and <code>sharpness</code> blocks lack per-task granularity</div>
+      <p class="issue-detail"><em>B-calibrated</em></p>
+      <p class="issue-detail">ADR-J4 defines the 200-trial independent set per (model, world, region, <strong>task</strong>) — two tasks per world means two different trial sets — yet both blocks are flat, region-only, with no task key. <code>sharpness</code>'s omission is worse: ADR-J4 explicitly reads "that region/<strong>task</strong>'s mean 90%-interval width," a value the schema cannot supply per task.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">NC-9 — <code>climatology.per_task</code> has no <code>region</code> field despite region-dependent definition</div>
+      <p class="issue-detail"><em>B-blind, C-blind (2 independent panels, unprompted convergence)</em></p>
+      <p class="issue-detail">ADR-J5 states <code>switch_step</code> is measured against "the trial's region's curve" — divergence curves differ materially by region — yet the schema carries one scalar <code>switch_step</code> per task, structurally unable to hold two regions' different crossing points.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">NC-10 — <code>region_labels</code> has three mutually inconsistent definitions with wrong cardinality</div>
+      <p class="issue-detail"><em>B-blind Critical, B-calibrated Important (2 independent panels)</em></p>
+      <p class="issue-detail"><code>worlds.md</code> defines one categorical field; <code>models.md</code>'s JSON shows two booleans plus unexplained <code>axis: null</code>; <code>judge.md</code> describes a third shape. None match. Separately, <code>models.md</code>'s example shows one flat object, not an <code>[n_trials]</code>-shaped array — structurally incapable of saying "trial 47 was out-of-region" within a mixed batch judge.md requires.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">NC-11 — Reporting's "computes no metric" invariant contradicted by Chart 3's binomial-SE formula</div>
+      <p class="issue-detail"><em>C-blind</em></p>
+      <p class="issue-detail"><code>reporting.md</code> states twice that "every number on a chart comes from the verdict record" and reporting "never computes a metric" — but Chart 3's Y-error bars are <code>sqrt(p(1-p)/n)</code>, a formula applied at render time to two Verdict inputs, not read verbatim. The analogy to exception-band inset is itself inaccurate — that inset draws a verbatim value, no formula.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">NC-12 — Chart 2's log-scale Y-axis has no accommodation for guaranteed zero at step 0</div>
+      <p class="issue-detail"><em>D-blind, D-calibrated (2 independent panels)</em></p>
+      <p class="issue-detail"><code>error_vs_horizon</code>'s step-0 entry is trivially zero by the schema's own convention. <code>log(0)</code> is undefined; nothing in reporting.md's Chart 2 design says whether to start at step 1, floor the value, or use symlog.</p>
+    </div>
+
+    <h2 id="new-findings-important">New Findings — Important (14)</h2>
+
+    <table>
+      <caption>Table 3 — Important findings from Round 3 panels</caption>
+      <thead>
+        <tr><th>#</th><th>Finding</th><th>Panels</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>NI-1</td><td>The <code>.md</code>/<code>.html</code> spec-parity hash check (v1.2 addition) is an orphan design element — no requirement ID, no test case, no build chunk</td><td>A-blind, A-calibrated</td></tr>
+        <tr><td>NI-2</td><td>AST gate's ambient-module blocklist is incomplete — missing <code>platform</code>/<code>uuid</code> (machine-identifying, stable per-machine) and <code>random</code>/<code>threading</code>/<code>multiprocessing</code> (directly threatening ADR-002)</td><td>F1-blind, F1-calibrated</td></tr>
+        <tr><td>NI-3</td><td>Chart 1's "one panel per (region, task)" rule doesn't account for two horizon steps (h=1, h=switch_step) each task has</td><td>C-blind</td></tr>
+        <tr><td>NI-4</td><td>TC-MU9-01's exact scope is ambiguous ("whole diff must be one path" vs. "named exclusions only") with materially different test coverage</td><td>F2-blind</td></tr>
+        <tr><td>NI-5</td><td><code>trials.is_exception</code>/<code>exceptions.per_task.observed</code> single-source-of-truth definition is correct but has no build-enforced test</td><td>C-calibrated</td></tr>
+        <tr><td>NI-6</td><td>AST gate's test-ID (<code>TC-NF6-01</code>) wasn't widened when scope was — nothing confirms the two new checks have exercised fixtures</td><td>C-calibrated</td></tr>
+        <tr><td>NI-7</td><td>Chart 4's region-to-column mapping relies on undeclared convention ("training" spelled identically in both worlds) with no rule for multi-out-region worlds</td><td>C-calibrated</td></tr>
+        <tr><td>NI-8</td><td>Implementation guide's "critical path (11 chunks)" miscounts its own chunks (10 listed, not 11) and omits P3-C05, a hard prerequisite of P6-C01</td><td>D-blind, D-calibrated</td></tr>
+        <tr><td>NI-9</td><td><code>wmj chart-preview</code> CLI entry point appears nowhere else in the five-spec suite — no argument spec, no mention in reporting.md or architecture-overview</td><td>D-calibrated</td></tr>
+        <tr><td>NI-10</td><td>A <code>prereg/</code> commit's timestamp can be set to any value at commit time (<code>--date=</code>, <code>GIT_AUTHOR_DATE</code>) with no rewrite trace — simpler, undisclosed gap distinct from history-rewriting risk</td><td>E-blind</td></tr>
+        <tr><td>NI-11</td><td><code>test_registry_isolation.py</code>'s scratch git worktree shares the main repo's object database with no disclosed cleanup/isolation contract</td><td>E-calibrated</td></tr>
+        <tr><td>NI-12</td><td>Fixtures' own registration path (calling <code>wmj.models.registry.register()</code> the same way as every other model?) is never stated</td><td>F2-calibrated</td></tr>
+        <tr><td>NI-13</td><td>Chart 1's "one panel per (region, task)" labelling rule has no defined "task ordering" — which dimension becomes the row/column?</td><td>D-blind</td></tr>
+        <tr><td>NI-14</td><td>No requirement or test ensures that <code>verdict.py</code> refuses to serialize a Verdict missing one of the eight mandatory field groups now explicitly listed in JU-9</td><td>C-calibrated</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="cross-panel-convergence">Cross-Panel Convergence Summary</h2>
+
+    <table>
+      <caption>Table 4 — Convergence: multiple independent panels reaching the same finding</caption>
+      <thead>
+        <tr><th>Finding</th><th>Panels converging</th><th>Confidence</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>EOM correction holds (independently re-derived)</td><td>D-cal, D-blind</td><td>Very high (positive)</td></tr>
+        <tr><td>Chunk count = 28 (independently recounted)</td><td>D-cal, D-blind</td><td>Very high (positive)</td></tr>
+        <tr><td><code>fx-brittle</code> contradiction with ADR-M4</td><td>A-blind, C-blind, C-cal</td><td>Very high</td></tr>
+        <tr><td>NF-4 hook never installed</td><td>E-cal, E-blind, A-cal</td><td>Very high</td></tr>
+        <tr><td>AST gate dynamic-import evadable</td><td>E-cal, E-blind, F1-blind</td><td>Very high</td></tr>
+        <tr><td>TC-MU9-01 tautological</td><td>F2-blind, F2-cal</td><td>High</td></tr>
+        <tr><td><code>climatology</code> missing region</td><td>B-blind, C-blind</td><td>High</td></tr>
+        <tr><td><code>region_labels</code> inconsistent definitions</td><td>B-cal, B-blind</td><td>High</td></tr>
+        <tr><td>Chart 2 log(0) undefined</td><td>D-blind, D-cal</td><td>High</td></tr>
+        <tr><td>Critical-path arithmetic wrong</td><td>D-blind, D-cal</td><td>High</td></tr>
+        <tr><td>Spec-parity orphan element</td><td>A-blind, A-cal</td><td>High</td></tr>
+        <tr><td>AST ambient-list incomplete (different specifics)</td><td>F1-blind, F1-cal</td><td>High</td></tr>
+        <tr><td>Registry discovery mechanism unspecified</td><td>F2-blind, F2-cal</td><td>High</td></tr>
+      </tbody>
+    </table>
+
+    <p>Thirteen of the ~26 new findings were independently discovered by two or more of the fourteen reviewers with zero shared context between blind and calibrated runs — the strongest confidence form this methodology produces.</p>
+
+    <h2 id="score-per-defect-class">Score per Defect Class</h2>
+
+    <table>
+      <caption>Table 5 — Panel scores: Round 2 vs Round 3 comparison</caption>
+      <thead>
+        <tr><th>Panel</th><th>Round 2</th><th>Round 3</th><th>Trend</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>A — Requirements Coverage</td><td>7</td><td>6</td><td>New Critical-adjacent orphan-element pattern (2 instances)</td></tr>
+        <tr><td>B — Interface Contracts</td><td>5</td><td>4</td><td>2 new Critical granularity gaps on core metric blocks</td></tr>
+        <tr><td>C — Structural Soundness</td><td>4</td><td>4</td><td>Physics/count fixes confirmed; 5 new findings incl. fx-brittle regression</td></tr>
+        <tr><td>D — Implementability</td><td>5</td><td>6</td><td>Two highest-stakes re-derivations both confirmed correct</td></tr>
+        <tr><td>E — Security</td><td>6</td><td>5</td><td>NF-4 self-defeat fixed; hook-install and AST-evasion gaps found</td></tr>
+        <tr><td>F1 — Reproducibility</td><td>5</td><td>4</td><td>AST gate broadened but incomplete denylist</td></tr>
+        <tr><td>F2 — Separability</td><td>7</td><td>3</td><td>TC-MU9-01 mechanism turned out to be tautological</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="what-prevents-higher-score">What Prevents a Higher Score</h2>
+
+    <p>The dominant pattern across all three rounds is now unambiguous: <strong>fixes are applied at the granularity of the finding, not the granularity of the design principle the finding violated.</strong> Every round finds a new instance of "a fact varies by (task, region, step) and some schema block doesn't carry the key it needs," and every round finds a new instance of "a fix for one attack/evasion left a structurally similar one uncovered."</p>
+
+    <p>Both are symptoms of the same root cause: verification of a fix means <em>re-reading the fix's own text for internal consistency</em>, not <em>independently deriving, adversarially attacking, or exhaustively enumerating against the design principle the fix is supposed to instantiate.</em> The two fixes that did survive independent pressure-testing this round (the EOM, the chunk count) are exactly the two assigned a from-scratch independent re-derivation rather than a re-read — which is strong evidence for what actually works here.</p>
+
+    <p><strong>Recommendation for next action:</strong> A structural fix — one canonical multi-key schema shape used everywhere a fact varies by task/region/step, and a rule that any new enforcement mechanism gets an adversarial pressure-test (fresh derivation, evasion attempt, real-usage simulation) before being marked resolved — would likely close most of both families at once.</p>
+
+    <p class="gvm-attribution">Developed using the Grounded Vibe Methodology</p>
+  </main>
+
+  <script>
+    (function () {
+      const toc = document.getElementById('toc');
+      const headings = document.querySelectorAll('h2[id], h3[id]');
+      const links = [];
+
+      headings.forEach(function (h) {
+        const a = document.createElement('a');
+        a.href = '#' + h.id;
+        a.textContent = h.textContent;
+        if (h.tagName === 'H3') a.classList.add('toc-h3');
+        toc.appendChild(a);
+        links.push({ el: a, target: h });
+      });
+
+      function onScroll() {
+        let current = links[0];
+        for (let i = 0; i < links.length; i++) {
+          if (links[i].target.getBoundingClientRect().top <= 80) current = links[i];
+        }
+        links.forEach(function (l) { l.el.classList.remove('active'); });
+        if (current) {
+          current.el.classList.add('active');
+          const tocEl = document.getElementById('toc');
+          const elTop = current.el.offsetTop - tocEl.offsetTop;
+          const elBot = elTop + current.el.offsetHeight;
+          if (elTop < tocEl.scrollTop || elBot > tocEl.scrollTop + tocEl.clientHeight) {
+            tocEl.scrollTop = elTop - tocEl.clientHeight / 2;
+          }
+        }
+      }
+
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    })();
+  </script>
+</body>
+</html>

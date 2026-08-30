@@ -2,44 +2,53 @@
 
 ## CURRENT STATE
 
-**Phase:** Technical specification complete and **twice design-reviewed**,
-all seven documents at **v1.2**. `/gvm-tech-spec` ran in full; Round 1 of
-`/gvm-design-review` (quick-scan, 4 panels) found 10 Critical + 16
-Important findings, all patched into v1.1. **Round 2** then ran as a
-genuinely independent re-check (full-depth, strict criteria, the newly
-imported `gvm-graph`-orchestrated skill with two brand-new panel types —
-Security, and two ATAM-utility-tree Quality-Attribute sub-panels for
-reproducibility and separability) specifically to close the honesty gap
-Round 1 left open: were the v1.1 fixes real, or self-graded homework?
-**Result: mostly real (16 of 26 Round 1 findings held cleanly), but not
-entirely** — 3 Round-1 "fixes" were only partial or had regressed (most
-seriously, the double-pendulum equations of motion, rewritten to fix a
-Round 1 finding, contained a wrong coefficient that was self-consistently
-baked into its own reference test values). Round 2 also surfaced 8 new
-Critical and 9 new Important findings the two new panel types and the
-stricter re-scan caught fresh — a defect population comparable in size to
-Round 1's, despite a full prior fix pass. The user again chose "fix
-everything before build"; all of it is patched into v1.2 (see
-`design-review/design-review-002.html` and `reviews/calibration.md`).
-**The same honesty gap is open a second time, and is explicitly named as
-such in `reviews/calibration.md`:** the Round 2 fixes were applied by the
-same agent that found them, in the same session, not independently
-re-verified. Two of them — the double-pendulum EOM correction and the
-NF-4 confidentiality-scan redesign — are exactly the kind of fix (a
-physics formula; a security mechanism) where a confident self-fix is
-least trustworthy, and are flagged in calibration.md as the highest-value
-thing a Round 3 could check first.
-**Code written:** none. Deliberately. Still true — specs only.
-**Blocked on:** nothing. Next step is a genuine choice between: (a) a
-Round 3 design review — likely with real dual/blind review this time,
-since shared rule 16 activates it at round 3+ — prioritising re-verification
-of the two fixes named above; or (b) accepting the residual self-verification
-risk and proceeding to `/gvm-build` starting at Phase 1 / P1-C01, followed by
-the P1-C02 → P2-C05 sequence (28 chunks total as of v1.2's implementation-guide
-correction — the "24"/"23" counts in earlier versions were themselves wrong,
-caught only by Round 2's independent recount).
+**Phase:** Technical specification complete and **three times design-reviewed**,
+all seven documents at **v1.3** (worlds.md untouched since v1.2 — Round 3 found
+no defect assigned to it). `/gvm-tech-spec` ran in full; Round 1 (quick-scan, 4
+panels) found 10 Critical + 16 Important, patched into v1.1; Round 2 (full,
+strict, +Security/Quality-Attribute panels) found 8 new Critical + 9 new
+Important plus 3 partial/regressed Round-1 fixes, patched into v1.2.
 
-Last updated 2026-08-30 (design-review-002 fixes).
+**Round 3 was the first genuine dual/blind review** (shared rule 16 activates
+automatically at 2+ prior rounds): 7 defect-class panels × 2 (one calibrated,
+one fully blind, zero shared context) = 14 independent reviewers. **The two
+fixes flagged after Round 2 as least trustworthy — the double-pendulum physics
+correction and the NF-4 security-mechanism redesign — both held**, confirmed by
+two independent from-scratch re-derivations/recounts each (the EOM was
+re-derived from Euler–Lagrange twice, independently, and matched exactly; the
+28-chunk count was recounted twice, independently, and matched exactly). But
+dual/blind review surfaced a large new defect population anyway — ~12 Critical,
+~12 Important, 13 of them reached by two or more of the 14 reviewers with zero
+shared context. Two structural patterns dominated (both promoted to standing
+**Build Checks** in `reviews/calibration.md`): (1) Verdict schema blocks kept
+missing a task/region/step key their own defining ADR required — this is the
+*third* round this exact shape has appeared, previously on Chart 1 (R1), Chart
+2/3 (R2), now on `calibration`/`sharpness`/`climatology`/`region_labels`/Chart
+4/Chart 1 again (R3); (2) every enforcement mechanism Round 2 introduced to fix
+a prior finding had a real, adversarially-discoverable gap one level below what
+it explicitly checked — most strikingly, the `test_registry_isolation.py`
+mechanism written in Round 2 to close a "no enforcement" finding was found to
+be **structurally incapable of ever failing** (it diffed a fixture it
+manufactured itself). The user again chose "fix everything item-by-item"; all
+of it is patched into v1.3 (see `design-review/design-review-003.html` and
+`reviews/calibration.md` for the full record, including the two Build Checks).
+
+**Code written:** none. Deliberately. Still true — specs only.
+**Blocked on:** nothing. **The honesty gap is finally closed** — Round 3's
+fixes are, as of this writing, self-verified again (not yet independently
+re-checked), so whoever picks this up should treat a Round 4 the same way
+Round 3 treated Round 2: check the fixes least likely to be self-verifiable
+correctly first (the `fx-brittle` redesign and the AST-gate/registry-discovery
+mechanisms are this round's equivalent of "a physics formula and a security
+mechanism"). The two Build Checks in `reviews/calibration.md` — schema
+granularity, and adversarial-pressure-testing of enforcement mechanisms — are
+the standing process fix meant to catch the next instance of either pattern
+without needing a full round to find it. The other live choice is the same one
+Round 2's handover posed and Round 3 answered "keep reviewing": accept the
+residual risk and proceed to `/gvm-build` at Phase 1 / P1-C01, 28 chunks per
+the (now twice-independently-confirmed) implementation guide.
+
+Last updated 2026-08-30 (design-review-003 fixes).
 
 ---
 
@@ -52,17 +61,18 @@ Last updated 2026-08-30 (design-review-002 fixes).
 | `requirements/requirements.html` | Same content, Tufte-styled. |
 | `requirements/wordsareamenu.html` | The source essay, now draft v2.7. Also revised post-review: narrowed novelty claim, corrected two factual errors (flight-simulator framing, SR 11-7 currency), added the employer disclaimer and an AI-assistance transparency note. |
 | `risks/risk-assessment.md` | Four product risks, written before requirements. Still references essay draft v2.1 deliberately — the historical record of what it was written against. |
-| `test-cases/test-cases.md` | v1.0. 69 cases, one `TC-{REQ-ID}-{NN}` per requirement minimum, more for credibility-fatal ones. Includes 5 negative/phantom-gate cases (proving WD-3, WD-7, NF-1, JU-9, JU-11's automated checks can actually fail, not just always pass) and 5 property-based cases. Full traceability matrix at the end — zero orphan requirements, zero orphan cases, every count independently grep-verified against the document body. |
-| `specs/cross-cutting.md` (+.html) | v1.2. Stack (pure NumPy, hand-rolled MLPs — user's explicit choice over PyTorch/stdlib-only), the four-rule determinism strategy, five-package structure with the judge importing nothing, error-handling conventions, the two-package dependency budget (`numpy`, `matplotlib`). The import-graph gate now also blocks ambient reads and dynamic imports; the NF-4 scan is redesigned around a gitignored local terms file (Round 2 fix). |
-| `specs/worlds.md` (+.html) | v1.2. LV and double-pendulum constants fully pinned (dt, horizons, scale vectors, regions, actions). Shared fixed-step RK4 with a 1e-6 relative drift bound (ADR-W1). Divergence benchmark: 64 seeded starts, median curve per region (ADR-W3). **Round 2 fixed a coefficient error in the double-pendulum EOM** (v1.1's explicit formula was wrong; the reference constant needs recomputing before TC-WD1-01 can be implemented). |
-| `specs/models.md` (+.html) | v1.2. Baselines with honest training-residual spreads. Three one-corruption fixtures. The direct-vs-ensemble unrigged pair (Nix & Weigend / Lakshminarayanan et al., both newly discovered experts) with a pre-registered `sqrt(1+1/K)`-corrected spread mapping and a 0.05 matching margin. Pre-registration enforced by git commit ordering; a second disclosed residual risk (undetectable non-publication of an unfavourable run) added in Round 2. |
-| `specs/judge.md` (+.html) | v1.2. CRPS as the scoring rule. Settles Open Questions 1/2: **N=200 independent trials, bands green [12,29] / amber [8,11]∪[30,35] / red beyond**, derived from the exact binomial CDF and verified computationally in-session (not eyeballed). Settles OQ-5's runtime half: 600s budget. Full verdict JSON schema, now 8 mandatory field groups with trust horizons carrying a region field (Round 2 fixes). |
-| `specs/reporting.md` (+.html) | v1.2. All four required charts designed down to authored caption templates. Fixture labelling centralised so it survives a screenshot. `wmj run` / `wmj verify` command pair. Chart 1/2/3 data-contract gaps and Chart 4's region breakdown fixed in Round 2. |
-| `specs/architecture-overview.md` (+.html, with an inline C4 container SVG) | v1.2. Synthesis of all five specs + a Brooks conceptual-integrity review — found and resolved one real tension (NF-1's byte-identity scope vs PNG rendering; resolved by disclosure, no spec change needed). Round 2 found no new conceptual-integrity defect here. |
-| `specs/implementation-guide.md` (+.html) | v1.2. 6 phases, **28 chunks** (Round 2 corrected an arithmetic error present since v1.0 — the "24"/"23" counts were wrong). P2-C05, a second early real-chart slice, still lands at position 8 — the plan had otherwise reverted to a fully horizontal build with no further user-visible milestone until chunk 25. Full dependency network, critical path, parallel-work sets, and a complete wiring matrix — no empty `Demanded by` cells, no exemptions needed. |
-| `design-review/design-review-001.html` | Round 1 design review. 4 parallel panels, 10 Critical + 16 Important findings, all fixed same-session (v1.1). Superseded as the current-trust record by Round 2 below — kept as historical record. |
-| `design-review/design-review-002.html` | Round 2 design review — independent re-check of the v1.1 fixes under strict criteria, plus two new panel types (Security; ATAM Quality-Attribute sub-panels for reproducibility and separability). 16 of 26 Round 1 findings held cleanly; 3 were only partially resolved or regressed; 8 new Critical + 9 new Important findings surfaced. All patched into v1.2, same-session, again self-verified. Verdict was "Do not build" pre-fix. |
-| `reviews/calibration.md` | GVM review-calibration record. Score history across both rounds, anchor examples, and the explicit, twice-repeated note that each round's fixes were applied by the same agent that found them and should be independently re-verified before full trust — Round 3 (or build) inherits this open item. |
+| `test-cases/test-cases.md` | v1.0 (content through Round 3). 79 cases, one `TC-{REQ-ID}-{NN}` per requirement minimum, more for credibility-fatal ones. 7 negative/phantom-gate cases, 10 property-based cases. Full traceability matrix at the end — zero orphan requirements, zero orphan cases, every count independently grep-verified against the document body (`grep -c '^\*\*TC-'` = 79). |
+| `specs/cross-cutting.md` (+.html) | v1.3. Stack (pure NumPy, hand-rolled MLPs), the four-rule determinism strategy, five-package structure, error-handling conventions, the two-package dependency budget. The AST import-graph gate now does 5 individually-tested things (TC-NF6-01..05) — bans `wmj.*` imports, ambient-module imports, `importlib`/`__import__` outright, `exec`/`eval` outright, and `numpy.random.*` legacy calls. NF-4's scan now covers historical git blobs too, with a named pre-commit-hook installation path. `wmj.models.registry`'s `pkgutil`-based auto-discovery is now specified, and TC-MU9-01's mechanism is a structural test, not a tautological git-diff (all Round 3 fixes). |
+| `specs/worlds.md` (+.html) | v1.2, unchanged since — Round 3 assigned it no fix. LV and double-pendulum constants fully pinned. Shared fixed-step RK4 with a 1e-6 relative drift bound (ADR-W1). Divergence benchmark: 64 seeded starts, median curve per region (ADR-W3). The double-pendulum EOM's Round 2 coefficient correction was independently re-derived from scratch twice in Round 3 and confirmed correct. |
+| `specs/models.md` (+.html) | v1.3. Baselines with honest training-residual spreads. Three fixtures, `fx-brittle` redesigned in Round 3 as a genuine post-hoc wrapper keyed to the world's own declared region box (closing a wrapper-framing contradiction and a region-mismatch three reviewers independently found). The direct-vs-ensemble unrigged pair with pre-registered spread mapping and matching margin. Pre-registration enforced by git commit ordering; three disclosed residual risks, the third (prereg timestamp forgery) added in Round 3 with a partial GitHub-hosting-dependent mitigation. |
+| `specs/judge.md` (+.html) | v1.3. CRPS as the scoring rule. **N=200 independent trials**, exact-binomial bands. Full verdict JSON schema: `calibration` and `sharpness` now keyed per task (Round 3 fix — both were the one metric family left flat despite their own ADRs requiring per-task granularity), `climatology.per_task` gained a region field, `region_labels` unified to one canonical shape across all three domain specs. |
+| `specs/reporting.md` (+.html) | v1.3. All four required charts designed down to authored caption templates. Chart 1 now also panels by horizon_step; Chart 2 starts at step 1 (closing an undefined `log(0)` case); Chart 3 reads the new per-task `calibration` block; Chart 4's region-to-column mapping rule is now stated explicitly (all Round 3 fixes). |
+| `specs/architecture-overview.md` (+.html, with an inline C4 container SVG) | v1.3. Synthesis of all five specs + a Brooks conceptual-integrity review. No new conceptual-integrity defect found in Round 2 or Round 3 — version references updated each round. |
+| `specs/implementation-guide.md` (+.html) | v1.3. 6 phases, **28 chunks**, independently recounted and confirmed correct twice in Round 3 (previously "24"/"23" — both wrong since v1.0). The stated "critical path" was itself wrong (miscounted its own list, omitted a hard prerequisite) — corrected to 9 chunks across two equal-length branches. Full dependency network, parallel-work sets, and a complete wiring matrix. |
+| `design-review/design-review-001.html` | Round 1 (quick-scan, 4 panels). 10 Critical + 16 Important, fixed into v1.1. Historical record. |
+| `design-review/design-review-002.html` | Round 2 (full, strict, +Security/Quality-Attribute panels). 16/26 Round 1 findings held, 3 partial/regressed; 8 new Critical + 9 new Important, fixed into v1.2. Historical record. |
+| `design-review/design-review-003.html` | Round 3 — the first genuine **dual/blind** review (14 independent reviewers). The two highest-risk Round 2 fixes (EOM, chunk count) both independently confirmed correct twice over. ~12 new Critical + ~12 new Important surfaced anyway, dominated by two recurring structural patterns, both promoted to standing Build Checks. All fixed into v1.3, same-session, again self-verified. Verdict was "Do not build" pre-fix. |
+| `reviews/calibration.md` | GVM review-calibration record. Score history across all three rounds, dual-review metadata (Round 3), two promoted Build Checks (schema/consumer granularity mismatch; adversarial-pressure-test enforcement mechanisms before calling them resolved), and the still-open note that Round 3's own fixes are self-verified, not yet independently re-checked. |
 
 ## What does not exist
 
@@ -129,9 +139,9 @@ Full table with reasoning is in `CLAUDE.md`. In short:
 
 ## What comes next
 
-Round 2 already happened — this is what Round 1's handover recommended, and it found a real, comparable-sized new defect population even after a full v1.1 fix pass. Two reasonable options remain, in order of recommendation:
-1. **A Round 3 design review**, prioritising independent re-verification of the two Round 2 fixes least trustworthy as self-graded work (the double-pendulum EOM correction; the NF-4 scan redesign) ahead of fresh discovery — shared rule 16 means Round 3 is where genuine dual/blind review activates, which would finally close the honesty gap both `reviews/calibration.md` rounds have named and neither has closed.
-2. **`/gvm-build`**, accepting the residual self-verification risk, starting at Phase 1 / chunk P1-C01 (foundations: scaffold, serializer, seed plumbing), followed by P1-C02 (the walking-skeleton MVP slice) and P2-C05 (the second early real-chart slice) — 28 chunks total per the v1.2-corrected implementation guide.
+Round 3 already happened — dual/blind, as Round 2's handover predicted it would need to be. The two fixes flagged as least trustworthy held under independent re-derivation; a large new defect population showed up anyway, dominated by two now-named-and-tracked structural patterns (see the two Build Checks in `reviews/calibration.md`). Two reasonable options remain, in order of recommendation:
+1. **A Round 4 design review**, prioritising independent pressure-testing of Round 3's own least-self-verifiable fixes (the `fx-brittle` redesign; the registry auto-discovery mechanism and its new TC-MU9-01 structural test) ahead of fresh discovery. Genuine dual/blind review is now standing practice (shared rule 16 stays active at round 3+), so Round 4 would run the same way Round 3 did. If this shape keeps producing a comparable defect population a fourth time, that itself would be worth surfacing to the user as a question about whether continued rounds are the right lever, versus a deliberate one-time structural rewrite guided by the two Build Checks.
+2. **`/gvm-build`**, accepting the residual self-verification risk, starting at Phase 1 / chunk P1-C01 (foundations: scaffold, serializer, seed plumbing), followed by P1-C02 (the walking-skeleton MVP slice) and P2-C05 (the second early real-chart slice) — 28 chunks total, independently confirmed twice, per the v1.3-corrected implementation guide's 9-chunk critical path.
 
 The GVM skill files are now committed in this repo's own `.claude/skills/`
 (no longer an external-availability gap — resolved a few sessions back,

@@ -188,9 +188,14 @@ When a model is trained twice from that seed,
 Then the two resulting models are identical (and therefore produce identical verdicts).
 
 **TC-MU9-01** · scenario test · executable
-Given a new model implementing only the MU-1 interface, added to a scratch git worktree checked out at the current commit and committed there (the mechanism named in cross-cutting spec v1.2 ADR-003, `tests/gates/test_registry_isolation.py` — design-review-002 update: Round 2 found this was the one MU-9-adjacent gate with no described enforcement mechanism, unlike NF-6's AST walk or NF-4's scan),
-When `git diff --stat` is computed between the two commits,
-Then the diff shows changes confined to exactly one new path under `wmj/models/` — zero lines changed under the judge, worlds, or reporting packages.
+Given a throwaway stub model module written directly into `wmj/models/` at test time (the structural mechanism named in cross-cutting spec ADR-003, `tests/gates/test_registry_isolation.py` — design-review-003 update: Round 3 found the previous git-diff-based mechanism staged, committed, and diffed a fixture it fully controlled end-to-end, so the diff could only ever show the file the test itself wrote — structurally incapable of failing regardless of what a real change did; replaced with a mechanism that tests the actual architectural property instead of a synthetic git operation),
+When `wmj.models.registry.all_models()` is called (exercising the `pkgutil`-based auto-discovery mechanism) and every other package (`wmj/judge`, `wmj/worlds`, `wmj/reporting`, `wmj/harness`) is AST-walked for any reference to the stub's class or function name,
+Then the stub is discovered by `all_models()` with no other file having been edited to make that happen, and zero references to the stub exist anywhere outside `wmj/models/` — proving both halves of MU-9's claim (auto-discovery works; nothing else needs to know a new model exists), not merely one file-count coincidence.
+
+**TC-MU9-02** (negative/phantom-gate, added post-design-review-003) · mutation test · executable
+Given the TC-MU9-01 gate,
+When a deliberately introduced reference to a stub model's class name is added to a file under `wmj/judge/` (simulating the exact violation MU-9 forbids),
+Then the gate's AST-reference check must fail. (Same phantom-gate proof as WD-3/WD-7/NF-1/JU-9/JU-11 — Round 3 found TC-MU9-01 had no such pairing and, under the prior mechanism, could not have one.)
 
 ---
 
@@ -280,6 +285,11 @@ Then it contains all eight required field groups (design-review-002 update: `tri
 Given a judging run where one required field (e.g. the calibration data) cannot be computed,
 When the verdict record is assembled,
 Then the run aborts rather than emitting a partial record with that field silently missing or null. (Proof that "the run fails rather than emitting a partial record" actually fails when it should — the same phantom-gate discipline applied to WD-3/WD-7/NF-1.)
+
+**TC-JU9-03** (added post-design-review-003) · property-based test · executable
+Given any computed Verdict,
+When, for every (task, region, horizon_step) key present, `exceptions.per_task[key].observed` is compared against `sum(t.is_exception for t in trials.per_task if same key)`,
+Then the two are always equal — proving `exceptions.per_task.observed` is genuinely derived from `trials.per_task.is_exception` rather than two independently-computable definitions that happen to usually agree (design-review-002 named the correct relationship; design-review-003 found no test enforced it).
 
 **TC-JU10-01** · scenario test · executable
 Given any verdict,
@@ -385,9 +395,14 @@ When compared against `<spec-value: the technical spec's named minimal package l
 Then no dependency outside that named list is present. (Unbuildable until the technical spec declares the list — flagged here rather than assumed.)
 
 **TC-NF4-01** · scenario test · executable
-Given the full repository text **and its commit-message history** (design-review-002 update: cross-cutting spec v1.2's scan mechanism now covers `git log` as well as tracked file content — Round 2's Security panel found a term typed into a commit message and later removed from file content would otherwise remain permanently visible on a public repo, uncaught),
-When scanned for a maintained list of forbidden terms (employer name, internal team/committee names — the list itself declared and kept current in the technical spec, in a gitignored local file per the v1.2 mechanism, never in a tracked one),
+Given the full repository text, its commit-message history, **and every historical file-content blob across every commit** (design-review-002 update: cross-cutting spec's scan mechanism covers `git log` as well as tracked file content; design-review-003 update: Round 3 found the identical permanence argument that motivated the commit-message scan applies to file content too — a term committed and later removed from a file is exactly as permanently visible via `git show` as one in a commit message — so historical blobs are now scanned the same way),
+When scanned for a maintained list of forbidden terms (employer name, internal team/committee names — the list itself declared and kept current in the technical spec, in a gitignored local file per the mechanism, never in a tracked one),
 Then no match is found — the one place this project's honesty requirements have real, checkable teeth on a public, first-commit repo.
+
+**TC-NF4-03** (added post-design-review-003) · scenario test · executable
+Given a fresh clone of the repository with the one-time `git config core.hooksPath .githooks` setup step never run,
+When a commit is made containing a term listed in the (test-only, non-real) local terms file,
+Then `python -m wmj run`/`verify`'s own re-run of the scan (P6-C02) still catches it at run time, even though the commit-time pre-commit hook was never active — proving the run-time check is a real, non-hook-dependent safety net, not merely a disclosed gap with no mitigation.
 
 **TC-NF4-02** · scenario test · judged
 Given every passage describing banking practice,
@@ -399,10 +414,40 @@ Given any published output (chart, caption, verdict record, or prose),
 When read against what the underlying data actually shows,
 Then no claim exceeds what the evidence supports, and every place the harness cannot demonstrate something says so rather than omitting it.
 
+**TC-NF5-02** (added post-design-review-003) · scenario test · executable
+Given a committed `specs/*.html` or `requirements/*.html` file and its `.md` twin,
+When the `.md` file's current SHA-256 hash is compared against the hash embedded in the `.html` file's `<!-- generated-from: ... -->` comment,
+Then the two match — proving the `.html` a human might read is genuinely generated from the exact `.md` a human approves, not a stale or hand-edited copy (design-review-002 introduced this mechanism; design-review-003 found it had no test case, no requirement trace, and no build chunk, and traced it here to NF-5's no-overclaiming principle).
+
 **TC-NF6-01** · property-based test (import graph) · executable
 Given the judge package's import graph,
 When statically analyzed,
 Then it contains no import from the worlds, models, or reporting packages — checked by AST inspection, not by convention.
+
+**TC-NF6-02** (added post-design-review-003) · property-based test (import graph) · executable
+Given the judge package's AST,
+When statically analyzed for imports of any ambient-access module (`os`, `sys`, `time`, `datetime`, `socket`, `pathlib`, `subprocess`, `random`, `threading`, `multiprocessing`, `platform`, `uuid`),
+Then none is found. (Design-review-002 added this check; design-review-003 widened the module list after two independent Round 3 panels each found different omissions.)
+
+**TC-NF6-03** (added post-design-review-003) · property-based test (import graph) · executable
+Given the judge package's AST,
+When statically analyzed for any import of `importlib` or any use of the name `__import__` anywhere (as a direct call, an aliased binding, or an argument to `getattr`),
+Then none is found. (Design-review-003: replaces a narrower check scoped only to direct calls to `importlib.import_module`/`__import__`, which Round 3 found evadable by alias or `getattr` indirection.)
+
+**TC-NF6-04** (added post-design-review-003) · property-based test (import graph) · executable
+Given the judge package's AST,
+When statically analyzed for any `Call` node targeting `exec` or `eval`,
+Then none is found — closing the string-payload evasion route TC-NF6-03's import-shaped checks cannot see inside.
+
+**TC-NF6-05** (added post-design-review-003) · property-based test (import graph) · executable
+Given the judge package's AST,
+When statically analyzed for any `Attribute` access of the form `<numpy-alias>.random.<name>` where `<name>` is not `Generator` or `PCG64`,
+Then none is found — proving ADR-002's ban on legacy-global NumPy randomness (rule 2) is actually enforced by the gate rule 3 names as its enforcement mechanism, not merely asserted.
+
+**TC-NF6-06 (negative/phantom-gate)** (added post-design-review-003) · mutation test · executable
+Given each of TC-NF6-02 through TC-NF6-05's checks,
+When a deliberately injected violation matching that specific check is added to a scratch copy of the judge package,
+Then that check must fail. (Same phantom-gate discipline as WD-3/WD-7/NF-1/JU-9/JU-11/MU-9 — design-review-003 found the broadened gate's own test-ID traceability wasn't widened when its scope was, so nothing confirmed the new checks had exercised fixtures.)
 
 ---
 
@@ -417,7 +462,7 @@ Then it contains no import from the worlds, models, or reporting packages — ch
 | WD-5 | TC-WD5-01, -02 | JU-6 | TC-JU6-01, -02 |
 | WD-6 | TC-WD6-01, -02 | JU-7 | TC-JU7-01, -02 |
 | WD-7 | TC-WD7-01, -02 | JU-8 | TC-JU8-01, -02, -03 |
-| WD-8 | — (Won't; nothing to verify) | JU-9 | TC-JU9-01, -02 |
+| WD-8 | — (Won't; nothing to verify) | JU-9 | TC-JU9-01, -02, -03 |
 | MU-1 | TC-MU1-01, -02, -03 | JU-10 | TC-JU10-01, -02 |
 | MU-2 | TC-MU2-01, -02 | JU-11 | TC-JU11-01, -02 |
 | MU-3 | TC-MU3-01, -02, -03 | JU-12 | TC-JU12-01 |
@@ -426,17 +471,17 @@ Then it contains no import from the worlds, models, or reporting packages — ch
 | MU-6 | TC-MU6-01, -02 | RP-2 | TC-RP2-01 |
 | MU-7 | TC-MU7-01 | RP-3 | TC-RP3-01 |
 | MU-8 | TC-MU8-01 | RP-4 | TC-RP4-01, -02 |
-| MU-9 | TC-MU9-01 | RP-5 | TC-RP5-01 |
+| MU-9 | TC-MU9-01, -02 | RP-5 | TC-RP5-01 |
 | MU-10 | — (Won't; nothing to verify) | RP-6 | TC-RP6-01 |
 | JU-1 | TC-JU1-01, -02 | RP-7 | TC-RP7-01 |
 | | | RP-8 | TC-RP8-01 |
-| NF-1 | TC-NF1-01, -02 | NF-4 | TC-NF4-01, -02 |
-| NF-2 | TC-NF2-01 | NF-5 | TC-NF5-01 |
-| NF-3 | TC-NF3-01 | NF-6 | TC-NF6-01 |
+| NF-1 | TC-NF1-01, -02 | NF-4 | TC-NF4-01, -02, -03 |
+| NF-2 | TC-NF2-01 | NF-5 | TC-NF5-01, -02 |
+| NF-3 | TC-NF3-01 | NF-6 | TC-NF6-01, -02, -03, -04, -05, -06 |
 
 **Every Must and the one mechanically-testable Won't (JU-13) has at least one case. Zero orphan requirements, zero orphan cases.** WD-8 and MU-10 are the two Won'ts with nothing to verify by design (they describe absence, not behaviour).
 
-**Totals:** 70 test cases across 45 requirements (69 in v1.0, independently recounted after a verification pass — an earlier draft of this summary paragraph miscounted itself in three separate places, checked against the case list and matrix rather than carried forward from that draft; +1 in this pass, TC-MU1-03, added after `/gvm-design-review` found `reset()`'s cross-rollout isolation had no test anywhere in v1.0). 5 negative/phantom-gate cases (TC-WD3-02, TC-WD7-02, TC-NF1-02, TC-JU9-02, TC-JU11-02). 5 property-based cases (TC-JU1-02, TC-JU4-02, TC-JU5-02, TC-JU12-01, TC-NF6-01). 5 cases marked *judged* rather than *executable* (TC-MU6-02, TC-JU10-02, TC-RP5-01, TC-NF4-02, TC-NF5-01 — plain-language and human-comprehension checks that genuinely need a reader, not a script; TC-MU9-01 and TC-NF2-01 were reclassified to *executable* in this pass once their mechanical check was stated precisely). 3 cases explicitly pending an Open Question being fixed by the technical spec, marked with `<spec-value>` rather than guessed at here (TC-JU8-02, TC-NF2-01, TC-NF3-01). 2 cases marked *(supporting)* — they validate wiring between two requirements rather than being the primary coverage of either (TC-MU2-02, TC-JU8-03).
+**Totals:** 79 test cases across 45 requirements (70 after design-review-001/002's additions; +9 in this pass, added after `/gvm-design-review` design-review-003 — Round 3, dual/blind — found: TC-MU9-02, a phantom-gate pairing TC-MU9-01 could not previously have, since its prior git-diff mechanism was structurally incapable of failing; TC-JU9-03, a property test enforcing the `exceptions.observed`/`trials.is_exception` invariant judge.md's prose only asserted; TC-NF6-02 through -06, splitting the single `TC-NF6-01` into one ID per AST-gate check plus a phantom-gate pairing, after the gate grew from one check to five across two rounds with no corresponding test-ID growth; TC-NF4-03, proving the run-time confidentiality scan is a real safety net independent of whether the pre-commit hook was ever installed; TC-NF5-02, covering the previously-orphaned `.md`/`.html` spec-parity hash check. Count independently verified via `grep -c '^\*\*TC-'` = 79, not carried forward by arithmetic). 7 negative/phantom-gate cases (TC-WD3-02, TC-WD7-02, TC-NF1-02, TC-JU9-02, TC-JU11-02, TC-MU9-02, TC-NF6-06). 10 property-based cases (TC-JU1-02, TC-JU4-02, TC-JU5-02, TC-JU12-01, TC-NF6-01, TC-NF6-02, TC-NF6-03, TC-NF6-04, TC-NF6-05, TC-JU9-03). 5 cases marked *judged* rather than *executable* (TC-MU6-02, TC-JU10-02, TC-RP5-01, TC-NF4-02, TC-NF5-01 — plain-language and human-comprehension checks that genuinely need a reader, not a script). 3 cases explicitly pending an Open Question being fixed by the technical spec, marked with `<spec-value>` rather than guessed at here (TC-JU8-02, TC-NF2-01, TC-NF3-01). 2 cases marked *(supporting)* — they validate wiring between two requirements rather than being the primary coverage of either (TC-MU2-02, TC-JU8-03).
 
 ---
 

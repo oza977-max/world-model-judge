@@ -1,6 +1,6 @@
 # World Model Judge — Worlds Specification
 
-Version 1.2 · 30 August 2026 · Domain 1 of Requirements v1.2 · References: cross-cutting spec v1.2
+Version 1.2 · 30 August 2026 · Domain 1 of Requirements v1.2 · References: cross-cutting spec v1.3
 
 > **Change note (v1.2).** Revised after `/gvm-design-review` design-review-002 (Round 2, independent re-check under strict criteria). **The v1.1 double-pendulum equations of motion, written out explicitly to fix a Round 1 finding, contained a coefficient error**: re-deriving the equal-mass case from the Euler–Lagrange equations shows `denom1`, `denom2`, and θ̈₁'s leading gravity term all need the coefficient `(2m₁+m₂)`, which specializes to **3·m** for equal masses — the v1.1 text used `2·m` in all three places (θ̈₂'s numerator, which needs the different `(m₁+m₂)=2m` coefficient, was already correct). Because the reference implementation and TC-WD1-01's hand-verified 15-significant-digit constants were both stated to be computed from the v1.1 (buggy) formula, **the previous reference constants are invalid and must be recomputed from the corrected formula below before TC-WD1-01 can be implemented** — this is flagged explicitly rather than silently carried forward, since no test in the suite as designed could have caught the original error (it was self-consistently wrong). See design-review-002.html for the full findings.
 
