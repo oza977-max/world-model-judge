@@ -2,20 +2,37 @@
 
 ## CURRENT STATE
 
-**Phase:** Technical specification **complete and approved by the user**,
-all seven documents. `/gvm-tech-spec` ran in full: cross-cutting, four
-domain specs (worlds, models, judge, reporting), architecture overview,
-implementation guide — each approved individually via AskUserQuestion
-before the next was written, per gate. Coverage audit ran clean on the
-first pass: all 45 requirements and all 69 test cases referenced in at
-least one spec, zero orphans either direction.
+**Phase:** Technical specification complete **and design-reviewed**, all
+seven documents at **v1.1**. `/gvm-tech-spec` ran in full and every spec
+was approved individually. Then `/gvm-design-review` ran (quick-scan
+depth, 4 parallel defect-class panels — Requirements Coverage, Interface
+Contracts, Structural Soundness, Implementability) and found 10 Critical
+and 16 Important findings: a genuinely valuable result, not a failure —
+this is what the review is for. The user chose "fix everything before
+build"; all 26 findings were patched directly into the specs in the same
+session (see `design-review/design-review-001.html` and
+`reviews/calibration.md` for the full record). Coverage audit re-run
+after the fixes: still clean, 45/45 requirements and 70/70 test cases
+(one new case, TC-MU1-03, added for a gap the review found with no other
+fix available).
+**Important honesty note, carried in `reviews/calibration.md`:** the
+fixes were applied by the same agent that found them, in the same
+session, and have **not** been independently re-verified by a second
+pass. This mirrors the test-cases stage's own pattern (self-fix, then an
+independent monitor re-checks) — that second step has not yet happened
+here. Whoever picks this up should treat that as the single most
+valuable next check before trusting the specs completely, ahead of
+fresh discovery work.
 **Code written:** none. Deliberately. Still true — specs only.
-**Blocked on:** nothing. Next gate is `/gvm-design-review` (recommended,
-not yet run), then `/gvm-build` starting at Phase 1 / P1-C01.
-**Do not** write source code until design review has run, or the user
-explicitly says to skip it and go straight to build.
+**Blocked on:** nothing. Next step is either a light independent
+re-verification pass (recommended, given the note above) or straight to
+`/gvm-build` starting at Phase 1 / P1-C01 (the walking skeleton) followed
+immediately by the new P1-C02→P2-C05 sequence (the design review added
+P2-C05, a second early real-chart slice, so the build has two
+demonstrable milestones early rather than one, per the guide's own
+MVP-1 rule).
 
-Last updated 2026-08-25.
+Last updated 2026-08-25 (design-review-001 fixes).
 
 ---
 
@@ -35,7 +52,9 @@ Last updated 2026-08-25.
 | `specs/judge.md` (+.html) | v1.0. CRPS as the scoring rule. Settles Open Questions 1/2: **N=200 independent trials, bands green [12,29] / amber [8,11]∪[30,35] / red beyond**, derived from the exact binomial CDF and verified computationally in-session (not eyeballed). Settles OQ-5's runtime half: 600s budget. Full verdict JSON schema. |
 | `specs/reporting.md` (+.html) | v1.0. All four required charts designed down to authored caption templates. Fixture labelling centralised so it survives a screenshot. `wmj run` / `wmj verify` command pair. |
 | `specs/architecture-overview.md` (+.html, with an inline C4 container SVG) | v1.0. Synthesis of all five specs + a Brooks conceptual-integrity review — found and resolved one real tension (NF-1's byte-identity scope vs PNG rendering; resolved by disclosure, no spec change needed). |
-| `specs/implementation-guide.md` (+.html) | v1.0. 6 phases, 23 chunks, P1-C02 satisfies MVP-1 (first user-facing chunk is a runnable skeleton). Full dependency network, critical path, parallel-work sets, and a complete wiring matrix — no empty `Demanded by` cells, no exemptions needed. |
+| `specs/implementation-guide.md` (+.html) | v1.1. 6 phases, **24 chunks** (design review added P2-C05, a second early real-chart slice, at position 8 — the plan had otherwise reverted to a fully horizontal build with no further user-visible milestone until chunk 19). Full dependency network, critical path, parallel-work sets, and a complete wiring matrix — no empty `Demanded by` cells, no exemptions needed. |
+| `design-review/design-review-001.html` | Round 1 design review. 4 parallel panels, 10 Critical + 16 Important findings, all fixed same-session. Verdict was "Do not build" pre-fix — read this before trusting the specs are actually consistent; the fixes are self-verified, not independently re-checked. |
+| `reviews/calibration.md` | GVM review-calibration record. Score history, anchor examples, and — importantly — the explicit note that round 1's fixes were applied by the same agent that found them and should be independently re-verified before full trust. |
 
 ## What does not exist
 
@@ -102,11 +121,9 @@ Full table with reasoning is in `CLAUDE.md`. In short:
 
 ## What comes next
 
-`/gvm-design-review` — recommended, not yet run. Then `/gvm-build`, starting
-at Phase 1 / chunk P1-C01 (foundations: scaffold, serializer, seed plumbing)
-followed immediately by P1-C02, the walking-skeleton MVP slice (one world,
-two baselines, the skill score, one deterministic serialized output —
-already scoped in the implementation guide as satisfying MVP-1).
+Two reasonable options, in order of recommendation:
+1. **A light independent re-verification** of the design-review fixes (a fresh monitor, not the same agent that wrote them) — cheaper than a full Round 2 design review, but closes the honesty gap `reviews/calibration.md` names explicitly.
+2. **`/gvm-build`**, starting at Phase 1 / chunk P1-C01 (foundations: scaffold, serializer, seed plumbing), followed by P1-C02 (the walking-skeleton MVP slice) and P2-C05 (the second early real-chart slice, added by the design review).
 
 The GVM skill files are now committed in this repo's own `.claude/skills/`
 (no longer an external-availability gap — resolved a few sessions back,
