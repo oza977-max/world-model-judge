@@ -79,6 +79,21 @@
       margin-bottom: 0.2rem;
     }
 
+    /* ── Change Note ── */
+    .change-note {
+      background: #f5f5f0;
+      border-left: 3px solid #d4a373;
+      padding: 0.8rem 1rem;
+      margin: 1.5rem 0 2rem;
+      max-width: 780px;
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+
+    .change-note strong {
+      color: #333;
+    }
+
     /* ── Floating TOC (Left Side) ── */
     nav.toc {
       position: fixed;
@@ -180,6 +195,25 @@
       border-radius: 2px;
     }
 
+    /* ── Pre/Code Blocks ── */
+    pre {
+      background: #f5f5f0;
+      border: 1px solid #e0e0e0;
+      border-radius: 3px;
+      padding: 1rem;
+      overflow-x: auto;
+      margin: 1rem 0 1.5rem;
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+
+    pre code {
+      background: none;
+      padding: 0;
+      border-radius: 0;
+      font-family: "Menlo", "Consolas", "Monaco", monospace;
+    }
+
     /* ── GVM Attribution ── */
     .gvm-attribution {
       font-size: 0.75rem;
@@ -263,6 +297,14 @@
       margin-bottom: 0.3rem;
     }
 
+    .adr-body ol {
+      margin-bottom: 0.8rem;
+    }
+
+    .adr-body ol li {
+      margin-bottom: 0.3rem;
+    }
+
     /* ── Responsive ── */
     @media (max-width: 1200px) {
       nav.toc {
@@ -292,7 +334,11 @@
   <main>
     <p class="date">25 August 2026</p>
     <h1>World Model Judge — Worlds Specification</h1>
-    <p class="subtitle">Version 1.0 · 25 August 2026 · Domain 1 of Requirements v1.2 · References: cross-cutting spec v1.0</p>
+    <p class="subtitle">Version 1.1 · 25 August 2026 · Domain 1 of Requirements v1.2 · References: cross-cutting spec v1.1</p>
+
+    <div class="change-note">
+      <p><strong>Change note (v1.1).</strong> Revised after <code>/gvm-design-review</code> design-review-001. Fixed: ADR-W1's integrator gate described comparing "the model-rollout driver's integrator" against the world's — but no model under test (models spec ADR-M1–M4) ever calls an integrator, so that component didn't exist; restated as two checks that do exist (ground-truth generator consistency, model rollout dt-alignment). The double pendulum's equations of motion, given only as "textbook" in v1.0, are now written out explicitly with a named sign convention, since TC-WD1-01's hand-verified reference values need one unambiguous source. The LV clamp-handling rule (§4.1 vs §7) is now stated once, consistently. Added the conditioned-climatology table's producer contract to §5 (judge spec v1.1 ADR-J5 needed a source for it) and a worked pendulum region-key example. See design-review-001.html for the full findings.</p>
+    </div>
 
     <p><strong>What this document is.</strong> The complete design of the two reference worlds — Lotka–Volterra and the double pendulum — including the shared integrator, the action levers, the divergence benchmark, the declared regions, and the evaluation tasks. Everything the judge later grades against is defined here.</p>
 
@@ -348,7 +394,7 @@
     <h2 id="architecturally-significant">2. Architecturally Significant Requirements</h2>
 
     <ul>
-      <li><strong>WD-3</strong> forces a <em>single shared integrator module</em>: truth and models call the same <code>step()</code> code object, and the gate test compares identity, not configuration values alone.</li>
+      <li><strong>WD-3</strong> forces a <em>single shared integrator module</em>, used by every generator of ground truth (training data, benchmarks, evaluation truth) via one call site; models under test are direct function approximators (models spec ADR-M1) that never call an integrator at all, so the gate that matters for them checks <code>dt</code>-alignment of their rollout loop against ground truth's, not code-object identity (design-review fix, ADR-W1).</li>
       <li><strong>WD-4</strong> forces divergence to be <em>measured artefacts, computed once per world per region and cached as data</em> — the judge receives curves as input (JU-1), so they must exist as plain arrays before judging.</li>
       <li><strong>WD-7 + NF-1</strong> force the worlds to be pure functions of (state, action): all sampling randomness lives in the harness, none in the worlds.</li>
       <li><strong>WD-6</strong> forces tasks to be world-owned data (name + tolerance + horizon), not judge logic — the judge reads tolerances; it never defines them.</li>
@@ -377,9 +423,17 @@
         </ol>
 
         <h4>Decision</h4>
-        <p>Option 1. One module <code>wmj.worlds.integrator</code> exposing <code>rk4_step(deriv_fn, state, dt)</code>. The WD-3 gate asserts that the world's and the model-rollout driver's integrator are the <em>same function object</em> and the same <code>dt</code> constant (TC-WD3-01), and the negative test proves the gate fails on a mismatched <code>dt</code> (TC-WD3-02).</p>
+        <p>Option 1. One module <code>wmj.worlds.integrator</code> exposing <code>rk4_step(deriv_fn, state, dt)</code>.</p>
 
-        <h4>Drift Bound (the TC-WD3-03 Numbers)</h4>
+        <h4>The WD-3 Gate, Precisely (Design-Review Fix)</h4>
+        <p>The original wording named "the model-rollout driver's integrator," but no model under test calls an integrator at all; models.md ADR-M1 defines every contestant as a direct <code>(state, action) → Prediction</code> function approximator. The gate is two checks, both real and both implementable against the actual architecture:</p>
+        <ol>
+          <li><strong>Ground-truth consistency:</strong> every ground-truth generator — <code>wmj.harness.benchmarks</code> (WD-4), training-data generation (models spec §4), and evaluation-truth generation — calls the <em>same</em> <code>wmj.worlds.integrator.rk4_step</code> function object with the <em>same</em> <code>dt</code> constant for a given world. This is checked by identity comparison (TC-WD3-01), since all three call sites genuinely exist and genuinely share code.</li>
+          <li><strong>Model dt-alignment:</strong> the harness's model-rollout loop advances a model exactly once per ground-truth step — checked by comparing the loop's step-count-to-horizon mapping against ground truth's for the same rollout length, which is a real, checkable property of a learned model that has no integrator of its own to compare.</li>
+        </ol>
+        <p>The negative test proves check 1 fails on a mismatched <code>dt</code> between two ground-truth call sites (TC-WD3-02).</p>
+
+        <h4>Drift Bound (the TC-WD3-03 numbers)</h4>
         <p>Over each world's full JU-6 horizon (§4), the relative drift of the conserved quantity under the true dynamics with null action shall stay below <strong>1e-6 (relative)</strong>. RK4 at the step sizes below sits orders of magnitude under this in preliminary hand calculation; the bound is deliberately loose enough to be stable across platforms and tight enough that JU-6's conditioned climatology cannot be corrupted by integrator error. The measured drift curve is stored alongside the divergence benchmark and re-checked by the gate on every full run.</p>
 
         <h4>Consequences</h4>
@@ -495,18 +549,18 @@
         </tr>
         <tr>
           <td>Action</td>
-          <td>u ∈ [−1.0, 1.0], prey impulse: x ← max(x + u, 0.05)</td>
+          <td>u = Action[0] ∈ [−1.0, 1.0], prey impulse: x ← max(x + u, 0.05) <span style="font-size: 0.85rem; color: #666;">(design-review Minor fix: <code>u</code> below is shorthand for the single component of the <code>Action</code> type cross-cutting §Data-Model Overview declares as <code>float64[1]</code>)</span></td>
           <td>the lever: remove (u&lt;0) or add (u&gt;0) rabbits; floor keeps populations positive</td>
         </tr>
         <tr>
           <td>State floor</td>
           <td>both dimensions clamped ≥ 0.05 after every step</td>
-          <td>LV populations are positive by construction; the clamp is a guard, and any clamp activation is logged as an integrator-anomaly event</td>
+          <td>LV populations are positive by construction; the clamp is a guard against an unphysical excursion — every clamp activation aborts the run it occurs in, per §7's single rule <span style="font-size: 0.85rem; color: #666;">(design-review fix: this used to read merely "logged," contradicting §7's "aborts"; one rule now, no exceptions by run type)</span></td>
         </tr>
       </tbody>
     </table>
 
-    <p><strong>Regions (WD-5):</strong> training states x ∈ [2.0, 6.0] × y ∈ [1.0, 4.0]; out-region states x ∈ [8.0, 12.0] × y ∈ [4.0, 6.0] (high-amplitude orbits). Trained actions u ∈ [−0.5, 0.5]; out-of-range actions |u| ∈ (0.5, 1.0].</p>
+    <p><strong>Regions (WD-5):</strong> training region name <code>"training"</code>, states x ∈ [2.0, 6.0] × y ∈ [1.0, 4.0]; out-region name <strong><code>"out-high-amplitude"</code></strong>, states x ∈ [8.0, 12.0] × y ∈ [4.0, 6.0] (high-amplitude orbits). Trained actions u ∈ [−0.5, 0.5]; out-of-range actions |u| ∈ (0.5, 1.0].</p>
 
     <p><strong>Tasks (WD-6):</strong></p>
     <table>
@@ -536,7 +590,27 @@
 
     <h3 id="double-pendulum">4.2 Double Pendulum</h3>
 
-    <p><strong>Equations:</strong> standard two-link frictionless double pendulum, state (θ₁, θ₂, ω₁, ω₂), the textbook equations of motion.</p>
+    <p><strong>Equations, written out explicitly (design-review fix — "textbook equations of motion" left the sign convention ambiguous; several physically-equivalent, numerically-different parameterizations exist, and TC-WD1-01's 15-significant-digit hand-verified reference values need exactly one to check against).</strong> Angles θ₁, θ₂ measured from the downward vertical, positive counter-clockwise; equal masses m₁ = m₂ = m, equal lengths l₁ = l₂ = l:</p>
+
+    <pre><code>Δ = θ₁ − θ₂
+
+denom1 = l·(2·m − m·cos(2Δ))
+denom2 = l·(2·m − m·cos(2Δ))   # same closed form, second link
+
+θ̈₁ = ( −g·(2·m)·sin(θ₁) − m·g·sin(θ1 − 2·θ2)
+        − 2·sin(Δ)·m·(ω₂²·l + ω₁²·l·cos(Δ)) ) / denom1
+
+θ̈₂ = ( 2·sin(Δ)·(ω₁²·l·(2·m) + g·(2·m)·cos(θ1)
+        + ω₂²·l·m·cos(Δ)) ) / denom2</code></pre>
+
+    <p>(the standard equal-mass, equal-length double pendulum EOM, as derived via the Euler–Lagrange equations for this coordinate/sign convention — the exact form above, not a differently-signed equivalent, is what the reference implementation and the hand-verified TC-WD1-01 constants are computed from).</p>
+
+    <p><strong>Energy, explicitly:</strong></p>
+
+    <pre><code>E(θ1, θ2, ω1, ω2) = m·l²·ω1² + 0.5·m·l²·ω2² + m·l²·ω1·ω2·cos(Δ)
+                     − (2·m)·g·l·cos(θ1) − m·g·l·cos(θ2)</code></pre>
+
+    <p>State (θ₁, θ₂, ω₁, ω₂).</p>
 
     <table>
       <thead>
@@ -584,7 +658,7 @@
         </tr>
         <tr>
           <td>Action</td>
-          <td>u ∈ [−2.0, 2.0] rad/s, pivot impulse: ω₁ ← ω₁ + u</td>
+          <td>u = Action[0] ∈ [−2.0, 2.0] rad/s, pivot impulse: ω₁ ← ω₁ + u <span style="font-size: 0.85rem; color: #666;">(design-review Minor fix: shorthand as above)</span></td>
           <td>the lever: kick the first joint's angular velocity</td>
         </tr>
         <tr>
@@ -595,7 +669,7 @@
       </tbody>
     </table>
 
-    <p><strong>Regions (WD-5):</strong> training states θ₁, θ₂ ∈ [−0.3, 0.3] rad, ω₁, ω₂ ∈ [−0.5, 0.5] rad/s (low-energy, near-regular); out-region states θ₁ ∈ [2.5, π] (near-inverted, chaotic regime), θ₂ ∈ [−0.3, 0.3], ω ∈ [−0.5, 0.5]. Trained actions u ∈ [−1.0, 1.0]; out-of-range |u| ∈ (1.0, 2.0].</p>
+    <p><strong>Regions (WD-5):</strong> training region name <code>"training"</code>; out-region name <strong><code>"out-near-inverted"</code></strong> <span style="font-size: 0.9rem; color: #666;">(design-review fix — the naming convention was demonstrated only for LV in v1.0; region names are the join key models.md's <code>region_labels</code> and this document's own §5 artefacts use to pick a specific curve/table, so every out-region needs one, named for what makes it out-of-distribution)</span>: states θ₁, θ₂ ∈ [−0.3, 0.3] rad, ω₁, ω₂ ∈ [−0.5, 0.5] rad/s (low-energy, near-regular) for training; θ₁ ∈ [2.5, π] (near-inverted, chaotic regime), θ₂ ∈ [−0.3, 0.3], ω ∈ [−0.5, 0.5] for <code>"out-near-inverted"</code>. Trained actions u ∈ [−1.0, 1.0]; out-of-range |u| ∈ (1.0, 2.0].</p>
 
     <p><strong>Tasks (WD-6):</strong></p>
     <table>
@@ -654,7 +728,28 @@
   "seed": 20260825, "n_starts": 64
 }</code></pre>
 
-    <p>Field names, nesting, and units are fixed here; the judge spec references this contract rather than restating it. A trajectory artefact is simply <code>float64[H+1, d]</code> plus the action sequence <code>float64[H, a]</code>.</p>
+    <p>Field names, nesting, and units are fixed here; the judge spec references this contract rather than restating it. A trajectory artefact is simply <code>float64[H+1, d]</code> plus the action sequence <code>float64[H, a]</code>. Note the <code>steps</code> array runs 0..H inclusive (<code>H+1</code> entries) — judge spec v1.1 §4 matches this exactly rather than the earlier, mismatched <code>[H]</code> shape, so every step-indexed curve in the system (divergence, error-vs-horizon) shares one zero-based origin.</p>
+
+    <h4>The Region-Name Join Key (Design-Review Fix)</h4>
+
+    <p>Every trial the harness hands to the judge carries a region label naming exactly one of the keys in the <code>regions</code> object above (<code>"training"</code>, <code>"out-high-amplitude"</code> for LV; <code>"training"</code>, <code>"out-near-inverted"</code> for the pendulum) — never a bare in/out boolean. This is what lets the judge and reporting pick the correct divergence curve and climatology bin table for a given trial even though each world currently declares only one out-region; the mechanism generalises without change if a world later declares more.</p>
+
+    <h4>The Conditioned-Climatology Table (Design-Review Fix)</h4>
+
+    <p>This artefact was consumed by the judge spec's ADR-J5 but never given a producer contract here, the section reserved for exactly that. Produced by <code>wmj.harness.benchmarks</code> alongside the divergence artefact, from one continuous 200,000-step null-action reference trajectory per world started at the training region's centre, binned by the world's own <code>conserved()</code> value into 16 equal-population bins:</p>
+
+    <pre><code>{
+  "world": "lv",
+  "reference_run_steps": 200000,
+  "bin_method": "equal-population",
+  "n_bins": 16,
+  "bins": [
+    {"invariant_range": [-Infinity, 1.842], "mean": [3.9, 2.4], "sd": [0.31, 0.22], "n_samples": 12500},
+    "...(16 entries; first bin's lower edge and last bin's upper edge are unbounded, per judge spec ADR-J5)"
+  ]
+}</code></pre>
+
+    <p>Field names and the unbounded-outer-bin convention are fixed here; the judge spec's ADR-J5 references this contract rather than restating it.</p>
 
     <h2 id="integration-points">6. Integration Points</h2>
 
@@ -667,7 +762,7 @@
     <h2 id="error-handling">7. Error Handling &amp; Edge Cases</h2>
 
     <ul>
-      <li>LV state-floor clamp activations and pendulum energy-drift bound violations raise/log per the cross-cutting error conventions — a clamped trajectory in a <em>benchmark or judged run</em> aborts that run loudly (it means the region/action declarations allowed an unphysical excursion, which is a spec bug, not data).</li>
+      <li><strong>One rule, no scope exceptions (design-review fix — v1.0 said clamp activations were merely "logged" in §4.1 but "abort loudly" in this section, and never said whether training-data generation counted as one of the aborting scopes):</strong> any LV state-floor clamp activation, and any pendulum energy-drift bound violation, aborts the run it occurs in — loudly, with the clamp/drift event logged in the abort message — whether that run is benchmark generation, training-data generation, or a judged evaluation. It means the region/action declarations allowed an unphysical excursion, which is a spec bug to fix (tighten the region or action bounds), never data to train on or grade against; tolerating a clamped state anywhere would silently corrupt MU-7/MU-8's determinism-and-honesty guarantees.</li>
       <li><code>transition</code> called with an action outside the world's declared full range → <code>ActionRangeError</code> (the declared range is the world's contract; out-of-<em>trained</em>-range is legitimate and labelled, out-of-<em>declared</em>-range is a caller bug).</li>
       <li>Region boxes are validated at construction: training box strictly inside the state-floor-safe domain; out-region disjoint from training box on at least one axis.</li>
     </ul>
@@ -732,6 +827,11 @@
           <td>1.0</td>
           <td>2026-08-25</td>
           <td>Initial version. All world constants pinned; integrator ADR decided (RK4 fixed-step, drift bound 1e-6 relative).</td>
+        </tr>
+        <tr>
+          <td>1.1</td>
+          <td>2026-08-25</td>
+          <td>Design-review fixes (design-review-001): WD-3's gate restated as two real checks (ground-truth call-site identity; model dt-alignment) since no model calls an integrator; double-pendulum EOM and energy written out explicitly with a named sign convention; LV clamp-handling unified into one rule with no run-type exceptions; named every region (including the pendulum's out-region, previously unnamed) as the join key judge/models specs use; added the conditioned-climatology table's producer contract to §5.</td>
         </tr>
       </tbody>
     </table>

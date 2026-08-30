@@ -79,6 +79,23 @@
       margin-bottom: 0.2rem;
     }
 
+    /* ── Change Note ── */
+    .change-note {
+      background: #f5f5f0;
+      border-left: 4px solid #c47;
+      padding: 0.8rem 1rem;
+      margin: 1.5rem 0 2rem;
+      max-width: 780px;
+      font-size: 0.95rem;
+      line-height: 1.6;
+      color: #444;
+    }
+
+    .change-note strong {
+      color: #333;
+      font-weight: 600;
+    }
+
     /* ── Floating TOC (Left Side) ── */
     nav.toc {
       position: fixed;
@@ -292,7 +309,11 @@
   <main>
     <p class="date">25 August 2026</p>
     <h1>World Model Judge — Models Specification</h1>
-    <p class="subtitle">Version 1.0 · 25 August 2026 · Domain 2 of Requirements v1.2 · References: cross-cutting spec v1.0, worlds spec v1.0</p>
+    <p class="subtitle">Version 1.1 · 25 August 2026 · Domain 2 of Requirements v1.2 · References: cross-cutting spec v1.1, worlds spec v1.1</p>
+
+    <div class="change-note">
+      <strong>Change note (v1.1).</strong> Revised after <code>/gvm-design-review</code> design-review-001. ADR-M3 previously left four numbers/formulas that would each produce a different trained model from the same seed — weight initialization, Model A's exact NLL loss, whether training is full-batch or mini-batch, and Adam's ε — all now pinned. <code>fx-honest-rough</code>'s spread-widening was prose ("widened to match the true resulting error"); now a formula. <code>fx-brittle</code>'s "half the training box" is now a specific, named split. Added a cross-rollout isolation test for <code>reset()</code> (§8) — the exact "a model remembers something across rollouts" risk this project's own architecture is designed to prevent had no test checking it actually holds. §5's boundary contract dropped the undefined <code>trial_boundaries</code> field (judge spec v1.1 explains why: the pre-shaped <code>[n_trials, H, d]</code> array design makes a separate boundary marker unnecessary) and now points at the harness-owned envelope (judge spec v1.1 §5) instead of a separately-described "map." ADR-M5 now explicitly lists the MU-1 uncertainty format among <code>prereg/recipe.md</code>'s contents, closing a traceability gap. See design-review-001.html for the full findings.
+    </div>
 
     <p><strong>What this document is.</strong> The design of everything the judge grades: the two dumb baselines, the three deliberately broken fixtures, and the two honest ("unrigged") models — plus the training recipe shape, the accuracy-matching rule, and the pre-registration mechanics that stop any of it being quietly tuned after the fact.</p>
 
@@ -392,9 +413,9 @@
   predict(state, action) -> Prediction   # mean: float64[d], spread: float64[d] (1 sd)</code></pre>
 
         <h4>Consequences</h4>
-        <p>Rollout-local state is invisible to the judge (which sees only arrays) and harmless to determinism (reset() makes every rollout self-contained). TC-MU1-01/02 check the format and its cross-model identity; the registry (<code>wmj.models.registry.register(factory)</code>) is the only discovery path (MU-9).</p>
+        <p>Rollout-local state is invisible to the judge (which sees only arrays) and harmless to determinism (reset() makes every rollout self-contained) — <strong>provided <code>reset()</code> actually clears it (design-review fix — this was previously asserted but never tested)</strong>: §8 adds a cross-rollout isolation test, since a model that silently leaked state across JU-8's 200 independent trials would corrupt the independence assumption the whole exception-band derivation depends on, undetected by any other test in this document. TC-MU1-01/02 check the format and its cross-model identity; the registry (<code>wmj.models.registry.register(factory)</code>) is the only discovery path (MU-9).</p>
 
-        <p><strong>[Requirement: MU-1, MU-9, WD-2] [Test: TC-MU1-01, TC-MU1-02, TC-MU9-01]</strong></p>
+        <p><strong>[Requirement: MU-1, MU-9, WD-2] [Test: TC-MU1-01, TC-MU1-02, TC-MU1-03]</strong></p>
       </div>
     </details>
 
@@ -441,7 +462,15 @@
               <li><strong>Spread mapping:</strong> per-dimension <code>spread = sqrt(1 + 1/K) × std(member_means, ddof=1)</code> — sample standard deviation with Bessel's correction, inflated by the standard <code>sqrt(1 + 1/K)</code> predictive-variance factor to correct small-ensemble underdispersion (the MU-5 correction clause; TC-MU5-03 checks it is applied).</li>
             </ul>
           </li>
-          <li><strong>Shared architecture (both models, both worlds):</strong> 2 hidden layers × 64 units, tanh activations, hand-rolled NumPy forward/backward, Adam (lr 1e-3, β₁ 0.9, β₂ 0.999), full-batch gradient checked against finite differences to 1e-6 relative before any training run (Beck: the failing test first — the gradient check is the MLP's first test).</li>
+          <li><strong>Shared architecture (both models, both worlds):</strong> 2 hidden layers × 64 units, tanh activations, hand-rolled NumPy forward/backward.
+            <ul>
+              <li><strong>Weight initialization (design-review fix — previously unspecified, and MU-8's seeded-reproducibility guarantee only holds if the init scheme is itself fixed):</strong> each weight matrix <code>W ~ U(−1/√fan_in, 1/√fan_in)</code> (uniform, fan-in scaled — the standard scheme for tanh networks), all biases initialised to 0, drawn from the run's seeded <code>Generator</code> (cross-cutting ADR-002).</li>
+              <li><strong>Model A's loss, written out (design-review fix — previously named "Gaussian negative log-likelihood" with no formula, unlike CRPS in the judge spec which gets a full closed form):</strong> per-dimension, per-example <code>NLL = 0.5·log(2π) + logσ + (y − μ)²/(2σ²)</code>, summed over the d dimensions and averaged over the batch.</li>
+              <li><strong>Training loop shape (design-review fix — v1.0 said "full-batch gradient checked... before any training run" and, separately, that Model B's members differ in "seeded batch shuffling," which only makes sense for mini-batches; the two statements were never reconciled):</strong> training itself is <strong>mini-batch</strong>, batch size <strong>32</strong>, examples shuffled each epoch from the run's seeded <code>Generator</code>. The <em>gradient check</em> (below) is a separate, one-time, full-batch finite-difference check run once before training starts — it is not the training loop itself, and "batch shuffling" refers only to the mini-batch training loop's own epoch-order shuffle.</li>
+              <li>Adam optimizer: lr 1e-3, β₁ 0.9, β₂ 0.999, <strong>ε = 1e-8</strong> (design-review fix — previously omitted; two implementers picking different conventional defaults would get bit-different trained weights under this project's own determinism standard).</li>
+              <li><strong>Gradient check:</strong> one full-batch pass, checked against finite differences to 1e-6 relative, run once before any training run begins (Beck: the failing test first — the gradient check is the MLP's first test; it validates the hand-rolled backprop implementation, and is not part of the mini-batch training loop above).</li>
+            </ul>
+          </li>
           <li><strong>Stopping rule:</strong> fixed epoch count (pinned in <code>prereg/recipe.md</code>), no early stopping — early stopping peeks at validation loss, which adds a tuning channel MU-6 exists to close.</li>
           <li><strong>Matching margin (the MU-5/TC-MU5-01 number):</strong> the two models' one-step skill scores (judge-spec definition), per task and per region, must differ by <strong>less than 0.05</strong> — recorded in <code>prereg/recipe.md</code> before training; if any pair exceeds the margin, judging refuses to proceed (the pre-registration is "not yet satisfied", TC-MU5-01's second branch — the remedy is revising the <em>recipe</em> openly and re-running, never nudging a trained model).</li>
         </ul>
@@ -487,13 +516,13 @@
             </tr>
             <tr>
               <td><code>fx-honest-rough</code></td>
-              <td>mean + seeded noise (σ = 2× the model's spread), spread honestly widened to match the true resulting error</td>
+              <td>mean + seeded noise (σ = 2× the model's spread); spread widened by the exact formula <code>spread ← sqrt(base_spread² + noise_σ²)</code> (design-review fix — "widened to match the true resulting error" was prose; this closed form is exact because it's the true variance of <code>mean + independent Gaussian noise</code>, so the fixture is honest by construction rather than by an empirical post-hoc fit)</td>
               <td>rougher but honest → calibration passes with worse accuracy</td>
               <td>TC-MU3-02</td>
             </tr>
             <tr>
               <td><code>fx-brittle</code></td>
-              <td>trained on a deliberately narrowed sub-region (half the training box); spread untouched</td>
+              <td>trained on a deliberately narrowed sub-region: <strong>the first state dimension's training interval is halved, keeping the upper half</strong> (design-review fix — "half the training box" was ambiguous for a 2–4 dimensional box; this names the specific axis and rule, applied identically in both worlds — prey count for LV, θ₁ for the pendulum); spread untouched</td>
               <td>great at home, catastrophic away → only the in/out region split surfaces it</td>
               <td>TC-MU3-03</td>
             </tr>
@@ -520,10 +549,10 @@
         <p>MU-6 requires recipe, margins, formats, and the ranking prediction committed before the first judged run of unrigged models; the enforcement must be mechanical (commit timestamps), and the judge itself cannot read git (JU-12).</p>
 
         <h4>Decision</h4>
-        <p><code>prereg/</code> contains, each as one committed file: <code>recipe.md</code> (architecture, training data counts, epochs, seeds policy, matching margin, ensemble rules), <code>prediction.md</code> (the written ranking prediction), <code>thresholds.json</code> (JU-11's bands — owned by the judge spec, enforced by the same mechanism). The harness's <code>check_prereg</code> step (runs before any judged run of an unrigged model) asserts: every <code>prereg/</code> file is committed (not dirty), and its <em>first-added</em> commit timestamp strictly precedes the timestamp of any recorded judged-run artefact for unrigged models. Runs record their commit-of-record in the verdict metadata, making TC-JU11-02's after-the-fact edit detectable: a <code>prereg/</code> file whose first commit postdates a recorded run fails certification.</p>
+        <p><code>prereg/</code> contains, each as one committed file: <code>recipe.md</code> (architecture including the ADR-M3 init/loss/batching/ε constants, training data counts, epochs, seeds policy, matching margin, ensemble rules, <strong>and the MU-1 uncertainty format itself — per-dimension mean + one standard deviation, cross-referencing cross-cutting.md's data model</strong> — design-review fix: MU-6's own text names the uncertainty format as one of the things that must be recorded before judging, but v1.0 left it implicitly satisfied elsewhere rather than traceably inside this file), <code>prediction.md</code> (the written ranking prediction), <code>thresholds.json</code> (JU-11's bands — owned by the judge spec, enforced by the same mechanism). The harness's <code>check_prereg</code> step (runs before any judged run of an unrigged model) asserts: every <code>prereg/</code> file is committed (not dirty), and its <em>first-added</em> commit timestamp strictly precedes the timestamp of any recorded judged-run artefact for unrigged models. Runs record their commit-of-record in the verdict metadata, making TC-JU11-02's after-the-fact edit detectable: a <code>prereg/</code> file whose first commit postdates a recorded run fails certification.</p>
 
         <h4>Consequences</h4>
-        <p>Pre-registration violations stop the pipeline before output exists (cross-cutting error conventions). MU-6's publish-either-way clause (TC-MU6-02, judged) is procedural, not code — the spec records it as an owner obligation.</p>
+        <p>Pre-registration violations stop the pipeline before output exists (cross-cutting error conventions). MU-6's publish-either-way clause (TC-MU6-02, judged) is procedural, not code — the spec records it as an owner obligation. <strong>A named residual risk (design-review addition):</strong> "append-only" <code>prereg/</code> history is a convention this mechanism relies on, not a technical control — git history is rewritable by the same single author JU-10's disclosure #3 already discloses as a limitation. This is not a defect to fix (no technical control fully closes it without infrastructure this toy-scale project doesn't otherwise need) but is named here explicitly rather than left implicit, in the same spirit as JU-10's other disclosures.</p>
 
         <p><strong>[Requirement: MU-6, JU-11 (mechanics shared)] [Test: TC-MU6-01, TC-MU6-02, TC-JU11-01, TC-JU11-02]</strong></p>
       </div>
@@ -545,17 +574,15 @@ tests/models/    # gradient check, format checks, fixture behaviour, determinism
 
     <h2 id="api-boundary">5. API Boundary Contracts</h2>
 
-    <p>What the harness extracts from models for the judge — the only model-shaped data the judge ever sees (JU-1):</p>
+    <p>What the harness extracts from models for the judge — the only model-shaped data the judge ever sees (JU-1). Arrays are pre-shaped <code>[n_trials, H, d]</code> (judge spec v1.1 §4); a trial's own row in that first axis is its boundary, so there is no separate boundary-marker field (design-review fix — v1.0 named a <code>trial_boundaries: [n_trials] int</code> field here that judge.md's own array shapes made undefined and redundant; removed):</p>
 
     <pre><code>{
-  "predictions": {"mean": "[T, d] float64", "spread": "[T, d] float64"},
-  "outcomes": "[T, d] float64",
-  "region_labels": {"start_in_region": true, "action_in_region": false, "axis": "action"},
-  "trial_boundaries": "[n_trials] int — where independent trials begin (JU-8)",
-  "is_fixture": "bool — carried for labelling only; stripped from JudgeInput, rejoined at reporting"
+  "predictions": {"mean": "[n_trials, H, d] float64", "spread": "[n_trials, H, d] float64"},
+  "outcomes": "[n_trials, H, d] float64",
+  "region_labels": {"region_name": "training", "start_in_region": true, "action_in_region": true, "axis": null}
 }</code></pre>
 
-    <p><code>is_fixture</code> is <em>not</em> part of <code>JudgeInput</code> (the judge must stay blind); the harness holds the mapping and reporting rejoins it for labelling. Model <code>name</code> likewise never enters the judge (TC-JU1-01/02 in the judge spec).</p>
+    <p><code>is_fixture</code> and the model's <code>name</code> are <em>not</em> part of <code>JudgeInput</code> (the judge must stay blind) and are never computed by anything in this package's own model code — the harness assembles them into the harness-owned envelope (judge spec v1.1 §5) alongside the judge's pure <code>Verdict</code> once judging completes, which is what reporting actually consumes (design-review fix: v1.0 described this as the harness holding "a mapping" reporting separately "rejoins"; the envelope is the single object that replaces both, per Keeling's single-producer-per-fact principle applied in the judge spec).</p>
 
     <h2 id="integration-points">6. Integration Points</h2>
 
@@ -587,6 +614,10 @@ tests/models/    # gradient check, format checks, fixture behaviour, determinism
         <tr>
           <td>Uncertainty format fixed and identical</td>
           <td>TC-MU1-01, TC-MU1-02</td>
+        </tr>
+        <tr>
+          <td><code>reset()</code> isolates rollouts — no cross-rollout state leak (design-review addition)</td>
+          <td>TC-MU1-03 (new)</td>
         </tr>
         <tr>
           <td>Baselines present and non-trivial</td>
@@ -644,6 +675,11 @@ tests/models/    # gradient check, format checks, fixture behaviour, determinism
           <td>1.0</td>
           <td>2026-08-25</td>
           <td>Initial version. Interface (reset+predict), baselines with honest spreads, direct-vs-ensemble design with pre-registered spread mapping, three one-corruption fixtures, prereg mechanics. Matching margin pinned at 0.05 skill-score difference.</td>
+        </tr>
+        <tr>
+          <td>1.1</td>
+          <td>2026-08-25</td>
+          <td>Design-review fixes (design-review-001): pinned weight initialization, Model A's exact NLL formula, resolved the full-batch/mini-batch contradiction (mini-batch 32, gradient check separately full-batch), pinned Adam's ε; <code>fx-honest-rough</code>'s spread now an exact formula; <code>fx-brittle</code>'s "half the training box" now names the specific axis and split; added TC-MU1-03 (reset-isolation test); §5 dropped the undefined <code>trial_boundaries</code> field and now points at the judge spec's harness-owned envelope; ADR-M5 traces the MU-1 format explicitly into <code>prereg/recipe.md</code>.</td>
         </tr>
       </tbody>
     </table>
