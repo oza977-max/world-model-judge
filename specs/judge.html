@@ -180,6 +180,38 @@
       border-radius: 2px;
     }
 
+    /* ── Code Blocks ── */
+    pre {
+      background: #f0f0e8;
+      padding: 1rem;
+      border-radius: 3px;
+      overflow-x: auto;
+      margin: 1.2rem 0;
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+
+    pre code {
+      background: none;
+      padding: 0;
+      border-radius: 0;
+    }
+
+    /* ── Change Note ── */
+    .change-note {
+      background: #fff9e6;
+      border-left: 4px solid #d4af37;
+      padding: 1rem 1rem 1rem 1.5rem;
+      margin: 1.5rem 0 2rem;
+      max-width: 860px;
+      line-height: 1.7;
+    }
+
+    .change-note strong {
+      display: block;
+      margin-bottom: 0.5rem;
+    }
+
     /* ── GVM Attribution ── */
     .gvm-attribution {
       font-size: 0.75rem;
@@ -263,6 +295,10 @@
       margin-bottom: 0.3rem;
     }
 
+    .adr-body table {
+      margin: 0.8rem 0;
+    }
+
     /* ── Responsive ── */
     @media (max-width: 1200px) {
       nav.toc {
@@ -292,7 +328,12 @@
   <main>
     <p class="date">25 August 2026</p>
     <h1>World Model Judge — Judge Specification</h1>
-    <p class="subtitle">Version 1.0 · 25 August 2026 · Domain 3 of Requirements v1.2 · References: cross-cutting spec v1.0, worlds spec v1.0, models spec v1.0</p>
+    <p class="subtitle">Version 1.1 · 25 August 2026 · Domain 3 of Requirements v1.2 · References: cross-cutting spec v1.1, worlds spec v1.1, models spec v1.1</p>
+
+    <div class="change-note">
+      <strong>Change note (v1.1).</strong>
+      Revised after <code>/gvm-design-review</code> design-review-001 (four parallel defect-class panels). Fixed: the Verdict schema carried <code>is_fixture</code>, <code>model_ref</code>, and <code>meta</code> fields the judge structurally cannot produce (JU-1/JU-12 purity violations) — these move to a harness-owned envelope, and the pure Verdict now contains only what the judge itself computes. Added: a per-trial data block the exception chart needs (was missing entirely), an explicit <code>region</code> field on exception counts, fixed z_p constants (erf gives no inverse), a corrected φ formula and its array-vectorization strategy, an explicit restatement of the shared distance formula, concrete climatology bin-edge/reference-run numbers and edge-case behaviour (out-of-range invariant, no-switch-step), a pre-registered absolute sharpness threshold replacing an undefined "bottom-decile," and the seven JU-10 disclosures authored verbatim (ADR-J7, new) instead of left as a placeholder. See design-review-001.html for the full findings.
+    </div>
 
     <p><strong>What this document is.</strong> The design of the product itself: every metric the judge computes, precisely enough to build from — the skill score, the calibration diagnostic, the scoring rule, sharpness, the climatology switch, the trust horizon, and the exception bands. This spec settles Open Questions 1 and 2 (bands and sample size, derived together) and the runtime half of Open Question 5.</p>
 
@@ -349,7 +390,7 @@
         <tr>
           <td>Michael Keeling</td>
           <td><em>Design It!</em></td>
-          <td>ADR format</td>
+          <td>ADR format; boundary-decision capture (design-review Panel B/C)</td>
         </tr>
       </tbody>
     </table>
@@ -363,8 +404,8 @@
     <h2 id="architecturally-significant-requirements">2. Architecturally Significant Requirements</h2>
 
     <ul>
-      <li><strong>JU-12 + NF-6</strong>: the judge is a leaf package — pure functions, no I/O, imports stdlib + NumPy only. Everything it needs arrives as arguments; everything it produces returns as values.</li>
-      <li><strong>JU-1</strong>: the input type is defined <em>inside</em> the judge package and has no field that could carry identity — blindness by construction, not by discipline.</li>
+      <li><strong>JU-12 + NF-6</strong>: the judge is a leaf package — pure functions, no I/O, imports stdlib + NumPy only. Everything it needs arrives as arguments; everything it produces returns as values. This now includes <code>meta</code> fields (platform, prereg commit) that are environment reads — they are explicitly <strong>not</strong> part of the judge's own output (§5).</li>
+      <li><strong>JU-1</strong>: the input type is defined <em>inside</em> the judge package and has no field that could carry identity — blindness by construction, not by discipline. The judge's <em>output</em> type carries the same discipline: it cannot contain <code>is_fixture</code> or a model name either, since those are exactly the facts JU-1 forbids the judge from having received in the first place.</li>
       <li><strong>JU-11 + OQ-1/OQ-2</strong>: bands must be <em>derived</em> from a declared test and sample size. This spec fixes the derivation; the resulting integers are computed once and committed in <code>prereg/thresholds.json</code> (models spec ADR-M5 mechanics).</li>
       <li><strong>JU-9</strong>: the verdict record is the reporting layer's entire input — its schema is the project's most important API boundary contract (§5).</li>
     </ul>
@@ -378,8 +419,11 @@
         <span class="adr-status">Accepted</span>
       </summary>
       <div class="adr-body">
+        <h4>Status</h4>
+        <p>Accepted. [Requirement: JU-2, JU-4(b)] [Test: TC-JU2-01, TC-JU4-02]</p>
+
         <h4>Context</h4>
-        <p>JU-4(b) requires a strictly proper scoring rule so misstated confidence cannot improve the summary score. JU-2 requires accuracy always reported as skill relative to both baselines. [Requirement: JU-2, JU-4(b)] [Test: TC-JU2-01, TC-JU4-02]</p>
+        <p>JU-4(b) requires a strictly proper scoring rule so misstated confidence cannot improve the summary score. JU-2 requires accuracy always reported as skill relative to both baselines.</p>
 
         <h4>Options Considered</h4>
         <ol>
@@ -389,8 +433,17 @@
         </ol>
 
         <h4>Decision</h4>
-        <p><strong>Decision:</strong> CRPS (option 1), computed per dimension on normalised state (worlds-spec scale vectors), averaged over dimensions; Φ and φ implemented in-house from <code>math.erf</code> (stdlib) — no SciPy (NF-3).</p>
-        <p><strong>Skill form (Murphy, JU-2):</strong> <code>skill = 1 − CRPS_model / CRPS_baseline</code>, reported against persistence and linear separately, per task, per region, at one step. No absolute error is ever emitted without its skill counterpart (TC-JU2-01); the strictly-proper property is verified by TC-JU4-02's misstatement test.</p>
+        <p><strong>Decision:</strong> CRPS (option 1), computed per dimension on normalised state (worlds-spec scale vectors), averaged over dimensions.</p>
+
+        <h4>Φ and φ, exactly (design-review fix — the original text imprecisely attributed both to erf, and never addressed array shape)</h4>
+        <ul>
+          <li><code>Φ(z) = 0.5 · (1 + erf(z/√2))</code>, from stdlib <code>math.erf</code>.</li>
+          <li><code>φ(z) = (1/√(2π)) · exp(−z²/2)</code>, from stdlib <code>math.exp</code> and <code>math.pi</code> — <strong>not</strong> from <code>erf</code>; the earlier draft's claim that both come from erf was imprecise.</li>
+          <li><strong>Vectorization:</strong> <code>JudgeInput</code> arrays are NumPy-shaped <code>[n_trials, H, d]</code>, but <code>math.erf</code>/<code>math.exp</code> are scalar-only. Both are wrapped once, in <code>wmj/judge/_normal.py</code>, via <code>numpy.frompyfunc(math.erf, 1, 1)</code> (and a native <code>numpy.exp</code> call for φ, which <em>is</em> already array-native) — no SciPy dependency (NF-3).</li>
+        </ul>
+
+        <h4>Skill form (Murphy, JU-2)</h4>
+        <p><code>skill = 1 − CRPS_model / CRPS_baseline</code>, reported against persistence and linear separately, per task, per region, at one step. No absolute error is ever emitted without its skill counterpart (TC-JU2-01); the strictly-proper property is verified by TC-JU4-02's misstatement test.</p>
       </div>
     </details>
 
@@ -401,11 +454,44 @@
         <span class="adr-status">Accepted</span>
       </summary>
       <div class="adr-body">
-        <h4>Context</h4>
-        <p>[Requirement: JU-4(a)] [Test: TC-JU4-01]</p>
+        <h4>Status</h4>
+        <p>Accepted. [Requirement: JU-4(a)] [Test: TC-JU4-01]</p>
 
         <h4>Decision</h4>
-        <p><strong>Decision:</strong> Predictions are Gaussian per dimension (MU-1 mean/spread). The diagnostic computes observed coverage of central intervals at levels <strong>{50%, 80%, 90%, 95%}</strong>: for level p, the interval is μ ± z_(p)·σ per dimension; an outcome "covers" if <em>all</em> dimensions fall inside (the joint event is what a user of the prediction experiences; per-dimension coverage is also recorded for diagnosis). Coverage is computed separately in-region and out-of-region (WD-5 labels), over the independent-trial set only (§ADR-J4 sampling). The diagnostic and the ADR-J1 summary are distinct fields in the verdict and never combined (JU-4's "never conflate", TC-JU4-01).</p>
+        <p>Predictions are Gaussian per dimension (MU-1 mean/spread). The diagnostic computes observed coverage of central intervals at levels <strong>{50%, 80%, 90%, 95%}</strong>: for level p, the interval is μ ± z_(p)·σ per dimension.</p>
+
+        <h4>z_p values (design-review fix — erf gives the forward normal CDF only; there is no general inverse available without an iterative routine this project doesn't otherwise need)</h4>
+        <p>fixed constants, not computed by a general inverse-CDF, since exactly four levels are ever used:</p>
+        <table>
+          <thead>
+            <tr>
+              <th>p</th>
+              <th>z_p</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>0.50</td>
+              <td>0.6745</td>
+            </tr>
+            <tr>
+              <td>0.80</td>
+              <td>1.2816</td>
+            </tr>
+            <tr>
+              <td>0.90</td>
+              <td>1.6449</td>
+            </tr>
+            <tr>
+              <td>0.95</td>
+              <td>1.9600</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>(Each is Φ⁻¹((1+p)/2), the standard two-sided central-interval multiplier, taken from published normal-quantile tables and hardcoded in <code>wmj/judge/_normal.py</code> alongside the Φ/φ helpers.)</p>
+
+        <p>An outcome "covers" if <em>all</em> dimensions fall inside (the joint event is what a user of the prediction experiences; per-dimension coverage is also recorded for diagnosis). Coverage is computed separately in-region and out-of-region (WD-5 labels), over the independent-trial set only (§ADR-J4 sampling). The diagnostic and the ADR-J1 summary are distinct fields in the verdict and never combined (JU-4's "never conflate", TC-JU4-01).</p>
       </div>
     </details>
 
@@ -416,11 +502,11 @@
         <span class="adr-status">Accepted</span>
       </summary>
       <div class="adr-body">
-        <h4>Context</h4>
-        <p>[Requirement: JU-5] [Test: TC-JU5-01, TC-JU5-02]</p>
+        <h4>Status</h4>
+        <p>Accepted. [Requirement: JU-5] [Test: TC-JU5-01, TC-JU5-02]</p>
 
         <h4>Decision</h4>
-        <p><strong>Decision:</strong> Sharpness = mean over trials and dimensions of the stated 90% central-interval width (2·z₀.₉₀·σ), in normalised units, per region. Smaller is sharper; it is monotone in stated σ by construction (TC-JU5-02's property). Reported in the same verdict block as calibration so neither is readable without the other (GBR: maximise sharpness subject to calibration).</p>
+        <p>Sharpness = mean over trials and dimensions of the stated 90% central-interval width (2·z₀.₉₀·σ, using the z₀.₉₀ = 1.6449 constant from ADR-J2), in normalised units, per region. Smaller is sharper; it is monotone in stated σ by construction (TC-JU5-02's property). Reported in the same verdict block as calibration so neither is readable without the other (GBR: maximise sharpness subject to calibration).</p>
       </div>
     </details>
 
@@ -431,13 +517,16 @@
         <span class="adr-status">Accepted</span>
       </summary>
       <div class="adr-body">
+        <h4>Status</h4>
+        <p>Accepted. [Requirement: JU-8, JU-11] [Test: TC-JU8-01, TC-JU8-02, TC-JU8-03]</p>
+
         <h4>Context</h4>
-        <p>JU-8 demands exceptions counted over statistically independent trials, compared to the model's implied rate with a declared test at a declared sample size, against bands fixed in advance with declared false-alarm probabilities. Open Questions 1 and 2 defer the numbers to this spec. [Requirement: JU-8, JU-11] [Test: TC-JU8-01, TC-JU8-02, TC-JU8-03]</p>
+        <p>JU-8 demands exceptions counted over statistically independent trials, compared to the model's implied rate with a declared test at a declared sample size, against bands fixed in advance with declared false-alarm probabilities. Open Questions 1 and 2 defer the numbers to this spec.</p>
 
         <h4>The Declared Design</h4>
         <ul>
-          <li><strong>Independent trials: N = 200</strong> per (model, world, region). Each trial is a rollout from its own evaluation starting condition (disjoint from training and from each other — models spec MU-7 mechanics) with its own seeded action sequence.</li>
-          <li><strong>Exception definition:</strong> at each <strong>pre-declared horizon step h ∈ {1, h_task}</strong> (h_task = the task's JU-6 switch step, per task), the trial's outcome at step h either falls inside the model's stated 90% central interval (all dimensions, ADR-J2 joint convention) or is an exception. One observation per trial per horizon — never pooled within a rollout (TC-JU8-01 rejects correlated pooling by construction: the input carries trial boundaries, and the counter consumes one designated step per trial).</li>
+          <li><strong>Independent trials: N = 200</strong> per (model, world, region, task). Each trial is a rollout from its own evaluation starting condition (disjoint from training and from each other — models spec MU-7 mechanics) with its own seeded action sequence. Trials are represented as the first axis of every <code>[n_trials, H, d]</code> array in <code>JudgeInput</code> (§4) — a trial's own row <em>is</em> its boundary; there is no flat/concatenated representation and therefore no separate boundary-marker field anywhere in the contract (design-review fix: an earlier draft's cross-cutting/models documents named a <code>trial_boundaries</code> array that this pre-shaped-array design makes unnecessary and undefined — removed there, see cross-cutting v1.1 and models v1.1 changelogs).</li>
+          <li><strong>Exception definition:</strong> at each <strong>pre-declared horizon step h ∈ {1, h_task}</strong> (h_task = the task's JU-6 switch step, per task), the trial's outcome at step h either falls inside the model's stated 90% central interval (all dimensions, ADR-J2 joint convention) or is an exception. One observation per trial per horizon — never pooled within a rollout (TC-JU8-01 rejects correlated pooling by construction: each trial occupies its own row in the array's trial axis, and the counter consumes one designated step per trial, never steps from two different trials' rows treated as if independent).</li>
           <li><strong>The test:</strong> exact two-sided binomial test against p = 0.10 at n = 200. Expected exceptions: 20.</li>
           <li><strong>Bands, derived (not chosen by eye — JU-11):</strong>
             <ul>
@@ -445,13 +534,13 @@
               <li><strong>Amber</strong> — outside green but inside the central 99.9% region: <strong>[8, 11] or [30, 35]</strong>.</li>
               <li><strong>Red</strong> — <strong>≤ 7 or ≥ 36</strong>.</li>
               <li>False-alarm probability for a perfectly calibrated model, from the exact binomial CDF: <strong>3.3%</strong> of landing outside green (declared bound ≤ 5%), <strong>0.087%</strong> outside amber (declared bound ≤ 0.1%) — declared per band, per JU-8. The integer boundaries above are computed from the exact binomial CDF by a build-time derivation script whose output is committed to <code>prereg/thresholds.json</code>; the committed file is what the judge reads (via its arguments), and TC-JU8-02 checks a known-calibrated fixture lands green at the declared rate.</li>
-              <li><strong>Low-side counts are flagged, not rewarded:</strong> a green-or-better count with bottom-decile sharpness triggers the JU-5 cross-flag (TC-JU8-03) — too few misses plus wide intervals is hedging, and the verdict says so.</li>
+              <li><strong>Low-side counts are flagged, not rewarded, against an absolute pre-registered threshold, not a decile (design-review fix):</strong> a green-or-better count is cross-checked against sharpness (ADR-J3); if that region/task's mean 90%-interval width exceeds a fixed value declared in <code>prereg/thresholds.json</code> (<code>sharpness_hedge_threshold</code>, set per world from the world's own scale vector at pre-registration time, before any model is judged — worlds spec ADR-W3 defines the scale), the JU-5 cross-flag fires (TC-JU8-03). The original "bottom-decile" wording is removed: with ~8 contestants per (model, world, region) a decile has no statistical meaning; an absolute, pre-registered width bound does.</li>
             </ul>
           </li>
         </ul>
 
         <h4>Why N=200</h4>
-        <p>At p=0.10 the green region [12,28] distinguishes a true 90% model from a fixture at 70% true coverage (expected 60 exceptions — deep red) and from a padded 99% model (expected 2 — red on the low side) with power ≈ 1; it is the smallest round sample where the amber band is non-degenerate at both ends, and it fits the NF-2 budget with two orders of magnitude to spare (§ADR-J6). Assumption 2 of the requirements (independent trials shrink the usable sample) is answered by construction: the 200 are independent starts, not steps.</p>
+        <p>At p=0.10 the green region [12,29] distinguishes a true 90% model from a fixture at 70% true coverage (expected 60 exceptions — deep red) and from a padded 99% model (expected 2 — red on the low side) with power ≈ 1; it is the smallest round sample where the amber band is non-degenerate at both ends, and it fits the NF-2 budget with two orders of magnitude to spare (§ADR-J6). Assumption 2 of the requirements (independent trials shrink the usable sample) is answered by construction: the 200 are independent starts, not steps.</p>
       </div>
     </details>
 
@@ -462,15 +551,18 @@
         <span class="adr-status">Accepted</span>
       </summary>
       <div class="adr-body">
-        <h4>Context</h4>
-        <p>[Requirement: JU-6, JU-3, JU-7] [Test: TC-JU6-01, TC-JU6-02, TC-JU3-01, TC-JU7-01, TC-JU7-02]</p>
+        <h4>Status</h4>
+        <p>Accepted. [Requirement: JU-6, JU-3, JU-7] [Test: TC-JU6-01, TC-JU6-02, TC-JU3-01, TC-JU7-01, TC-JU7-02]</p>
+
+        <h4>The Shared Distance Metric (design-review fix — this was asserted in worlds.md and architecture-overview.md but never actually restated or cited here, despite every formula in this document otherwise being given in full)</h4>
+        <p>Every "normalised error" and "normalised distance" in this ADR is worlds spec ADR-W3's metric, restated here so the two specs cannot silently drift apart: RMS over state dimensions each divided by the world's declared scale vector (worlds.md §4) — <code>distance(a, b) = sqrt(mean_d(((a_d − b_d) / scale_d)²))</code>. This is the <em>same</em> function used for WD-4's divergence curves, JU-3's error-vs-horizon, and every task's tolerance τ. It is a different metric from CRPS (ADR-J1): CRPS scores the full predictive distribution for the anti-gaming skill summary; this RMS distance scores point predictions against tolerances and divergence. Both are deliberate and distinct — see architecture-overview v1.1's corrected conceptual-integrity note.</p>
 
         <h4>Decision</h4>
         <ul>
-          <li><strong>Switch step per task:</strong> the first step where the world's own divergence curve (WD-4, the trial's region's curve) exceeds the task tolerance τ. Before it: trajectory grading (normalised error vs the divergence reference, JU-3). At and after it: statistical grading. The verdict records the switch step per task (TC-JU6-01).</li>
-          <li><strong>Conditioned climatology:</strong> the reference statistics (per-dimension mean and standard deviation of state) of the true world <em>restricted to the invariant's value</em> — computed by binning long true reference runs (harness-generated artefact, part of the benchmark data) by conserved-quantity value into <strong>16 bins</strong> per world, and at each compared step using the bin of the invariant <em>measured from the true trajectory at that step</em> (TC-JU6-02's re-measured-not-frozen check; both action impulses and bounded integrator drift move the bin, per WD-3/JU-6).</li>
+          <li><strong>Switch step per task:</strong> the first step where the world's own divergence curve (WD-4, the trial's region's curve) exceeds the task tolerance τ. Before it: trajectory grading (normalised error vs the divergence reference, JU-3, using the distance metric above). At and after it: statistical grading. The verdict records the switch step per task (TC-JU6-01). <strong>If the divergence curve never exceeds τ within the world's declared horizon (design-review fix — previously undefined):</strong> <code>switch_step = null</code> in the verdict, the task is graded by trajectory error for its entire horizon, and the verdict states explicitly ("this task never left trajectory-grading within the horizon") rather than leaving <code>trust_horizon</code>'s formula (below) without an upper bound.</li>
+          <li><strong>Conditioned climatology, concretely (design-review fix — bin-edge method and reference-run length were previously unstated numbers in a document that otherwise pins every constant):</strong> the reference statistics (per-dimension mean and standard deviation of state) of the true world <em>restricted to the invariant's value</em>, computed by binning <strong>one continuous 200,000-step reference trajectory per world</strong> (harness-generated, null action, from the world's training-region centre — long enough that every bin below has ≥50 samples for both worlds, checked by an assertion at generation time) by conserved-quantity value into <strong>16 equal-population bins</strong> (not equal-width — equal-population guarantees every bin has comparable sample size regardless of how the invariant's long-run distribution is shaped, which an equal-width scheme cannot guarantee for the pendulum's energy, whose long-run density is not uniform). At each compared step, the invariant is <em>measured from the true trajectory at that step</em> (TC-JU6-02's re-measured-not-frozen check; both action impulses and bounded integrator drift move the bin, per WD-3/JU-6). <strong>Out-of-range invariant values (design-review fix — a real case: WD-5's out-of-region starts and JU-6's own action-driven excursions can both reach invariant values the reference run never visited):</strong> the outermost bins are unbounded on their open side (the lowest bin's floor and the highest bin's ceiling are ±∞), so every possible invariant value falls in exactly one of the 16 bins by construction — no value is ever "outside the bins."</li>
           <li><strong>Statistical agreement score:</strong> past the switch, the model's predicted mean at each compared step is scored against the conditioned climatology as a standardised deviation <code>(pred_mean − clim_mean)/clim_sd</code>, averaged per dimension over the post-switch window; agreement holds when the average |z| ≤ 1. The threshold is part of <code>prereg/thresholds.json</code>.</li>
-          <li><strong>Trust horizon (JU-7):</strong> <code>trust_horizon(model, world, task) = the largest step h ≤ switch_step such that the model's median normalised error across trials at every step ≤ h stays within τ</code>. Always reported as (steps, steps × dt in world time units, fraction of the world's natural cycle for LV / seconds for the pendulum), and always attached to its task name and τ (TC-JU7-01/02). It is capped at the switch step by construction — beyond it, exact-path trust is not a claim anyone can earn (Lorenz).</li>
+          <li><strong>Trust horizon (JU-7):</strong> <code>trust_horizon(model, world, task) = the largest step h such that the model's median normalised error across trials at every step ≤ h stays within τ, capped at switch_step if switch_step is not null, else capped at the world's declared horizon H</code>. If the model fails tolerance even at step 1, <code>trust_horizon = 0</code> (an explicit, not implicit, convention — design-review fix). Always reported as (steps, steps × dt in world time units, fraction of the world's natural cycle for LV / seconds for the pendulum), and always attached to its task name and τ (TC-JU7-01/02). It is capped at the switch step by construction — beyond it, exact-path trust is not a claim anyone can earn (Lorenz).</li>
         </ul>
       </div>
     </details>
@@ -482,11 +574,39 @@
         <span class="adr-status">Accepted</span>
       </summary>
       <div class="adr-body">
-        <h4>Context</h4>
-        <p>[Requirement: NF-2] [Test: TC-NF2-01]</p>
+        <h4>Status</h4>
+        <p>Accepted. [Requirement: NF-2] [Test: TC-NF2-01]</p>
 
         <h4>Decision</h4>
-        <p><strong>Decision:</strong> The full result set — benchmarks, training both unrigged models, all rollouts, judging, charts — completes in <strong>under 600 seconds wall-clock on a 4-core consumer laptop CPU</strong> (TC-NF2-01's <code>&lt;spec-value&gt;</code> = 600 s). Envelope: 200 trials × (700 + 5000) steps × 8 models ≈ 9M model-step calls, each a 2×64×64 MLP forward ≈ tens of kFLOPs — well under a minute of compute; training two small MLPs full-batch for a pinned epoch count dominates and is budgeted at ≤ 6 minutes combined. The budget includes headroom ≥ 30% on the reference machine class.</p>
+        <p>The full result set — benchmarks, training both unrigged models, all rollouts, judging, charts — completes in <strong>under 600 seconds wall-clock on a 4-core consumer laptop CPU</strong> (TC-NF2-01's <code>&lt;spec-value&gt;</code> = 600 s). Envelope: 200 trials × (700 + 5000) steps × 8 models ≈ 9M model-step calls, each a 2×64×64 MLP forward ≈ tens of kFLOPs — well under a minute of compute; training two small MLPs full-batch for a pinned epoch count dominates and is budgeted at ≤ 6 minutes combined. The budget includes headroom ≥ 30% on the reference machine class.</p>
+      </div>
+    </details>
+
+    <details class="adr" id="adr-j7">
+      <summary>
+        <span class="adr-id">ADR-J7</span>
+        <span class="adr-title">The seven JU-10 disclosures, authored verbatim</span>
+        <span class="adr-status">Accepted</span>
+      </summary>
+      <div class="adr-body">
+        <h4>Status</h4>
+        <p>Accepted. [Requirement: JU-10] [Test: TC-JU10-01, TC-JU10-02]</p>
+
+        <h4>Context (design-review fix)</h4>
+        <p>JU-10 and TC-JU10-01 both name seven required disclosures, but every prior draft of this spec only <em>counted</em> them (<code>`limitations.py` # the seven JU-10 disclosures as fixed text constants</code>) without ever writing the text — the Verdict schema literally showed a placeholder string. This project's own pattern (reporting.md ADR-R3 authors every chart caption verbatim, specifically so caption quality is reviewable before code exists) applies at least as strongly here, since JU-10 is one of the most credibility-critical requirements in the document.</p>
+
+        <h4>Decision — the seven fixed strings, stored as module-level constants in <code>wmj/judge/limitations.py</code> and emitted unchanged in every verdict's <code>limitations</code> array, in this order</h4>
+        <ol>
+          <li><code>"This method validates the middle of the distribution, not the extremes — it says nothing about how the model behaves on rare, disaster-scale events."</code></li>
+          <li><code>"This toy world validates the judging harness, not any real-world model — a clean result here is not evidence that a real world model is trustworthy."</code></li>
+          <li><code>"The judge, the models, and the thresholds share a single author. The blinding in JU-1 means the judge cannot favour a model for its identity — it does not mean this evaluation has banking's organisational independence: a separate team, reporting separately, empowered to challenge the model builder."</code></li>
+          <li><code>"This project borrows banking's backtesting and ex-ante-threshold practices, not its ongoing monitoring or its power to force a stop. Deciding who has the authority to act on a bad verdict is exactly the gap this project's source essay names — it is not solved here."</code></li>
+          <li><code>"The judge's own thresholds and metric choices are modelling decisions. They were fixed in advance and are not arbitrary, but they are not beyond challenge either."</code></li>
+          <li><code>"The toy worlds contain no genuine off-model surprises by construction (no randomness, no hidden state, no high-dimensional input) — this judge's behaviour when a model meets a real surprise is untested."</code></li>
+          <li><code>"'Control' and 'planning' name the tolerance regime used to grade a passive prediction, not a closed-loop decision. This judge does not test whether a model can choose its own actions to reach a goal — the actions it is graded against were chosen by someone else."</code></li>
+        </ol>
+
+        <p><code>limitations.py</code> exports these as a tuple <code>JU10_DISCLOSURES</code> with no parameters and no formatting logic — they are complete, final English sentences, identical in every verdict regardless of model or world, per JU-10's "at minimum" wording (a verdict may add more, per-run detail elsewhere, but never fewer or reworded versions of these seven).</p>
       </div>
     </details>
 
@@ -495,60 +615,80 @@
     <pre><code>wmj/judge/
   types.py        # JudgeInput, Verdict, Task/ToleranceView — frozen dataclasses, arrays+floats only,
                   # no name/id/provenance fields anywhere (JU-1; TC-JU1-01)
+  _normal.py      # Phi, phi, and the four fixed z_p constants (ADR-J1, ADR-J2)
   skill.py        # CRPS closed form, skill scores vs both baselines (ADR-J1)
+  distance.py     # the shared normalised-RMS distance metric (ADR-J5), imported by skill/climatology/horizon
   calibration.py  # coverage at the four levels, in/out region (ADR-J2)
   sharpness.py    # interval widths (ADR-J3)
-  exceptions.py   # trial-wise exception counts, binomial band assignment (ADR-J4)
-  climatology.py  # switch step, conditioned climatology agreement (ADR-J5)
+  exceptions.py   # trial-wise exception counts, binomial band assignment, hedge cross-flag (ADR-J4)
+  climatology.py  # switch step, conditioned climatology agreement, out-of-range/no-switch handling (ADR-J5)
   horizon.py      # trust horizons (ADR-J5)
-  verdict.py      # assembles the JU-9 record; refuses on any missing input (TC-JU9-02)
-  limitations.py  # the seven JU-10 disclosures as fixed text constants</code></pre>
+  verdict.py      # assembles the pure Verdict (JU-9); refuses on any missing input (TC-JU9-02)
+  limitations.py  # the seven JU-10 disclosures, verbatim (ADR-J7)</code></pre>
 
-    <p>Every public function: pure, typed, arrays in → values out. The package imports <code>numpy</code>, <code>math</code>, <code>dataclasses</code>, <code>typing</code> — nothing else (TC-NF6-01, TC-JU12-01, TC-JU13-01).</p>
+    <p>Every public function: pure, typed, arrays in → values out. The package imports <code>numpy</code>, <code>math</code>, <code>dataclasses</code>, <code>typing</code> — nothing else (TC-NF6-01, TC-JU12-01, TC-JU13-01). Nothing in this package reads a file, a clock, or an environment variable — <code>platform</code>, <code>prereg_commit</code>, and any other run-identifying metadata are the harness's concern, not the judge's (§5).</p>
 
-    <p><strong>JudgeInput (complete):</strong> predictions (mean, spread) <code>[n_trials, H, d]</code>, outcomes <code>[n_trials, H, d]</code>, baseline predictions (same shapes, one set per baseline), region labels per trial (+ axis), divergence curves per region <code>[H]</code>, conditioned-climatology table <code>(bin → mean[d], sd[d])</code> + per-step true invariant bins <code>[n_trials, H]</code>, task list (name, kind, τ, horizon), thresholds (bands, agreement threshold, interval levels), world time step dt and natural-cycle length. Nothing else — by type, nothing else <em>can</em> be passed (TC-JU1-01), and label-swap invariance is property-tested (TC-JU1-02).</p>
+    <p><strong>JudgeInput (complete):</strong> predictions (mean, spread) <code>[n_trials, H, d]</code>, outcomes <code>[n_trials, H, d]</code>, baseline predictions (same shapes, one set per baseline), region labels per trial (state axis, action axis, <strong>and the region's name string</strong> — design-review fix: a boolean in/out flag alone gives reporting and the climatology lookup no way to pick which named curve/table a trial belongs to once a world declares more than one out-region, which WD-5 explicitly permits), divergence curves per region <strong><code>[H+1]</code></strong> (design-review fix: matches the worlds-spec artefact's own <code>H+1</code>-length, 0-indexed convention exactly — see worlds v1.1 §5 — rather than the previously mismatched <code>[H]</code>), conditioned-climatology table (16 equal-population bins → mean[d], sd[d], each bin's invariant range) + per-step true invariant bins <code>[n_trials, H]</code>, task list (name, kind, τ, horizon), thresholds (bands, sharpness-hedge threshold, agreement threshold, interval levels), world time step dt and natural-cycle length. Nothing else — by type, nothing else <em>can</em> be passed (TC-JU1-01), and label-swap invariance is property-tested (TC-JU1-02).</p>
 
-    <h2 id="api-boundary-contracts">5. API Boundary Contracts — the Verdict record (JU-9)</h2>
+    <h2 id="api-boundary-contracts">5. API Boundary Contracts — the Verdict record (JU-9) and the harness envelope</h2>
 
-    <p>The complete schema reporting consumes; serialized canonically (cross-cutting ADR-002). One verdict per (model, world):</p>
+    <p><strong>The judge produces exactly one thing: a pure <code>Verdict</code>, containing only what its own arithmetic computed.</strong> Design-review Panels B and C both independently found the previous draft's Verdict schema carrying <code>is_fixture</code>, <code>model_ref</code>, and <code>meta.platform</code>/<code>meta.prereg_commit</code> — fields the judge cannot honestly produce (JU-1 forbids it from ever knowing <code>is_fixture</code> or a model's identity; JU-12 forbids it from reading the platform or git state). Those fields move to a <strong>harness-owned envelope</strong> that wraps the pure Verdict after the fact. There is now exactly one producer for each fact: the judge for everything inside <code>Verdict</code>, the harness for everything identifying <em>whose</em> verdict it is.</p>
+
+    <p><strong>The pure <code>Verdict</code> (serialized canonically, cross-cutting ADR-002):</strong></p>
 
     <pre><code>{
   "schema": "wmj-verdict/1",
   "world": "lv",
-  "model_ref": "opaque-index-3",
-  "is_fixture": false,
   "skill": {"per_task_region": [{"task": "lv-control", "region": "training",
     "vs_persistence": 0.41, "vs_linear": 0.28, "crps": 0.031}]},
-  "error_vs_horizon": {"steps": [1, 2, "..."], "median_error": ["..."],
+  "error_vs_horizon": {"steps": [0, 1, 2, "..."], "median_error": ["..."],
     "divergence_reference": ["..."], "region": "training"},
   "calibration": {"levels": [0.5, 0.8, 0.9, 0.95],
     "coverage_in_region": [0.52, 0.79, 0.9, 0.94],
     "coverage_out_region": [0.44, 0.71, 0.82, 0.88],
     "per_dimension": "..."},
   "sharpness": {"mean_width_90_in": 0.18, "mean_width_90_out": 0.21},
-  "exceptions": {"per_task": [{"task": "lv-control", "horizon_step": 1, "n_trials": 200,
-    "expected": 20, "observed": 27, "band": "green",
+  "exceptions": {"per_task": [{"task": "lv-control", "region": "training", "horizon_step": 1,
+    "n_trials": 200, "expected": 20, "observed": 27, "band": "green",
     "bands": {"green": [12, 29], "amber": [[8, 11], [30, 35]], "red": "outside"},
     "low_side_sharpness_flag": false}]},
+  "trials": {"per_task": [{"task": "lv-control", "region": "training", "horizon_step": 1,
+    "distance_unit": "rms-normalised (ADR-W3/ADR-J5, scalar even for multi-dimensional state)",
+    "outcome_distance": [0.08, "...(200 values, one per trial — distance from this trial's mean prediction to its true outcome)"],
+    "band_lo": [0.0, "...(always 0 — a distance is never negative)"],
+    "band_hi": [0.16, "...(the trial's stated 90% interval width in the same distance unit, from spread via ADR-J2/J3's z-multiplier)"],
+    "is_exception": [false, "..."]}]},
   "climatology": {"per_task": [{"task": "lv-planning", "switch_step": 214,
     "agreement_mean_abs_z": 0.6, "agrees": true}]},
   "trust_horizons": {"per_task": [{"task": "lv-control", "tolerance": 0.1,
     "steps": 118, "world_time": 2.36, "natural_units": "0.34 cycles"}]},
   "not_tested": ["genuine off-model surprises (WD-8)", "closed-loop action selection",
-    "ongoing monitoring", "..."],
-  "limitations": ["&lt;the seven JU-10 disclosures, fixed text&gt;"],
+    "ongoing monitoring", "the seven JU-10 disclosures cover the rest of this list"],
+  "limitations": ["&lt;the seven ADR-J7 strings, verbatim, in order&gt;"]
+}</code></pre>
+
+    <p><strong>Changes from the pre-review draft:</strong> <code>model_ref</code>, <code>is_fixture</code>, and <code>meta</code> are removed (moved to the envelope, below). <code>error_vs_horizon.steps</code> now starts at 0, matching the worlds-spec divergence artefact's own indexing exactly (design-review Important #1) — there is one shared step-zero origin for every step-indexed curve in the system. <code>exceptions.per_task</code> entries now carry a <code>region</code> field, matching the convention <code>calibration</code> and <code>error_vs_horizon</code> already used (design-review Important #2). A new <code>trials</code> block carries the per-trial outcome/band/exception arrays reporting's Chart 1 (the primary chart) actually needs to draw the 200 individual points and their bands — the pre-review schema only had aggregate counts, which cannot render that chart (design-review Critical finding on RP-1). <code>not_tested</code>'s example list is fully stated rather than trailing off with "..." (design-review Minor).</p>
+
+    <p><strong>The harness-owned envelope (<code>wmj/harness/results.py</code>, NOT part of the judge package):</strong></p>
+
+    <pre><code>{
+  "model_ref": "opaque-index-3",
+  "model_name": "ensemble",
+  "is_fixture": false,
+  "verdict": { "...the pure Verdict above..." },
   "meta": {"seed": 20260825, "platform": "linux-x86_64", "prereg_commit": "&lt;sha&gt;",
     "thresholds_file": "prereg/thresholds.json"}
 }</code></pre>
 
-    <p><code>model_ref</code> is an opaque index assigned by the harness — the judge never sees a name; the harness's index→name map lets reporting label charts (models spec §5). All six JU-9 field groups are mandatory: <code>verdict.py</code> raises rather than emitting a record with any of them missing or null (TC-JU9-01, TC-JU9-02).</p>
+    <p>The harness constructs one envelope per (model, world) immediately after calling the judge; this envelope — never the bare <code>Verdict</code> — is what's written to <code>out/verdicts/*.json</code> and handed to reporting. <code>model_ref</code> is an opaque index; the judge never sees a name or a fixture flag at any point in its call graph. All six JU-9 field groups (skill, error-vs-horizon, calibration+sharpness, exceptions, trust horizons, not-tested) are mandatory inside the pure <code>Verdict</code>: <code>verdict.py</code> raises rather than emitting a record with any of them missing or null (TC-JU9-01, TC-JU9-02).</p>
 
     <h2 id="integration-points">6. Integration Points</h2>
 
     <ul>
       <li><strong>← harness:</strong> builds <code>JudgeInput</code> from world artefacts + model rollouts; owns the prereg check (models spec ADR-M5) and passes <code>thresholds</code> as data — the judge never reads files (JU-12).</li>
-      <li><strong>→ reporting:</strong> consumes only <code>Verdict</code> records plus the harness's index→name/fixture map.</li>
-      <li><strong>Bands derivation script</strong> (<code>wmj/harness/derive_thresholds.py</code>): computes the binomial boundaries from (N, p, α-levels) and writes <code>prereg/thresholds.json</code>; run once, committed, never re-run after judging begins (JU-11; TC-JU11-01/02).</li>
+      <li><strong>→ harness:</strong> returns the pure <code>Verdict</code>; the harness (not the judge) wraps it in the envelope described in §5 before it reaches reporting or disk.</li>
+      <li><strong>→ reporting:</strong> consumes only the harness's <code>{model_ref, model_name, is_fixture, verdict, meta}</code> envelopes — never a bare <code>Verdict</code> and never a separately-maintained side map (the previous draft's "index→name/fixture map" is retired; the envelope carries everything reporting needs in one object, per Keeling's boundary-decision-capture principle).</li>
+      <li><strong>Bands derivation script</strong> (<code>wmj/harness/derive_thresholds.py</code>): computes the binomial boundaries from (N, p, α-levels) and the per-world sharpness-hedge threshold, and writes <code>prereg/thresholds.json</code>; run once, committed, never re-run after judging begins (JU-11; TC-JU11-01/02).</li>
     </ul>
 
     <h2 id="error-handling-edge-cases">7. Error Handling &amp; Edge Cases</h2>
@@ -558,6 +698,7 @@
       <li>σ = 0 in a stated spread → <code>ModelContractError</code> upstream (models spec); the judge additionally guards CRPS/coverage against σ ≤ 0 with a hard error, never a clamp.</li>
       <li>A trial whose true trajectory left the declared task's domain (e.g. LV clamp event) was already aborted upstream (worlds spec §7); the judge asserts input completeness (<code>n_trials</code> consistent across all arrays).</li>
       <li>Bands file with boundaries inconsistent with the declared (N, p, α) → the harness's certification check fails the run before judging (TC-JU11-02's mechanism).</li>
+      <li>A task whose divergence curve never crosses τ within the horizon → <code>switch_step = null</code>, not an error (ADR-J5); this is a reportable fact about the task, not a defect.</li>
     </ul>
 
     <h2 id="testing-strategy">8. Testing Strategy</h2>
@@ -579,23 +720,23 @@
           <td>TC-JU2-01</td>
         </tr>
         <tr>
-          <td>Error vs divergence on shared axes</td>
+          <td>Error vs divergence on shared axes, shared distance metric</td>
           <td>TC-JU3-01</td>
         </tr>
         <tr>
-          <td>Calibration/summary distinct; anti-gaming property</td>
+          <td>Calibration/summary distinct; anti-gaming property; fixed z_p constants</td>
           <td>TC-JU4-01, TC-JU4-02</td>
         </tr>
         <tr>
-          <td>Sharpness beats hedging; monotone</td>
+          <td>Sharpness beats hedging; monotone; absolute hedge threshold (not decile)</td>
           <td>TC-JU5-01, TC-JU5-02</td>
         </tr>
         <tr>
-          <td>Switch step + re-measured invariant</td>
+          <td>Switch step + re-measured invariant + no-switch and out-of-range-bin cases</td>
           <td>TC-JU6-01, TC-JU6-02</td>
         </tr>
         <tr>
-          <td>Trust horizon always task-attached, dual units</td>
+          <td>Trust horizon always task-attached, dual units, h=0 convention</td>
           <td>TC-JU7-01, TC-JU7-02</td>
         </tr>
         <tr>
@@ -603,11 +744,11 @@
           <td>TC-JU8-01, TC-JU8-02, TC-JU8-03</td>
         </tr>
         <tr>
-          <td>Complete verdict or none</td>
+          <td>Complete verdict or none; pure Verdict excludes identity fields</td>
           <td>TC-JU9-01, TC-JU9-02</td>
         </tr>
         <tr>
-          <td>Seven disclosures present; readable</td>
+          <td>Seven disclosures present verbatim; readable</td>
           <td>TC-JU10-01, TC-JU10-02 (judged)</td>
         </tr>
         <tr>
@@ -615,7 +756,7 @@
           <td>TC-JU11-01, TC-JU11-02</td>
         </tr>
         <tr>
-          <td>Purity under blocked environment</td>
+          <td>Purity under blocked environment (no meta fields computed in-package)</td>
           <td>TC-JU12-01</td>
         </tr>
         <tr>
@@ -642,6 +783,11 @@
           <td>1.0</td>
           <td>2026-08-25</td>
           <td>Initial version. CRPS chosen (ADR-J1); OQ-1/OQ-2 settled: N=200 independent trials, 90% interval, exact-binomial bands green [12,29] / amber [8,11]∪[30,35] / red beyond, derived by exact binomial CDF (verified in-session) and committed. OQ-5 runtime half settled: 600 s budget.</td>
+        </tr>
+        <tr>
+          <td>1.1</td>
+          <td>2026-08-25</td>
+          <td>Design-review fixes (design-review-001): moved <code>is_fixture</code>/<code>model_ref</code>/<code>meta</code> out of the judge-produced Verdict into a harness-owned envelope (JU-1/JU-12 purity); added the <code>trials</code> per-trial data block RP-1's chart needs; added <code>region</code> to <code>exceptions.per_task</code>; fixed <code>error_vs_horizon.steps</code> to 0-index matching worlds' artefact; pinned z_p constants and corrected the φ formula/vectorization strategy; restated the shared distance metric explicitly (ADR-J5); pinned climatology bin-edge method (16 equal-population bins) and reference-run length (200,000 steps), and defined out-of-range-bin and no-switch-step behaviour; replaced the undefined "bottom-decile" sharpness flag with an absolute pre-registered threshold; authored the seven JU-10 disclosures verbatim (ADR-J7, new).</td>
         </tr>
       </tbody>
     </table>

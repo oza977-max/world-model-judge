@@ -117,6 +117,11 @@ Given two different models under test,
 When each returns its uncertainty,
 Then both use identical units and dimensional structure, so JU-4/JU-8 can compare them without a conversion step.
 
+**TC-MU1-03** (added post-design-review) · scenario test · executable
+Given a model instance run through one rollout with a given action sequence, then `reset()`, then run through a second rollout with a different action sequence,
+When the second rollout's predictions are compared against a fresh instance of the same model run on the same second action sequence,
+Then the two match exactly — proving `reset()` actually clears rollout-local state rather than silently leaking it across rollouts, which would corrupt JU-8's independent-trials assumption undetected by any other case in this document.
+
 **TC-MU2-01** · scenario test · executable
 Given a model's verdict computation,
 When the persistence and linear-extrapolation baselines are missing from the input,
@@ -413,7 +418,7 @@ Then it contains no import from the worlds, models, or reporting packages — ch
 | WD-6 | TC-WD6-01, -02 | JU-7 | TC-JU7-01, -02 |
 | WD-7 | TC-WD7-01, -02 | JU-8 | TC-JU8-01, -02, -03 |
 | WD-8 | — (Won't; nothing to verify) | JU-9 | TC-JU9-01, -02 |
-| MU-1 | TC-MU1-01, -02 | JU-10 | TC-JU10-01, -02 |
+| MU-1 | TC-MU1-01, -02, -03 | JU-10 | TC-JU10-01, -02 |
 | MU-2 | TC-MU2-01, -02 | JU-11 | TC-JU11-01, -02 |
 | MU-3 | TC-MU3-01, -02, -03 | JU-12 | TC-JU12-01 |
 | MU-4 | TC-MU4-01 | JU-13 | TC-JU13-01 |
@@ -431,7 +436,7 @@ Then it contains no import from the worlds, models, or reporting packages — ch
 
 **Every Must and the one mechanically-testable Won't (JU-13) has at least one case. Zero orphan requirements, zero orphan cases.** WD-8 and MU-10 are the two Won'ts with nothing to verify by design (they describe absence, not behaviour).
 
-**Totals:** 69 test cases across 45 requirements (independently recounted after a verification pass — an earlier draft of this summary paragraph miscounted itself in three separate places; the numbers below are checked against the case list and the matrix above, not carried forward from that draft). 5 negative/phantom-gate cases (TC-WD3-02, TC-WD7-02, TC-NF1-02, TC-JU9-02, TC-JU11-02). 5 property-based cases (TC-JU1-02, TC-JU4-02, TC-JU5-02, TC-JU12-01, TC-NF6-01). 5 cases marked *judged* rather than *executable* (TC-MU6-02, TC-JU10-02, TC-RP5-01, TC-NF4-02, TC-NF5-01 — plain-language and human-comprehension checks that genuinely need a reader, not a script; TC-MU9-01 and TC-NF2-01 were reclassified to *executable* in this pass once their mechanical check was stated precisely). 3 cases explicitly pending an Open Question being fixed by the technical spec, marked with `<spec-value>` rather than guessed at here (TC-JU8-02, TC-NF2-01, TC-NF3-01). 2 cases marked *(supporting)* — they validate wiring between two requirements rather than being the primary coverage of either (TC-MU2-02, TC-JU8-03).
+**Totals:** 70 test cases across 45 requirements (69 in v1.0, independently recounted after a verification pass — an earlier draft of this summary paragraph miscounted itself in three separate places, checked against the case list and matrix rather than carried forward from that draft; +1 in this pass, TC-MU1-03, added after `/gvm-design-review` found `reset()`'s cross-rollout isolation had no test anywhere in v1.0). 5 negative/phantom-gate cases (TC-WD3-02, TC-WD7-02, TC-NF1-02, TC-JU9-02, TC-JU11-02). 5 property-based cases (TC-JU1-02, TC-JU4-02, TC-JU5-02, TC-JU12-01, TC-NF6-01). 5 cases marked *judged* rather than *executable* (TC-MU6-02, TC-JU10-02, TC-RP5-01, TC-NF4-02, TC-NF5-01 — plain-language and human-comprehension checks that genuinely need a reader, not a script; TC-MU9-01 and TC-NF2-01 were reclassified to *executable* in this pass once their mechanical check was stated precisely). 3 cases explicitly pending an Open Question being fixed by the technical spec, marked with `<spec-value>` rather than guessed at here (TC-JU8-02, TC-NF2-01, TC-NF3-01). 2 cases marked *(supporting)* — they validate wiring between two requirements rather than being the primary coverage of either (TC-MU2-02, TC-JU8-03).
 
 ---
 
