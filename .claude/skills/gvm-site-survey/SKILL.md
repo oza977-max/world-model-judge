@@ -9,7 +9,17 @@ description: Use when working with an existing codebase for the first time, befo
 
 Evaluates an existing codebase before work begins — the construction industry equivalent of surveying a site before renovation. Explores the architecture, identifies patterns, frameworks, and conventions in use, diagnoses the codebase's structural state, selects and locks in grounding experts based on what is found, and recommends the appropriate GVM pipeline entry point.
 
-**Pipeline position:** **`/gvm-site-survey`** → `/gvm-requirements` | `/gvm-tech-spec` | `/gvm-build` (routing depends on diagnosis)
+**Stage:** Pre-stage. **Status:** Entry point (brownfield), per Table A.1.
+
+## Book reference
+
+*The Grounded Vibe Methodology* (Quinn, working draft 2026) —
+Ch.19 Setup and Site Survey (p315); Ch.5 The Three-Tier Expert Model (p83);
+Appendix A §A.2 `/gvm-site-survey`.
+
+**Pipeline position:** **`/gvm-site-survey`** → `/gvm-requirements` | `/gvm-tech-spec` | `/gvm-build` | `/gvm-doc-review` (routing depends on diagnosis)
+
+The canonical full pipeline this survey routes into is: `/gvm-site-survey` (brownfield entry) OR `/gvm-init` (greenfield entry) → `/gvm-impact-map` (conditional) → `/gvm-requirements` → `/gvm-test-cases` → `/gvm-tech-spec` → `/gvm-design-review` → `/gvm-walking-skeleton` (conditional) → `/gvm-build` → `/gvm-code-review` → `/gvm-test` → `/gvm-explore-test` (conditional) → `/gvm-doc-write` → `/gvm-doc-review` → `/gvm-deploy`
 
 This is the entry point for existing codebases. Greenfield projects skip this and begin with Expert Calibration → `/gvm-requirements`.
 
@@ -84,7 +94,7 @@ Before Phase 1: Bootstrap GVM home directory per shared rule 14.
 
 1. SCOPE THE SURVEY — establish intent, concern areas, codebase size with the user
 2. RECONNAISSANCE — read directory structure, package files, configs, tech stack, test infrastructure, git archaeology, existing documentation
-3. ARCHITECTURAL MAPPING — identify patterns, modules, boundaries, data flow, conventions
+3. ARCHITECTURAL MAPPING — identify patterns, modules, boundaries, data flow, conventions (wide phase: module-per-agent fan-out per /gvm-graph — see Phase 2 details)
 4. DIAGNOSIS — score 6 dimensions (Coherence, Currency, Testability, Modularity, Documentation, Dependency Health) and classify into one of 5 scenarios (Coherent, Coherent but Outdated, Fractured, Mid-migration, Incoherent)
 5. EXPERT SELECTION — assemble project roster across all three tiers using roster-assembly.md, driven by what the codebase revealed
 6. ROUTE RECOMMENDATION — recommend pipeline entry point based on diagnosis and work type, present to user with rationale
@@ -155,7 +165,16 @@ Present a structured summary of findings to the user before proceeding to Phase 
 
 ### Phase 2 — Architectural Mapping
 
-Deeper analysis guided by the diagnostic experts. Read representative files, not every file.
+Deeper analysis guided by the diagnostic experts. **Phase 2 is a wide phase** — the per-module scans are independent units (the fake-edge test passes: no module's scan consumes another's output), so run it as a fan-out per `/gvm-graph`'s contract (`~/.claude/skills/gvm-graph/SKILL.md`) rather than a single sequential pass:
+
+1. **Fan out — one Sonnet-class agent per module/directory** identified in Phase 1 (cap and preview per gvm-graph). Each agent's prompt carries the five scanning lenses below (2.1–2.5) plus the relevant diagnostic-expert excerpts, and returns JSON findings in gvm-graph's shape `{finding, evidence, source, confidence}` with evidence anchored to `file:line`. A claim without a file:line anchor is discarded — this is Hard Gate 2 (READ ACTUAL CODE) applied per worker. Within its module each agent reads representative files — one or two examples per pattern, not every file.
+2. **Reduce with a script** — schema-validate, merge, and dedupe the per-module JSON; count modules that returned nothing.
+3. **Verify blind** — batched fresh-context checkers receive only each finding and its cited file:line evidence, never the worker transcripts; the code as it is on disk is the anchor. Outcomes: confirmed / disproven (drop) / unverifiable (keep, flagged).
+4. **Chair in the main loop** — synthesise the verified per-module findings into the single architectural map presented below. Per gvm-graph's fan-in guard, report "N of M modules returned nothing" and the unverifiable count in the survey rather than presenting a partial sweep as complete.
+
+For small codebases (a handful of modules), a single-context pass over the same five lenses is acceptable — state in the report which execution mode was used. Phases 3–5 (diagnosis, expert selection, route recommendation) are judgment work and stay single-context in the main loop — never graph them.
+
+The five scanning lenses every module agent applies:
 
 **2.1 Pattern Identification** (use the pattern recognition expert from the diagnostic panel)
 - What architectural pattern is in use? MVC, hexagonal, clean architecture, event-driven, CQRS, microservices, monolith, serverless?
@@ -336,7 +355,7 @@ Before writing, scan `site-survey/` for existing files and increment the counter
 3. **Architectural Map** — patterns identified, module boundaries, data flow, conventions
 4. **Health Scorecard** — the scored dimensions (Coherence, Currency, Testability, Modularity, Documentation, Dependency Health, and Usability if a UI is present) presented as a visual table with 1–5 scores. For mixed codebases, show per-area scores.
 5. **Diagnosis** — scenario classification with supporting evidence, showing how the score pattern maps to the scenario
-6. **Risk Areas** — hotspots, high-coupling zones, untested areas, areas of concern (prioritised as Critical / Important / Minor)
+6. **Risk Areas** — hotspots, high-coupling zones, untested areas, areas of concern (prioritised as Critical / Important / Minor; Critical means a consumer of this survey would take a wrong action if the item stood, not merely that it blocks the pipeline)
 7. **Diagnostic Experts Used** — which experts were loaded to conduct this survey, what role each played (pattern recognition, legacy assessment, data layer, boundary assessment), and which were cited in the diagnosis
 8. **Expert Coverage Assessment** — the output of the Expert Discovery and Persistence Process: which technologies, patterns, and domains are covered by existing experts (name the expert and reference file), which have gaps, and what was done about each gap (expert discovered, scored, added — or gap acknowledged)
 9. **Recommended Project Experts** — the assembled three-tier expert panel recommended for downstream pipeline phases, with a summary table: expert name, work, tier, classification, reference file, status (existing / newly added)
@@ -371,7 +390,7 @@ Mirrors the HTML content exactly:
 ## Context Window Management
 
 - Phase 1 uses broad, shallow reads — directory listings, config files, dependency files. Do not read entire source files.
-- Phase 2 reads representative files — one or two examples per module/pattern, not every file.
+- Phase 2 fans out one agent per module (per /gvm-graph), so no module's file reads enter the main context — only the reduced, verified JSON findings do. Each worker reads representative files — one or two examples per pattern, not every file.
 - For large codebases, use Grep to identify patterns rather than reading files end-to-end.
 - Present findings incrementally — don't accumulate the entire analysis in memory before writing (per shared rule 18).
 - Write the report as sections are completed, using Edit for updates.

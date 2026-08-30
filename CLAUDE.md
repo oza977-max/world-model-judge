@@ -86,24 +86,37 @@ exist specifically to give that risk a chance to resolve honestly.
 
 ## Method
 
-Built with the Grounded Vibe Methodology (`/gvm-*` skills, now committed at
+Built with the Grounded Vibe Methodology (`/gvm-*` skills, committed at
 `.claude/skills/` — project-scoped, so any session on this repo has them).
-Discovery is complete: risk assessment → requirements → test cases, all
-approved/written. Next stage is `/gvm-tech-spec`.
+Pipeline so far: risk assessment → requirements (v1.2, approved) → test
+cases (v1.0, 70 cases, independently verified) → tech spec (all 7 documents
+at v1.1) → design review (round 1: 10 Critical + 16 Important findings,
+all fixed same-session — see `design-review/design-review-001.html` and
+`reviews/calibration.md`, which also names the honest gap that those
+fixes were self-verified, not independently re-checked). Next stage is
+either a Round 2 design review or `/gvm-build` starting at P1-C01.
 
-**Correction (25 Aug 2026):** this section previously claimed expert panels
-were scored into `gvm-design-system/references/industry/model-risk.md`,
-`forecast-verification.md`, `ai-evaluation.md`, `world-models.md`, and
-`predictive-neuroscience.md`. That was stale. What's actually in the repo
-now, at that path, is GVM's own generic domain-reference library
-(`model-risk.md`, `market-risk.md`, `operational-risk.md`, `credit-risk.md`
-— reusable across any project, not scored for this one specifically). The
-five project-specific files this project's own expert panel was supposedly
-scored into do not exist anywhere found so far. The Expert Panel table in
-`requirements/requirements.md` is real and grounded, but its "single-pass
-scoring" honesty note refers to scoring artefacts that currently cannot be
-located or verified. Whoever picks this up next: either find those five
-files (an earlier session's output that never got committed) or re-run
-`/gvm-experts` to regenerate them properly, with the two-reviewer
-cross-check this time. Until then, treat the honesty note as understating
-the gap, not overstating it.
+The five project-specific expert-scoring files (`model-risk-world-model-judge.md`,
+`forecast-verification.md`, `ai-evaluation.md`, `world-models.md`,
+`predictive-neuroscience.md`) referenced by requirements.md's Expert Panel
+table exist and are scored, at `.claude/skills/gvm-design-system/references/industry/`
+— an earlier version of this note flagged them as missing; they were
+regenerated and verified later in the same session that wrote this
+correction, including catching and fixing a collision where a project-
+specific file was initially written over GVM's generic `model-risk.md`
+(restored; the project-specific one lives at the World-Model-Judge-suffixed
+filename instead).
+
+**Update (30 Aug 2026):** five of the `/gvm-*` skills were upgraded from a
+newer GVM version found in a sibling repo (`oza977-max/ai-raf-precheck`,
+public, confidentiality-scanned before import): `gvm-design-review`,
+`gvm-code-review`, `gvm-doc-review`, `gvm-site-survey` (each gained new
+defect-class panels — Security and ATAM-driven Quality-Attribute panels
+for design review), and `gvm-graph` (new — the fan-out/verify/merge
+orchestration engine that wide review phases now dispatch through, with
+independent blind verification built into the pattern rather than
+deferred to a later review round). All five still depend on the same
+`gvm-design-system/references/` library already in this repo. A sixth
+skill from that source, `verify`, was deliberately **not** imported — it
+is a project-specific verification checklist for that other repo's own
+product, not portable methodology.

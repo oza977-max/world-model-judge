@@ -9,9 +9,16 @@ description: Use when reviewing implementation code for quality, security, and s
 
 Reviews implementation code by dispatching parallel defect-class subagents. Each subagent scans for a specific *class* of defect, not a broad area of expertise. Panels are partitioned so their scanning mandates are orthogonal — minimal overlap, maximum first-pass coverage.
 
-**Pipeline position:** `/gvm-requirements` → `/gvm-test-cases` → `/gvm-tech-spec` → `/gvm-design-review (optional)` → `/gvm-build` → **`/gvm-code-review`** → `/gvm-test` → `/gvm-doc-write` → `/gvm-doc-review` → `/gvm-deploy`
+**Pipeline position:** `/gvm-site-survey` (brownfield entry) OR `/gvm-init` (greenfield entry) → `/gvm-impact-map` (conditional) → `/gvm-requirements` → `/gvm-test-cases` → `/gvm-tech-spec` → `/gvm-design-review` → `/gvm-walking-skeleton` (conditional) → `/gvm-build` → **`/gvm-code-review`** → `/gvm-test` → `/gvm-explore-test` (conditional) → `/gvm-doc-write` → `/gvm-doc-review` → `/gvm-deploy`
+
+**Stage:** Verification (Table A.1). **Status:** Mandatory for Full-mode verification — `/gvm-test` Full mode stops without a code review, and unresolved Critical findings stop Full-mode verification.
 
 This skill reviews code, not documents. For document review (requirements, test cases, specs), use `/gvm-doc-review`.
+
+## Book reference
+
+*The Grounded Vibe Methodology* (Quinn, working draft 2026) —
+Ch.7 Multi-Expert Panels and Defect-Class Partitioning (p123); Ch.8 Triage and Stopping Rules (p145); Ch.17 Verifying AI-Generated Code (p277); Appendix A §A.4 `/gvm-code-review`.
 
 **Shared rules:** At the start of this skill, load `~/.claude/skills/gvm-design-system/references/shared-rules.md` and follow all rules throughout execution. Load `~/.claude/skills/gvm-design-system/references/expert-scoring.md` when scoring experts.
 
@@ -28,7 +35,7 @@ The panel structure is grounded in published inspection research, not convention
 
 These steps are non-negotiable. If you skip any of them, the review output is invalid.
 
-1. **DISPATCH PANELS IN PARALLEL.** YOU MUST dispatch all panels as concurrent subagents via the Agent tool — all in a single message. If you review sequentially instead of in parallel, you are not executing this skill correctly. Parallel dispatch is the core value of this skill.
+1. **DISPATCH PANELS IN PARALLEL — per `/gvm-graph`'s contract.** YOU MUST dispatch all panels as concurrent subagents via the Agent tool — all in a single message. Fan-out mechanics (worker model routing, cap and preview, fan-in guard for failed panels, honesty check) follow `~/.claude/skills/gvm-graph/SKILL.md`. If you review sequentially instead of in parallel, you are not executing this skill correctly. Parallel dispatch is the core value of this skill.
 
 2. **LOAD EXPERT REFERENCES BEFORE DISPATCH.** Read the relevant expert sections from `architecture-specialists.md`, the relevant `domain/*.md` files, and `stack-specialists.md` BEFORE writing the dispatch prompts. Load domain files selectively from `~/.claude/skills/gvm-design-system/references/domain/` — see `domain-specialists.md` index for activation signals. Each panel prompt MUST include expert excerpts from these loaded files — if the experts in the prompts are generic descriptions rather than content loaded from the reference files, you skipped this step.
 
@@ -105,7 +112,7 @@ Panels are partitioned by defect class, not by expert domain (Basili: orthogonal
 
 **What to scan:** Every function signature, API endpoint, data structure, producer/consumer pair, and verdict string. Does the output match what the consumer expects? Do types align? Are error contracts honoured?
 
-**Experts assigned:** Keeling (decision capture — interface contracts), Clements (architectural views — producer/consumer alignment), Beck (test interface — mock at boundaries only), domain specialists relevant to the API.
+**Experts assigned:** Keeling (decision capture — interface contracts), Clements (architectural views — producer/consumer alignment), Metz (test interface — test the public API, mock at boundaries only), domain specialists relevant to the API.
 
 **Scanning method:** For each public interface, trace both the producer and consumer. Verify structural agreement: field names, types, required vs optional, error shapes. Flag any interface where producer and consumer specifications diverge.
 
@@ -151,11 +158,27 @@ Panels are partitioned by defect class, not by expert domain (Basili: orthogonal
 
 **What to scan:** Every named concept, term, variable, and convention. Is it called the same thing everywhere? Does it match the spec? Are patterns consistent?
 
-**Experts assigned:** Brooks (conceptual integrity — one concept, one name), Fowler (refactoring — intention-revealing names), project-specific experts from `specs/cross-cutting.md` conventions.
+**Experts assigned:** Brooks (conceptual integrity — one concept, one name), McConnell (*Code Complete* Ch. 11 — intention-revealing names), project-specific experts from `specs/cross-cutting.md` conventions.
 
 **Scanning method:** Build a glossary of every named concept from the spec. For each concept, verify it appears with the same name in every file that references it. Flag divergences.
 
-### Panel E: Stub Detection (honesty-triad)
+### Panel E: Concurrency & Ordering
+
+**What to scan:** Every point where two things can run at once or arrive out of order. Shared mutable state reachable from more than one thread, task, request, or process; lock acquisition sequences; check-then-act and read-modify-write sequences; `async`/`await` and Promise composition; and every assumption that event A is observed before event B.
+
+**Experts assigned:** Goetz (*Java Concurrency in Practice* — concurrency hazard taxonomy: data races, atomicity violations, visibility/publication errors, deadlock and lock-ordering inversion, unsafe object publication), Lamport ("Time, Clocks, and the Ordering of Events in a Distributed System", 1978 — the happens-before relation: an ordering assumption is only valid where a happens-before edge actually exists), stack specialists (the language's concurrency primitives and their documented hazards).
+
+**Scanning method:** For each piece of mutable state, enumerate every writer and every reader, and identify which concurrency domain each one runs in. For each pair that can overlap, ask whether a happens-before edge exists between them; if it does not, the ordering is an assumption, not a guarantee. Then scan specifically for:
+
+- **Races and shared mutable state** — module-level or instance state mutated from more than one concurrency domain without synchronisation; caches, memo tables, counters, and singletons written on request paths.
+- **Atomicity violations** — check-then-act (exists-then-create, empty-then-fill) and read-modify-write sequences composed from individually-safe operations. Each call being thread-safe does not make the sequence atomic.
+- **Lock ordering** — enumerate every acquisition path over two or more locks and verify a single global order. Any pair acquired in both orders is a deadlock, whether or not it has been observed.
+- **`async`/`await` misuse** — unawaited promises, fire-and-forget tasks whose failures are swallowed, `await` inside a loop that was meant to be concurrent, concurrent work sharing a non-reentrant client or transaction, and cancellation paths that leave state half-written.
+- **Ordering across process or network boundaries** — code that assumes messages arrive in send order, that a write is visible to the next read, that clocks are comparable across hosts, or that retries are safe without idempotence. Flag any such assumption not backed by an explicit mechanism (sequence number, version, idempotency key, transactional boundary).
+
+Panel E is always-on: it is dispatched in parallel with A, B, C and D every round, on every project. Where a codebase is genuinely single-threaded end to end, Panel E reports that finding explicitly rather than returning silently — a claimed absence of concurrency is itself an assumption worth stating.
+
+### Panel F: Stub Detection (honesty-triad, conditional)
 
 **What to scan:** Every function, method, or constant whose body is suggestive of a placeholder but whose name implies production behaviour. Three `violation_type` categories:
 
@@ -165,17 +188,17 @@ Panels are partitioned by defect class, not by expert domain (Basili: orthogonal
 
 **Experts assigned:** project-specific stub-detection rules from `gvm-code-review/references/stub-detection.md` (the heuristic file is loaded verbatim into the panel prompt, per honesty-triad ADR-107).
 
-**Scanning method:** Panel E receives a mechanically-assembled prompt from `_panel_e_prompt.assemble_panel_e_prompt(...)` containing `STUBS.md` (verbatim), the `.stub-allowlist` (verbatim), and the `stub-detection.md` section for the project's primary language. Findings are reconciled in synthesis: allowlist suppression via `_allowlist.load_allowlist(...)`, severity promotion via `_sd5_promotion.apply_sd5(...)`.
+**Scanning method:** Panel F receives a mechanically-assembled prompt from `_panel_e_prompt.assemble_panel_e_prompt(...)` containing `STUBS.md` (verbatim), the `.stub-allowlist` (verbatim), and the `stub-detection.md` section for the project's primary language. Findings are reconciled in synthesis: allowlist suppression via `_allowlist.load_allowlist(...)`, severity promotion via `_sd5_promotion.apply_sd5(...)`.
 
-Panel E is dispatched in parallel with A, B, C, D every round when `gvm-code-review/scripts/_panel_e_prompt.py` exists in the plugin tree (i.e., honesty-triad is active for this project) — this is rule **SD-1** (honesty-triad ADR-107). On projects without honesty-triad, Panel E is omitted.
+Panel F is dispatched in parallel with A, B, C, D, E every round when `gvm-code-review/scripts/_panel_e_prompt.py` exists in the plugin tree (i.e., honesty-triad is active for this project) — this is rule **SD-1** (honesty-triad ADR-107). On projects without honesty-triad, Panel F is omitted. (The script and helper names retain their `_panel_e_` prefix — they are file names, not panel letters.)
 
-**Out of scope for Panel E:** surfaced requirements. A code-level stub is *not* a record of a requirement gap; the two artefacts are distinct (shared rule 27). Panel E never emits a `surfaced_requirement` violation type and never proposes parking a finding in `STUBS.md` under a `## Surfaced Requirements` heading or a `STUB-SR-NN` ID. If Panel C (Logic & Completeness) or Panel D (Naming & Spec Compliance) surfaces a requirement gap, that finding is triaged separately during synthesis (step 5) and promoted to `requirements.md` via the three-option flow described there.
+**Out of scope for Panel F:** surfaced requirements. A code-level stub is *not* a record of a requirement gap; the two artefacts are distinct (shared rule 27). Panel F never emits a `surfaced_requirement` violation type and never proposes parking a finding in `STUBS.md` under a `## Surfaced Requirements` heading or a `STUB-SR-NN` ID. If Panel C (Logic & Completeness) or Panel D (Naming & Spec Compliance) surfaces a requirement gap, that finding is triaged separately during synthesis (step 5) and promoted to `requirements.md` via the three-option flow described there.
 
 ### Expert Assignment Rules
 
 1. Each expert is assigned to exactly one panel based on the primary defect class their framework addresses.
 2. The panel assignment determines what the expert scans for — an expert assigned to Panel B (Contracts) applies their framework to interface contract verification, not to general quality.
-3. If the project declares domain or stack specialists not covered by panels A-D, create a supplementary Panel E with a clear defect-class mandate (not "review for [domain] quality" — specify what class of defect to scan for).
+3. If the project declares domain or stack specialists not covered by panels A-F, create a supplementary Panel G with a clear defect-class mandate (not "review for [domain] quality" — specify what class of defect to scan for).
 
 ## Criteria by Round
 
@@ -198,9 +221,9 @@ Detection threshold varies by round (Green & Swets, Signal Detection Theory: lib
    ├── Read the project's specs/cross-cutting.md to see which experts are declared
    ├── Read relevant domain specs for their declared specialists
    ├── Load expert reference files (architecture-specialists, relevant domain/, relevant stack/)
-   ├── Assign each loaded expert to exactly one panel (A/B/C/D) based on their primary defect class
+   ├── Assign each loaded expert to exactly one panel (A/B/C/D/E) based on their primary defect class
    ├── If any domain has no expert coverage → expert discovery per shared rule 2
-   ├── If changed code covers a domain not in A-D → create Panel E with specific defect-class mandate
+   ├── If changed code covers a domain not in A-F → create Panel G with specific defect-class mandate
    └── Present panel assignments to user for confirmation
 
 3. LOAD CONTEXT
@@ -216,14 +239,16 @@ Detection threshold varies by round (Green & Swets, Signal Detection Theory: lib
    ├── If reviewing a build phase: read the build prompt and handover
    └── Log all loaded experts to activation CSV (per shared rule 1)
 
-4. DISPATCH PARALLEL AGENTS
-   ├── Use the Agent tool to dispatch panels A, B, C, D — ALL IN PARALLEL
-   ├── Add Panel E (Stub Detection) to the parallel dispatch when honesty-triad
+4. DISPATCH PARALLEL AGENTS (wide phase — run per /gvm-graph's contract:
+   │   ~/.claude/skills/gvm-graph/SKILL.md — cap and preview, retry-once-then-count-missing,
+   │   fan-in guard, honesty check; panel content below is this skill's own, not gvm-graph's)
+   ├── Use the Agent tool to dispatch panels A, B, C, D, E — ALL IN PARALLEL
+   ├── Add Panel F (Stub Detection) to the parallel dispatch when honesty-triad
    │   is active for this project (i.e., `gvm-code-review/scripts/_panel_e_prompt.py`
-   │   exists). Panel E's prompt is assembled mechanically by
+   │   exists). Panel F's prompt is assembled mechanically by
    │   `_panel_e_prompt.assemble_panel_e_prompt(...)` — STUBS.md and the
    │   `.stub-allowlist` are embedded verbatim, plus the language section from
-   │   `references/stub-detection.md`. Panel E findings are reconciled in
+   │   `references/stub-detection.md`. Panel F findings are reconciled in
    │   step 5 via `_allowlist.load_allowlist(...)` (suppression) and
    │   `_sd5_promotion.apply_sd5(...)` (severity promotion).
    ├── Each agent prompt includes:
@@ -236,7 +261,7 @@ Detection threshold varies by round (Green & Swets, Signal Detection Theory: lib
    │   │     Pass 1: Systematic scan — read each file line by line for your defect class
    │   │     Pass 2: Cross-reference scan — check relationships between files for your defect class"
    │   └── Output format: Expert, Severity, File:Line, Issue, Spec Reference, Fix
-   ├── Use model: sonnet for panel agents (breadth over depth)
+   ├── Use model: sonnet for panel agents (breadth over depth — per /gvm-graph model routing; synthesis stays main-loop)
    └── DUAL REVIEW (round 3+ per shared rule 16):
        ├── Dispatch a second set of panels IN PARALLEL with the calibrated panels
        ├── Blind panels receive the same files, experts, and defect-class mandates
@@ -267,7 +292,7 @@ Detection threshold varies by round (Green & Swets, Signal Detection Theory: lib
    │   ├── Classify each blind panel finding as: new, confirmed, regression, rediscovered, or noise
    │   ├── Merge new findings and regressions into the consolidated report
    │   └── Tag merged findings with their blind-review origin
-   ├── Prioritise: Critical > Important > Minor > Suggestion
+   ├── Prioritise: Critical > Important > Minor > Observation
    ├── EBT PHASE-4 ACKNOWLEDGEMENT (testing-mandates ADR-508):
    │   ├── If Panel B emitted any EBT contract/collaboration violations
    │   │   (`kind="rainsberger"`, `kind="metz"`, or `kind="mock-budget"`), surface a note to the
@@ -317,14 +342,14 @@ Detection threshold varies by round (Green & Swets, Signal Detection Theory: lib
    ├── Cross-cutting themes
    ├── Critical findings (must fix) with file:line and fix
    ├── Important findings (should fix)
-   ├── Minor + suggestions (grouped)
+   ├── Minor + observations (grouped)
    ├── Borderline filter results (R1): how many kept, how many discarded, filter ratio
    ├── Per-panel detail
    └── Log cited experts to activation CSV (per shared rule 1)
 
-7. SERIALISE FINDINGS — write the JSON sidecar (only when Panel E ran)
-   ├── If Panel E was NOT in this dispatch, skip — no sidecar is written
-   ├── Else, for each Panel E finding produced in step 5:
+7. SERIALISE FINDINGS — write the JSON sidecar (only when Panel F ran)
+   ├── If Panel F was NOT in this dispatch, skip — no sidecar is written
+   ├── Else, for each Panel F finding produced in step 5:
    │   ├── Compute the stable signature via `_sd5_promotion.compute_signature(file_path, symbol, heuristic_class, violation_type)`
    │   ├── Construct a `PanelEFinding` (9 fields per honesty-triad ADR-104):
    │   │   `expert, severity, file_line, issue, spec_reference, fix, violation_type, symbol, signature`
@@ -334,7 +359,7 @@ Detection threshold varies by round (Green & Swets, Signal Detection Theory: lib
    │   return NNN+1, mispairing the sidecar with the HTML.
    ├── Call `_findings_serialiser.serialise_findings(findings, path)` to write
    │   `code-review/code-review-NNN.findings.json` (NDJSON — one JSON object per line)
-   ├── If no Panel E findings: write a zero-byte sidecar so the consumer's
+   ├── If no Panel F findings: write a zero-byte sidecar so the consumer's
    │   "missing report" branch is preserved (an empty file still PASSes VV-4(a))
    └── The sidecar is consumed by `/gvm-test`'s `_review_parser.load(...)` for VV-4(a)
 
@@ -413,7 +438,7 @@ Return your structured findings. DO NOT write output files.
 | Field | Required | Description |
 |-------|----------|-------------|
 | **Expert** | Yes | Which expert's framework identified this issue |
-| **Severity** | Yes | Critical / Important / Minor / Suggestion / [BORDERLINE] (R1 only) |
+| **Severity** | Yes | Critical / Important / Minor / Observation / [BORDERLINE] (R1 only) |
 | **File:Line** | Yes | Exact file path and line number |
 | **Issue** | Yes | What is wrong, in one sentence |
 | **Spec Reference** | If applicable | Which ADR, spec section, or convention is violated |
@@ -445,7 +470,7 @@ A markdown table with columns: #, Severity, File, Issue, Expert, Status (open).
 | **Critical** | Security vulnerability, spec violation breaking functionality, dead code at architecture level |
 | **Important** | Type safety gap, missing accessibility, test coverage hole, design system violation |
 | **Minor** | Inconsistency, style issue, small coverage gap |
-| **Suggestion** | Alternative approach, optimization, future-proofing |
+| **Observation** | Alternative approach, optimization, future-proofing. Carries no severity — it is recorded for the practitioner's judgement and never gates a verdict. |
 | **[BORDERLINE]** | R1 only. Might be an issue — flagged for synthesis filtering. Converted to a severity or discarded during step 5. |
 
 ## Key Rules

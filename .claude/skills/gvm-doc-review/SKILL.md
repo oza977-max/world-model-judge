@@ -9,9 +9,20 @@ description: Use when reviewing documents for quality. Triggered by /gvm-doc-rev
 
 Reviews project documents by dispatching parallel defect-class subagents. Each subagent scans for a specific *class* of defect, not a broad area of quality. Panels are partitioned so their scanning mandates are orthogonal — minimal overlap, maximum first-pass coverage. Covers both pipeline artefacts (requirements, test cases, specs) and standalone documents (presentations, strategy, newsletters, training materials, user documentation). Auto-detects document types, presents a multi-select when multiple types are found, and outputs a scored HTML report with prioritised issues.
 
-**This skill is a quality gate.** It catches problems before they propagate downstream in the pipeline: `/gvm-requirements` → `/gvm-test-cases` → `/gvm-tech-spec` → `/gvm-build`.
+**This skill is a quality gate.** It catches problems before they propagate downstream.
+
+**Pipeline position:** `/gvm-site-survey` (brownfield entry) OR `/gvm-init` (greenfield entry) → `/gvm-impact-map` (conditional) → `/gvm-requirements` → `/gvm-test-cases` → `/gvm-tech-spec` → `/gvm-design-review` → `/gvm-walking-skeleton` (conditional) → `/gvm-build` → `/gvm-code-review` → `/gvm-test` → `/gvm-explore-test` (conditional) → `/gvm-doc-write` → **`/gvm-doc-review`** → `/gvm-deploy`
+
+**Stage: Release** (Table A.1), between `/gvm-doc-write` and `/gvm-deploy`. Because it reviews both pipeline artefacts (requirements, test cases, specs) and standalone documents, it MAY be invoked against any document at any point — reviewing requirements before `/gvm-test-cases`, for example, is a legitimate ad-hoc use. But its *pipeline* position is Release, and that is where it runs as a gate rather than as a favour.
+
+**Downstream consumer:** `/gvm-deploy` reads this skill's verdict as the input to its own Hard Gate 1 (quality gate check). A "not ready" verdict here blocks the release; a "ready with caveats" verdict forces `/gvm-deploy` to put the caveats to the user before tagging. The verdict is therefore not advisory — it is a machine-consumed release control.
 
 **Shared rules:** At the start of this skill, load `~/.claude/skills/gvm-design-system/references/shared-rules.md` and follow all rules throughout execution. Load `~/.claude/skills/gvm-design-system/references/expert-scoring.md` when scoring experts.
+
+## Book reference
+
+*The Grounded Vibe Methodology* (Quinn, working draft 2026) —
+Ch.7 Multi-Expert Panels and Defect-Class Partitioning (p123); Ch.8 Triage and Stopping Rules (p145); Appendix A §A.6 `/gvm-doc-review`.
 
 ## Methodological Basis
 
@@ -26,7 +37,7 @@ The panel structure is grounded in published inspection research, not convention
 
 These steps are non-negotiable. If you skip any of them, the review output is invalid.
 
-1. **DISPATCH PANELS IN PARALLEL.** YOU MUST dispatch all panels (A, B, C, D) as concurrent subagents via the Agent tool — all in a single message. If you review sequentially instead of in parallel, you are not executing this skill correctly. Parallel dispatch is the core value of defect-class partitioning.
+1. **DISPATCH PANELS IN PARALLEL — per `/gvm-graph`'s contract.** YOU MUST dispatch all panels (A, B, C, D) as concurrent subagents via the Agent tool — all in a single message. Fan-out mechanics (worker model routing, cap and preview, fan-in guard for failed panels, honesty check) follow `~/.claude/skills/gvm-graph/SKILL.md`. If you review sequentially instead of in parallel, you are not executing this skill correctly. Parallel dispatch is the core value of defect-class partitioning.
 
 2. **LOAD REVIEW CRITERIA BEFORE SCORING.** YOU MUST read:
    - (1a) `~/.claude/skills/gvm-doc-review/references/review-criteria.md` (this skill's local scoring rubrics)
@@ -250,7 +261,7 @@ The pass is opt-in: invoke via `/gvm-doc-review` with the `--integrity-pass` fla
 2e. **Log all loaded experts to activation CSV (per shared rule 1).**
 2f. **Load project calibration** — if `reviews/calibration.md` exists, load it. Count the number of score history rows to determine the current round number. Extract per-dimension benchmarks, anchor examples, and recurring findings. Set criteria: R1 = liberal, R2+ = strict (see Criteria by Round). If 2+ prior rows, dual review applies (shared rule 16).
 2g. **Load build checks** — if `reviews/build-checks.md` exists, load it. Active checks are used to update 'Last triggered' during the calibration update step.
-3. **Dispatch panels** — dispatch Panels A, B, C, D as parallel subagents via the Agent tool — ALL IN A SINGLE MESSAGE. Each panel prompt includes:
+3. **Dispatch panels** — this is a wide GVM phase: run the fan-out per `/gvm-graph`'s contract (`~/.claude/skills/gvm-graph/SKILL.md` — one bounded job per panel, cap and preview, retry-once-then-count-missing, fan-in guard, honesty check). Dispatch Panels A, B, C, D as parallel subagents via the Agent tool — ALL IN A SINGLE MESSAGE. Everything below is this skill's own content and is NOT covered by gvm-graph — it goes into the prompts exactly as specified. Each panel prompt includes:
    - Defect class mandate: "You scan for [class]. Do NOT scan for [other classes]."
    - Expert identities assigned to this panel (names + works — excerpted from loaded reference files)
    - ALL documents to review (every panel sees every document — partitioning is by defect class, not by document)
@@ -261,7 +272,7 @@ The pass is opt-in: invoke via `/gvm-doc-review` with the `--integrity-pass` fla
    - Criteria: "Liberal — flag borderlines as `[BORDERLINE]`" (R1) or "Strict — consumer FAIL only" (R2+)
    - Output format: Expert, Severity, Document:Section, Issue, Criteria Source, Fix (six fields — matches the canonical finding block in `pipeline-contracts.md`)
 
-   **Subagent model (per shared rule 22):** Dispatch all panel subagents with `model: sonnet`. They are reading and classifying, not synthesizing.
+   **Subagent model:** per `/gvm-graph`'s model routing (and shared rule 22): panel workers are Sonnet-class (`model: sonnet`) — they are reading and classifying, not synthesizing. Synthesis (step 3b onward) stays in the main loop, single context, per gvm-graph's chair rule.
 
    **DUAL REVIEW (round 3+ per shared rule 16):**
    - Dispatch a second set of panels IN PARALLEL with the calibrated panels
@@ -346,9 +357,11 @@ Issues are categorised into three tiers:
 
 | Tier | Label | Meaning | HTML Colour |
 |---|---|---|---|
-| **Critical** | Must fix before building | Blocks the pipeline. Missing requirements, untraceable tests, contradictory specs. | `#c0392b` (red) |
-| **Important** | Should fix soon | Weakens quality but doesn't block. Vague requirements, missing edge case tests, light spec sections. | `#e67e22` (orange) |
-| **Minor** | Nice to improve | Polish items. Wording improvements, optional coverage gaps, style inconsistencies. | `#7f8c8d` (grey) |
+| **Critical** | Consumer would take a wrong action | The consumer-FAIL criterion: a downstream consumer of this artefact — a skill, a builder, a reader — would act wrongly on it as written. Missing requirements, untraceable tests, contradictory specs. | `#c0392b` (red) |
+| **Important** | Fix unless a deferral is recorded | No consumer takes a wrong action, but quality is materially weakened. Fixed by default; deferring is permitted only if the deferral is recorded against the finding (per Hard Gate 7 — the user decides, not this skill). | `#e67e22` (orange) |
+| **Minor** | Practitioner discretion | Polish items. Wording improvements, optional coverage gaps, style inconsistencies. No obligation either way. | `#7f8c8d` (grey) |
+
+Severity is set by consumer impact, not by pipeline position. For standalone documents the six-test gate (Hard Gate 8) replaces the generic consumer-FAIL criterion, because "consumer" is a concrete downstream skill for pipeline artefacts and a reader for prose.
 
 ## Cross-Document Consistency Checks
 

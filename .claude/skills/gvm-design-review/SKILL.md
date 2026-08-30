@@ -13,9 +13,16 @@ Where `/gvm-doc-review` checks document quality and `/gvm-code-review` checks im
 
 This skill does not review documents for writing quality or code for implementation quality. It reviews designs for requirements coverage and expert-informed best practice.
 
-**Pipeline position:** `/gvm-requirements` → `/gvm-test-cases` → `/gvm-tech-spec` → **`/gvm-design-review`** → `/gvm-build`
+**Pipeline position:** `/gvm-site-survey` (brownfield entry) OR `/gvm-init` (greenfield entry) → `/gvm-impact-map` (conditional) → `/gvm-requirements` → `/gvm-test-cases` → `/gvm-tech-spec` → **`/gvm-design-review`** → `/gvm-walking-skeleton` (conditional) → `/gvm-build` → `/gvm-code-review` → `/gvm-test` → `/gvm-explore-test` (conditional) → `/gvm-doc-write` → `/gvm-doc-review` → `/gvm-deploy`
+
+**Stage:** Construction (Table A.1). **Status: Mandatory, blocking.** This skill is never optional. **DR-1** in `/gvm-build` refuses to start any build that is not backed by a cleared design review — cleared meaning a verdict of **"Build from this"** or **"Build with caveats"**, never **"Do not build"**. There is exactly one narrow waiver: chunks that touch only a single function, a single config value, or a doc file. Any chunk broader than that requires a cleared review.
 
 The design review sits between spec and build. The specs define the design; the design review validates it against requirements before implementation begins. It can also be triggered by `/gvm-site-survey` when diagnosing an existing codebase.
+
+## Book reference
+
+*The Grounded Vibe Methodology* (Quinn, working draft 2026) —
+Ch.7 Multi-Expert Panels and Defect-Class Partitioning (p123); Ch.11 Mechanical Enforcement: Gates Outside the Model's Discretion (p183); Ch.22 From Spec to Build (p377); Appendix A §A.3 `/gvm-design-review`.
 
 **Shared rules:** At the start of this skill, load `~/.claude/skills/gvm-design-system/references/shared-rules.md` and follow all rules throughout execution. Load `~/.claude/skills/gvm-design-system/references/expert-scoring.md` when scoring experts.
 
@@ -32,7 +39,7 @@ The panel structure is grounded in published inspection research, not convention
 
 These steps are non-negotiable. If you skip any of them, the review output is invalid.
 
-1. **DISPATCH PANELS IN PARALLEL.** YOU MUST dispatch all panels as concurrent subagents via the Agent tool — all in a single message. If you review sequentially instead of in parallel, you are not executing this skill correctly. Parallel dispatch is the core value of this skill.
+1. **DISPATCH PANELS IN PARALLEL — per `/gvm-graph`'s contract.** YOU MUST dispatch all panels as concurrent subagents via the Agent tool — all in a single message. Fan-out mechanics (worker model routing, cap and preview, fan-in guard for failed panels, honesty check) follow `~/.claude/skills/gvm-graph/SKILL.md`. If you review sequentially instead of in parallel, you are not executing this skill correctly. Parallel dispatch is the core value of this skill.
 
 2. **LOAD EXPERT REFERENCES BEFORE DISPATCH.** Read `architecture-specialists.md` and the relevant `domain/*.md` files from `~/.claude/skills/gvm-design-system/references/domain/` BEFORE writing the dispatch prompts. Load domain files selectively — see `domain-specialists.md` index for activation signals. Each panel prompt MUST include expert excerpts loaded from these files — generic descriptions are not a substitute for loaded content.
 
@@ -62,8 +69,8 @@ Before dispatching panels, verify:
 ## Input
 
 One of:
-- **Auto-detect** (no arguments) — scan `specs/` for all design content, dispatch all four defect-class panels
-- **Specific focus** — "review the data model" or "review the API contracts" — all four panels still run (they scan by defect class), but the focus narrows which spec sections are emphasised
+- **Auto-detect** (no arguments) — scan `specs/` for all design content, dispatch all five always-on defect-class panels (plus Panel F sub-panels where the utility tree calls for them)
+- **Specific focus** — "review the data model" or "review the API contracts" — all five always-on panels still run (they scan by defect class), but the focus narrows which spec sections are emphasised
 - **Site survey referral** — `/gvm-site-survey` passes specific concerns to investigate
 
 If invoked without arguments after `/gvm-tech-spec` completes, auto-detect design content from the specs and dispatch all panels.
@@ -113,15 +120,15 @@ Panels are partitioned by defect class, not by design domain (Basili: orthogonal
 
 ### Panel C: Structural Soundness
 
-**What to scan:** The architecture's internal consistency — dependency direction, state management, transaction/consistency boundaries, quality attribute support.
+**What to scan:** The architecture's internal consistency — dependency direction, state management, transaction/consistency boundaries, single responsibility, and whether the risky parts are designed rather than hand-waved. Security is **not** in scope here — it is Panel E's class. Quality attribute *scenarios* are Panel F's class; Panel C's concern is whether the structure holds together.
 
-**Experts assigned:** Bass & Kazman (quality attributes — does the architecture support the quality attribute scenarios in the requirements?), Fowler (patterns — are the structural patterns applied correctly and consistently?), Brooks (conceptual integrity — does the design feel like one mind designed it?), Fairbanks (risk-driven — are the architecturally significant, risky parts designed with sufficient thoroughness, or hand-waved?).
+**Experts assigned:** Fowler (patterns — are the structural patterns applied correctly and consistently?), Brooks (conceptual integrity — does the design feel like one mind designed it?), Fairbanks (risk-driven — are the architecturally significant, risky parts designed with sufficient thoroughness, or hand-waved?).
 
 **Scanning method:**
 
-**Pass 1 — Systematic scan:** For each component, module, or service in the specs, check: are dependencies acyclic? Is state managed in one place or scattered? Are transaction boundaries explicit? Does each component have a single responsibility? Are quality attribute scenarios (performance, security, availability) addressed by specific architectural decisions, not just stated as goals?
+**Pass 1 — Systematic scan:** For each component, module, or service in the specs, check: are dependencies acyclic? Is state managed in one place or scattered? Are transaction boundaries explicit? Does each component have a single responsibility?
 
-**Pass 2 — Cross-reference scan:** Trace across specs for structural consistency. Do the same patterns appear everywhere, or does each spec invent its own approach? Are there circular dependencies between specs? Does the overall architecture support the non-functional requirements, or does it only address the happy path? Flag any risky area (concurrency, distributed state, complex workflows) that lacks detailed design.
+**Pass 2 — Cross-reference scan:** Trace across specs for structural consistency. Do the same patterns appear everywhere, or does each spec invent its own approach? Are there circular dependencies between specs? Flag any risky area (concurrency, distributed state, complex workflows) that lacks detailed design.
 
 ### Panel D: Implementability
 
@@ -137,11 +144,40 @@ Panels are partitioned by defect class, not by design domain (Basili: orthogonal
 
 **Pass 3 — MVP-1 compliance scan:** Check whether the design supports MVP-1 (Minimum Viable Product first ordering). Does the design admit a thin end-to-end vertical slice that delivers user-visible value as the first chunk? Or does it force a horizontal build order — all data layer first, then all service layer, then all UI — that defers user-visible behaviour to the final phase? Flag designs that structurally prevent MVP-1, since `/gvm-tech-spec` Phase 5 will refuse to sequence chunks against them and `/gvm-build` Hard Gate 9 will refuse to start. Exemption is permitted for the four named project shapes (`library`, `refactor`, `performance-driven`, `fully-specified`) — confirm the design declares one if MVP-1 cannot be satisfied. Horizontal architectural consistency across slices is required and is NOT a violation; the rule is about the build *sequence*, not the design *shape*.
 
+### Panel E: Security
+
+**What to scan:** Every place the design meets something it does not control — untrusted input, an authenticated identity, a permission decision, a secret, a trust boundary between components, or data at rest and in transit. Does the design name its threats, or does it assume good behaviour?
+
+**Experts assigned:** Anderson (*Security Engineering*, 3rd ed. 2020 — threat-model first: state who the adversary is and what they want before choosing a control; defence in depth: no single control is load-bearing), Bratus, Patterson & Sassaman (LANGSEC, "Security Applications of Formal Language Theory", 2013 — every input is a language; recognise it fully before acting on it, and never parse the same input twice with two different parsers), domain and stack specialists where the design touches a regulated or high-risk domain.
+
+**Scanning method:**
+
+**Pass 1 — Systematic scan:** For each spec, enumerate the trust boundaries and, at each one, check: is there an explicit threat model naming the adversary and the asset, or only a stated goal ("the system will be secure")? Is authentication distinguished from authorisation, and is the authorisation decision made in one place? Are input-validating and input-consuming code the same recogniser, or can a value be validated in one shape and used in another? Are secrets, credentials, and keys given a declared storage, rotation, and blast radius? Is sensitive data classified, and does the design say what is encrypted, where, and against which threat?
+
+**Pass 2 — Cross-reference scan:** Trace an untrusted value from its entry point to every place it is stored, rendered, logged, or used in a query, and flag any hop where it crosses a boundary unvalidated or is re-interpreted by a second parser. Check that no single control carries the whole design (defence in depth): if one component is compromised, what else falls? Flag any security requirement in `requirements/requirements.md` that the design answers with an aspiration rather than a mechanism — that is a Critical finding, not a suggestion, because it cannot be built from.
+
+### Panel F: Quality Attributes (conditional — utility-tree driven)
+
+**What to scan:** The design's support for the quality attributes the requirements actually demand — performance, availability, scalability, modifiability, testability, usability, operability — assessed as concrete scenarios, not as adjectives.
+
+**Experts assigned:** Bass, Clements & Kazman (*Software Architecture in Practice*, 4th ed. 2021 — quality attribute scenarios and architectural tactics), plus domain and stack specialists for the attributes the tree prioritises.
+
+**Activation and construction (ATAM utility tree).** Panel F is the conditional row: it is not one fixed panel but a set of panels built per project from a **utility tree**, the prioritisation device from ATAM (the Architecture Tradeoff Analysis Method). Build the tree before dispatch:
+
+1. **Root:** "Utility" — the design's overall fitness for purpose.
+2. **Branches:** the quality attributes named or implied by the requirements and the non-functional sections of the specs. Do not invent branches the requirements do not motivate.
+3. **Leaves:** concrete quality attribute scenarios in the six-part form — *source, stimulus, artefact, environment, response, response measure*. "Fast" is not a leaf; "under 200 concurrent users, a search returns the first page in under 400ms at p95" is.
+4. **Rate each leaf twice:** importance to the business (H/M/L) and architectural risk (H/M/L).
+5. **Dispatch one Panel F sub-panel per (H,H) leaf cluster**, each with its own defect-class mandate naming the scenario it scans for and the tactics it expects to find. If no leaf rates (H,H), Panel F does not run — record in the report that the tree was built and produced no high-risk, high-importance scenarios, so the reader can see the check happened.
+
+Each sub-panel scans for one defect class: *the design states this quality attribute as a goal but implements no architectural tactic that would achieve it, or the tactic chosen trades away another (H,H) attribute without the tradeoff being acknowledged.* Record every such tradeoff — an unacknowledged tradeoff between two high-importance attributes is an Important finding at minimum.
+
 ### Expert Assignment Rules
 
 1. Each expert is assigned to exactly one panel based on the primary defect class their framework addresses.
 2. The panel assignment determines what the expert scans for — an expert assigned to Panel B (Contracts) applies their framework to interface contract verification, not to general quality.
-3. If the project declares domain or stack specialists not covered by panels A-D, create a supplementary Panel E with a clear defect-class mandate (not "review for [domain] quality" — specify what class of defect to scan for).
+3. Panels A, B, C, D and E are always-on. Panel F is conditional on the utility tree producing a high-importance, high-risk leaf.
+4. If the project declares domain or stack specialists not covered by panels A-F, create a supplementary Panel G with a clear defect-class mandate (not "review for [domain] quality" — specify what class of defect to scan for).
 
 ## Criteria by Round
 
@@ -159,7 +195,7 @@ Detection threshold varies by round (Green & Swets, Signal Detection Theory: lib
 1. RESOLVE SCOPE
    ├── Read specs/*.md to identify all design content
    ├── If invoked with a specific focus (e.g., "review the data model"),
-   │   note the focus but still dispatch all four panels — they scan by defect class, not domain
+   │   note the focus but still dispatch all five always-on panels — they scan by defect class, not domain
    ├── If invoked from /gvm-site-survey, read the survey report for specific concerns
    └── If no design content found in specs, tell the user
 
@@ -171,9 +207,13 @@ Detection threshold varies by round (Green & Swets, Signal Detection Theory: lib
    ├── Read the project's specs/cross-cutting.md to see which experts are declared
    ├── Read relevant domain specs for their declared specialists
    ├── Load expert reference files (architecture-specialists, relevant domain/, relevant stack/)
-   ├── Assign each loaded expert to exactly one panel (A/B/C/D) based on their primary defect class
+   ├── Assign each loaded expert to exactly one panel (A/B/C/D/E) based on their primary defect class
    ├── If any domain has no expert coverage → expert discovery per shared rule 2
-   ├── If the project declares specialists not covered by A-D → create Panel E with specific defect-class mandate
+   ├── BUILD THE ATAM UTILITY TREE (see Panel F): root Utility → quality-attribute branches
+   │   from the requirements → six-part scenario leaves → rate each (importance, risk).
+   │   Dispatch one Panel F sub-panel per (H,H) leaf cluster; if no leaf rates (H,H),
+   │   record that in the report and skip Panel F
+   ├── If the project declares specialists not covered by A-F → create Panel G with specific defect-class mandate
    └── Present panel assignments to user for confirmation
 
 4. LOAD CONTEXT
@@ -191,8 +231,10 @@ Detection threshold varies by round (Green & Swets, Signal Detection Theory: lib
    ├── Load industry domain file if applicable
    └── Log all loaded experts to activation CSV (per shared rule 1)
 
-5. DISPATCH PARALLEL PANELS
-   ├── Use the Agent tool to dispatch panels A, B, C, D (+ E if needed) — ALL IN PARALLEL
+5. DISPATCH PARALLEL PANELS (wide phase — run per /gvm-graph's contract:
+   │   ~/.claude/skills/gvm-graph/SKILL.md — cap and preview, retry-once-then-count-missing,
+   │   fan-in guard, honesty check; panel content below is this skill's own, not gvm-graph's)
+   ├── Use the Agent tool to dispatch panels A, B, C, D, E (+ F sub-panels and G if needed) — ALL IN PARALLEL
    ├── Each agent prompt includes:
    │   ├── Defect class mandate: "You scan for [class]. Do NOT scan for [other classes]."
    │   ├── Expert identities assigned to this panel (names + works — excerpted from canonical reference)
@@ -205,7 +247,7 @@ Detection threshold varies by round (Green & Swets, Signal Detection Theory: lib
    │   │     Pass 2: Cross-reference scan — trace across specs and against requirements for your defect class"
    │   ├── Depth mode (quick scan or full review)
    │   └── Project calibration data (if available)
-   ├── Use model: sonnet for panel agents
+   ├── Use model: sonnet for panel agents (per /gvm-graph model routing; chair/synthesis stays main-loop)
    └── DUAL REVIEW (round 3+ per shared rule 16):
        ├── Dispatch a second set of panels IN PARALLEL with the calibrated panels
        ├── Blind panels receive the same specs, requirements, experts, and defect-class mandates
@@ -253,7 +295,7 @@ Detection threshold varies by round (Green & Swets, Signal Detection Theory: lib
    │   ├── Classify each blind panel finding as: new, confirmed, regression, rediscovered, or noise
    │   ├── Merge new findings and regressions into the consolidated report
    │   └── Tag merged findings with their blind-review origin
-   └── Prioritise: Critical > Important > Minor > Suggestion
+   └── Prioritise: Critical > Important > Minor > Observation
 
 7. WRITE REPORT
    ├── Output HTML only to design-review/design-review-{NNN}.html (no paired MD — shared rule 13 exception for review reports)
@@ -269,7 +311,7 @@ Detection threshold varies by round (Green & Swets, Signal Detection Theory: lib
    ├── Cross-cutting themes
    ├── Critical findings (must fix) with spec location and fix
    ├── Important findings (should fix)
-   ├── Minor + suggestions (grouped)
+   ├── Minor + observations (grouped)
    ├── Borderline filter results (R1): how many kept, how many discarded, filter ratio
    ├── Per-panel detail
    └── Score per defect class (0-10) with rubric anchors (full review only)
@@ -306,7 +348,7 @@ Detection threshold varies by round (Green & Swets, Signal Detection Theory: lib
 When `/gvm-site-survey` identifies design concerns in an existing codebase, it can recommend `/gvm-design-review` with specific focus areas. When invoked with a site survey referral, the design review:
 
 1. Reads the site survey report for the specific concerns
-2. Dispatches all four defect-class panels (defect classes apply regardless of the concern's domain)
+2. Dispatches all five always-on defect-class panels (defect classes apply regardless of the concern's domain)
 3. For existing codebases without formal specs, reads code artefacts directly: schema files for data models, component trees for UI structure, route definitions for API contracts
 4. Reports back with explicit reference to the survey findings: "The site survey flagged X. This review confirms/contradicts the concern."
 
@@ -329,12 +371,14 @@ Scan for existing files and increment. Use the Read tool to load both `~/.claude
 2. **Requirements Coverage Matrix** — every requirement ID mapped to design coverage status (from Panel A)
 3. **Panel A Findings: Requirements Coverage** — requirement-by-requirement traceability, orphan design elements, INVEST compliance
 4. **Panel B Findings: Interface Contracts** — contract mismatches, schema-business rule alignment, error contract consistency
-5. **Panel C Findings: Structural Soundness** — dependency cycles, state management, quality attribute support, risk coverage
+5. **Panel C Findings: Structural Soundness** — dependency cycles, state management, transaction boundaries, risk coverage
 6. **Panel D Findings: Implementability** — ambiguous specs, tech stack mismatches, vertical slice feasibility
-7. **Cross-Panel Themes** — issues that span multiple panels (elevate severity for multi-panel findings)
-8. **Borderline Filter Results** (R1 only) — how many kept, how many discarded, filter ratio
-9. **Scores** — per defect class, 0-10 with rubric anchors and concrete deductions (full review only)
-10. **What Prevents a Higher Score** — per `review-reference.md`, state each sub-10 dimension gap. Placement: after scores, before expert panel.
+7. **Panel E Findings: Security** — unstated threat models, trust-boundary gaps, input-recognition defects, single-control designs
+8. **Panel F Findings: Quality Attributes** — the utility tree (branches, leaves, importance/risk ratings), findings per (H,H) sub-panel, and unacknowledged tradeoffs. State explicitly when the tree produced no (H,H) leaf and Panel F did not run
+9. **Cross-Panel Themes** — issues that span multiple panels (elevate severity for multi-panel findings)
+10. **Borderline Filter Results** (R1 only) — how many kept, how many discarded, filter ratio
+11. **Scores** — per defect class, 0-10 with rubric anchors and concrete deductions (full review only)
+12. **What Prevents a Higher Score** — per `review-reference.md`, state each sub-10 dimension gap. Placement: after scores, before expert panel.
 
 ## Severity Definitions
 
@@ -343,7 +387,7 @@ Scan for existing files and increment. Use the Read tool to load both `~/.claude
 | **Critical** | Requirement has no design representation at all — cannot be built from this design |
 | **Important** | Design partially covers requirement but with gaps — buildable but incomplete |
 | **Minor** | Design covers requirement but violates expert best practice — functional but suboptimal |
-| **Suggestion** | Alternative approach that would improve the design — not a gap |
+| **Observation** | Alternative approach that would improve the design — not a gap. Carries no severity — recorded for the practitioner's judgement and never gates the verdict. |
 | **[BORDERLINE]** | R1 only. Might be an issue — flagged for synthesis filtering. Converted to a severity or discarded during step 6. |
 
 ## Key Rules
@@ -355,7 +399,7 @@ Scan for existing files and increment. Use the Read tool to load both `~/.claude
 5. **Two passes per panel** — systematic scan (spec by spec) then cross-reference scan (trace across specs and against requirements). This mitigates the satisfaction-of-search effect (Drew & Wolfe: scanning for one class at a time prevents premature termination).
 6. **Liberal R1, strict R2+** — R1 uses a low detection threshold to maximise recall (Green & Swets: liberal criterion). R2+ applies the Finding Quality Gate (consumer FAIL only).
 7. **Capture-recapture after R1** — estimate remaining defect population from panel overlaps (Wohlin: Lincoln-Petersen estimator). This converts "should we do R2?" from a guess into a calculation.
-8. **Requirements are the standard** — the design is reviewed against requirements, not against abstract best practice. A design that violates an expert principle but correctly implements the requirements is noted as a suggestion, not a critical finding.
+8. **Requirements are the standard** — the design is reviewed against requirements, not against abstract best practice. A design that violates an expert principle but correctly implements the requirements is noted as an observation, not a critical finding.
 9. **Coverage matrix is mandatory** — every design review must produce a requirement-by-requirement coverage check. The user should see at a glance which requirements have design coverage and which don't.
 10. **Existing codebases work without specs** — when invoked after a site survey, the review reads code artefacts directly (schema files, component trees, route definitions) instead of spec documents.
 11. **Experts who find should fix** — per shared rule 3. Design gaps identified by a panel should be resolved using the same experts' principles.
