@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>World Model Judge — Design Review 002</title>
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+
+    body {
+      font-family: "ET Book", Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif;
+      color: #111;
+      background: #fffff8;
+      line-height: 1.6;
+      padding: 2rem 1rem 6rem;
+      max-width: 1480px;
+      margin: 0 auto;
+    }
+
+    /* ── Typography ── */
+    h1 {
+      font-size: 2.4rem;
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.4rem;
+      color: #111;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 400;
+      font-style: italic;
+      margin-top: 3rem;
+      margin-bottom: 1rem;
+      color: #111;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 0.3rem;
+    }
+
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-top: 2rem;
+      margin-bottom: 0.6rem;
+      color: #333;
+    }
+
+    p, li {
+      font-size: 1rem;
+      line-height: 1.7;
+      margin-bottom: 0.8rem;
+      max-width: 1000px;
+    }
+
+    ul, ol { padding-left: 1.4rem; margin-bottom: 1.2rem; }
+    li { margin-bottom: 0.4rem; }
+
+    .subtitle {
+      font-size: 1.1rem;
+      font-style: italic;
+      color: #555;
+      margin-bottom: 2.5rem;
+      max-width: 1000px;
+    }
+
+    .date {
+      font-size: 0.9rem;
+      color: #888;
+      margin-bottom: 0.2rem;
+    }
+
+    /* ── Floating TOC (Left Side) ── */
+    nav.toc {
+      position: fixed;
+      top: 2rem;
+      left: 2rem;
+      width: 220px;
+      max-height: calc(100vh - 4rem);
+      overflow-y: auto;
+      background: #fffff8;
+      border-right: 2px solid #ddd;
+      padding: 1rem 1rem 1rem 0;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      z-index: 100;
+    }
+
+    nav.toc .toc-title {
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #999;
+      margin-bottom: 0.6rem;
+    }
+
+    nav.toc a {
+      color: #555;
+      text-decoration: none;
+      display: block;
+      padding: 0.15rem 0;
+      transition: color 0.15s;
+    }
+
+    nav.toc a:hover { color: #111; }
+    nav.toc a.active { color: #111; font-weight: 600; }
+    nav.toc .toc-h3 { padding-left: 0.8rem; font-size: 0.78rem; color: #888; }
+    nav.toc .toc-h3:hover { color: #555; }
+
+    /* Offset main content for left TOC */
+    main {
+      margin-left: 260px;
+      max-width: 1000px;
+    }
+
+    /* ── Sidenotes (Right Margin) ── */
+    .sidenote {
+      float: right;
+      clear: right;
+      width: 220px;
+      margin-right: -260px;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      color: #666;
+      padding-left: 1rem;
+      border-left: 2px solid #e0e0e0;
+    }
+
+    /* ── Tables (Few's principles) ── */
+    table {
+      border-collapse: collapse;
+      margin: 1.5rem 0 2rem;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      width: auto;
+      min-width: 480px;
+    }
+
+    thead th {
+      text-align: left;
+      font-weight: 600;
+      padding: 0.5rem 1rem 0.5rem 0;
+      border-bottom: 2px solid #333;
+      color: #111;
+    }
+
+    tbody td {
+      padding: 0.45rem 1rem 0.45rem 0;
+      border-bottom: 1px solid #e8e8e8;
+      vertical-align: top;
+    }
+
+    tbody tr:last-child td { border-bottom: 2px solid #333; }
+    tbody tr:nth-child(even) { background: #f9f9f4; }
+
+    caption {
+      font-style: italic;
+      font-size: 0.88rem;
+      color: #666;
+      text-align: left;
+      margin-bottom: 0.4rem;
+    }
+
+    /* ── Requirement Blocks ── */
+    .req {
+      background: #f7f7f0;
+      border-left: 3px solid #999;
+      padding: 0.8rem 1rem;
+      margin: 1rem 0 1.2rem;
+      max-width: 1000px;
+    }
+
+    .req-id {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.2rem;
+    }
+
+    .req p { margin-bottom: 0.3rem; }
+
+    /* ── Inline Code ── */
+    code {
+      font-family: "Menlo", "Consolas", "Monaco", monospace;
+      font-size: 0.88rem;
+      background: #f0f0e8;
+      padding: 0.1rem 0.35rem;
+      border-radius: 2px;
+    }
+
+    /* ── Verdict Box (review components) ── */
+    .verdict {
+      border: 2px solid #333;
+      padding: 1.2rem 1.5rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+    }
+
+    .verdict-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+      margin-bottom: 0.3rem;
+    }
+
+    .verdict-text {
+      font-size: 1.3rem;
+      font-weight: 400;
+      color: #111;
+      margin-bottom: 0.4rem;
+    }
+
+    .verdict-basis {
+      font-size: 0.88rem;
+      color: #555;
+      max-width: 1000px;
+    }
+
+    .verdict.ready { border-color: #27ae60; background: #f0faf4; }
+    .verdict.ready .verdict-text { color: #27ae60; }
+
+    .verdict.caveats { border-color: #e67e22; background: #fef8f0; }
+    .verdict.caveats .verdict-text { color: #e67e22; }
+
+    .verdict.not-ready { border-color: #c0392b; background: #fdf0ef; }
+    .verdict.not-ready .verdict-text { color: #c0392b; }
+
+    /* ── Review Components (score card, issues, criteria) ── */
+    .score-card {
+      background: #f7f7f0;
+      border: 2px solid #333;
+      padding: 1.5rem 2rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+      text-align: center;
+    }
+
+    .overall-score {
+      font-size: 2.4rem;
+      font-weight: 400;
+      color: #111;
+      margin-bottom: 0.8rem;
+    }
+
+    .score-breakdown {
+      display: flex;
+      justify-content: space-around;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .score-item {
+      font-size: 0.88rem;
+      color: #555;
+    }
+
+    .issue {
+      border-left: 3px solid;
+      padding: 0.8rem 1rem;
+      margin: 0.8rem 0;
+      max-width: 1000px;
+    }
+
+    .issue.critical {
+      border-left-color: #c0392b;
+      background: #fdf0ef;
+    }
+
+    .issue.important {
+      border-left-color: #e67e22;
+      background: #fef8f0;
+    }
+
+    .issue.minor {
+      border-left-color: #7f8c8d;
+      background: #f7f7f4;
+    }
+
+    .issue-title {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 0.3rem;
+    }
+
+    .issue-detail {
+      font-size: 0.92rem;
+      color: #555;
+      margin-bottom: 0.3rem;
+    }
+
+    .issue-location {
+      font-size: 0.78rem;
+      color: #999;
+      font-style: italic;
+    }
+
+    .criterion {
+      display: flex;
+      align-items: baseline;
+      gap: 0.8rem;
+      margin: 0.6rem 0;
+      max-width: 1000px;
+    }
+
+    .criterion-name {
+      font-weight: 600;
+      color: #333;
+      min-width: 160px;
+    }
+
+    .criterion-score {
+      font-size: 0.85rem;
+      font-weight: 600;
+      min-width: 40px;
+    }
+
+    .criterion-score.high { color: #27ae60; }
+    .criterion-score.mid { color: #e67e22; }
+    .criterion-score.low { color: #c0392b; }
+
+    .criterion-note {
+      font-size: 0.88rem;
+      color: #666;
+    }
+
+    /* ── GVM Attribution ── */
+    .gvm-attribution {
+      font-size: 0.75rem;
+      color: #999;
+      font-style: italic;
+      text-align: center;
+      margin-top: 3rem;
+      margin-bottom: 0;
+      max-width: none;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 1200px) {
+      nav.toc {
+        position: static;
+        width: 100%;
+        max-height: none;
+        border-right: none;
+        border-bottom: 1px solid #ddd;
+        padding: 1rem 0;
+        margin-bottom: 2rem;
+      }
+      main { margin-left: 0; }
+      .sidenote {
+        float: none;
+        width: 100%;
+        margin: 0.8rem 0;
+        padding: 0.6rem 0 0.6rem 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="toc" id="toc">
+    <div class="toc-title">Contents</div>
+  </nav>
+
+  <main>
+    <p class="date">Round 2 (full depth, strict criteria) · 7 panels including Security & ATAM · 30 August 2026</p>
+    <h1>World Model Judge — Design Review 002</h1>
+    <p class="subtitle">Independent re-scanning of all seven specification documents with two new panel types (Security, Quality Attributes). Verification that Round 1's 26 fixes hold cleanly; discovery of 8 new Critical and 9 new Important findings.</p>
+
+    <h2 id="verdict">Verdict</h2>
+    <div class="verdict not-ready">
+      <div class="verdict-label">Verdict</div>
+      <div class="verdict-text">Do not build</div>
+      <p class="verdict-basis">Round 2 confirms most of Round 1's fixes hold cleanly (16 of 26 verified CONFIRMED-RESOLVED), but strict independent re-scanning with two new defect classes (Security, Quality-Attribute scenarios) surfaced 8 new Critical and 9 new Important findings — a defect population comparable in size to Round 1's. Three of Round 1's own fixes proved only partially resolved, and one (the double-pendulum EOM) introduced a new, more dangerous defect: a coefficient error baked self-consistently into the reference test values, which the test suite as specified cannot detect. This is not a process failure — it is exactly what a genuine Round 2 is for.</p>
+    </div>
+
+    <h2 id="executive-summary">Executive Summary</h2>
+    <p>Seven independent panels scanned all specifications under strict, narrower criteria than Round 1. Five of Round 1's findings reappeared independently from different angles in different panels, confirming those findings' robustness. Two new panel types (Security, ATAM-driven Quality Attributes) revealed gaps the original four panels' lenses could not reach. Most significantly: two separate panels (F1 Reproducibility and E Security) converged independently on the same root mechanism being insufficient (the AST import-graph gate), examining it from different angles and finding two distinct loopholes — independence-convergence, the methodology's strongest available confidence signal.</p>
+
+    <p>The pattern of findings has shifted subtly but importantly from Round 1. Round 1's defects were primarily in specification <em>incompleteness</em> (missing field names, unstated constants, unnamed edge cases). Round 2's defects are in specification <em>inconsistency</em>: a required field omitted from a mandatory-list; a trust horizon that lacks a region axis, defeating the entire reason the region axis was added to other blocks; two different definitions of "exception" that the specification claims cannot disagree. This points to a process fix: when a fix touches a shared artefact (a schema, a total count, a formula), re-derive or recount it from scratch rather than trusting the delta was applied everywhere it's referenced.</p>
+
+    <h2 id="part-1">Part 1 — Round 1 Fix Verification</h2>
+
+    <h3 id="confirmed-resolved">Confirmed-Resolved (16 of 26 — hold cleanly under strict re-scan)</h3>
+
+    <table>
+      <caption>Table 1 — Round 1 findings verified independently to hold after v1.1 fixes</caption>
+      <thead>
+        <tr><th>#</th><th>Finding</th><th>Verified by</th><th>Note</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>C1</td><td><code>is_fixture</code> conflicting producers</td><td>B, C</td><td>Envelope split holds; single producer confirmed</td></tr>
+        <tr><td>C2</td><td>Verdict <code>meta</code> ambient access</td><td>C</td><td>Moved to envelope, judge purity intact</td></tr>
+        <tr><td>C4</td><td>Climatology underspecification (3 axes)</td><td>B, C</td><td>Producer contract, bin scheme, edge cases all consistent across worlds.md/judge.md</td></tr>
+        <tr><td>C5</td><td>WD-3 gate nonexistent component</td><td>B, C, D</td><td>Two real checks, buildable as written</td></tr>
+        <tr><td>C7</td><td><code>z_p</code> not derivable from erf</td><td>D</td><td>Table present, independently verified against standard normal-quantile values</td></tr>
+        <tr><td>C8</td><td><code>fx-honest-rough</code> spread formula</td><td>D</td><td>Formula verified correct (independent-Gaussian variance addition)</td></tr>
+        <tr><td>C10</td><td>Unpinned training constants</td><td>D</td><td>Init/NLL/batching/ε all pinned and internally consistent</td></tr>
+        <tr><td>—</td><td><code>trial_boundaries</code> removed</td><td>B</td><td>Clean across cross-cutting/models/judge</td></tr>
+        <tr><td>—</td><td><code>exceptions.per_task.region</code></td><td>B</td><td>Present in schema</td></tr>
+        <tr><td>—</td><td>Trust horizon <code>natural_units</code> / Chart 4 3 units</td><td>B</td><td>All three units present and rendered</td></tr>
+        <tr><td>—</td><td>Shared distance-metric restatement</td><td>B</td><td>judge.md and worlds.md cite the same formula both ways</td></tr>
+        <tr><td>—</td><td>Region-name join key</td><td>B</td><td>Consistent vocabulary across worlds.md/models.md</td></tr>
+        <tr><td>—</td><td>Divergence-curve step-indexing</td><td>B</td><td>0-indexed, <code>H+1</code>, consistent both sides</td></tr>
+        <tr><td>—</td><td>JU-8 bottom-decile → absolute threshold</td><td>C</td><td>Concrete, pre-registered, traceable</td></tr>
+        <tr><td>—</td><td>LV clamp-handling contradiction</td><td>C</td><td>Unified rule, no scope exceptions remain</td></tr>
+        <tr><td>—</td><td>Architecture-overview's false "no second metric" self-check</td><td>C</td><td>Corrected claim verified against both judge.md ADRs</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="partially-resolved">Partially Resolved / Regressed (3 of 26)</h3>
+
+    <p><strong>C3 — Chart 1 (RP-1) per-trial data.</strong> The <code>trials</code> block was added, but two new gaps surfaced under strict re-scan (Panel B): a field-name mismatch inside reporting.md itself (<code>outcome</code> cited in one place, <code>outcome_distance</code> — the schema's actual field — in another), and the X-axis ordering rule requires a start-state-distance-from-region-centre value that doesn't exist anywhere in judge.md's schema, with reporting.md structurally unable to derive it (reporting "computes no metric of its own"). Panel C independently found a second angle on the same block: JU-9's mandatory-field list doesn't include <code>trials</code> or <code>climatology</code>, so <code>verdict.py</code> isn't actually required to refuse a Verdict missing them — undermining the fail-loudly guarantee for the one chart this fix was written to unblock.</p>
+
+    <p><strong>C6 — Double-pendulum EOM.</strong> The hand-waving ("textbook equations") is gone — worlds.md §4.2 now states θ̈₁, θ̈₂, and E explicitly. But Panel D re-derived the equal-mass case from Euler–Lagrange and found <code>denom1</code>/<code>denom2</code> and θ̈₁'s leading gravity term use coefficient <code>2·m</code> where the correct general-mass formula <code>(2m₁+m₂)</code> specializes to <code>3·m</code>. Because the spec states its own hand-verified TC-WD1-01 reference constants are computed from this exact formula, the bug is now self-consistently embedded in what the test suite treats as ground truth — the fix is confidently wrong in a way the original vague version could not have been, since nothing built against "textbook equations, unspecified" could have silently shipped a wrong constant.</p>
+
+    <p><strong>C9 — Implementation guide sequencing.</strong> The core fix (P2-C05, a genuine second early real-chart slice) is sound and demonstrable — Panel D confirmed the chunk itself, its dependency wiring, and its Wiring Matrix row all check out. But the guide's own chunk-count bookkeeping is wrong (28 actual chunks, not the "24" stated four separate times), and the guide's claim that P2-C05 "shares no files with any Phase 3 chunk" is false: both P2-C05 and P3-C02 target <code>wmj/models/baselines.py</code> per the models.md component design and the guide's own Wiring Matrix naming, and running them in parallel as explicitly recommended would produce a merge conflict or silent overwrite.</p>
+
+    <h2 id="part-2">Part 2 — New Findings</h2>
+
+    <h3 id="critical-findings">Critical (8 new)</h3>
+
+    <div class="issue critical">
+      <div class="issue-title">NEW-C1 (Panel A) — The NF-4 confidentiality-scan mechanism instructs a maintainer to commit the exact secrets NF-4 forbids</div>
+      <p class="issue-detail"><code>scan_repository()</code> walks tracked files via <code>git ls-files</code>, and <code>wmj/harness/confidentiality.py</code> — the module implementing the scan — is itself one of those tracked files. The spec's own remediation instruction ("the actual private seed list … is added to this file directly") tells a future maintainer to write the literal forbidden term into a Python string constant inside a file that will be committed to a public repository with, per CLAUDE.md, "no window in which a mistake could be quietly fixed." Following the ADR exactly as written causes the violation it exists to prevent. Compounding: <code>FORBIDDEN_TERMS</code> is currently an empty list, so the scan can never find a match and passes vacuously regardless of repository contents — the one gate this project calls out as having "real, checkable teeth" currently has none, and cannot get any without the self-defeating step above.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">NEW-C2 (Panel C) — <code>trust_horizon</code> carries no region field, defeating the project's own headline mechanism</div>
+      <p class="issue-detail"><code>judge.md</code>'s trust-horizon formula and Verdict schema (<code>trust_horizons.per_task</code>) have no region axis, unlike <code>exceptions.per_task</code> and <code>error_vs_horizon</code>, which do (and which the v1.1 changelog says were fixed for exactly this reason). But <code>fx-brittle</code> exists specifically to be "great at home, catastrophic away — only the in/out region split surfaces it" (MU-3/ADR-M4). Without a region-conditioned trust horizon, the headline comparison table (RP-4) — the metric this project's own fixture roster was built to demonstrate — cannot show the phenomenon it exists to reveal.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">NEW-C3 (Panel C) — JU-9's mandatory-field list omits <code>trials</code> and <code>climatology</code>, undermining fail-loudly for the primary chart</div>
+      <p class="issue-detail"><code>judge.md</code> §5 names six mandatory field groups explicitly, excluding the two newest top-level blocks. This directly contradicts cross-cutting's own Error-Handling rule 1 ("a required verdict field that cannot be computed → the run aborts; no partial record is written") and risks the exact failure mode Round 1 was trying to close: RP-1, a Must-requirement chart, silently undrawable with no abort.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">NEW-C4 (Panel D) — Double-pendulum equations of motion contain a coefficient error</div>
+      <p class="issue-detail">See C6 above (Part 1). Listed here as a fresh, independently-derived Critical finding in its own right: a physics bug in the ground-truth generator, embedded self-consistently in the test suite's own reference values, undetectable by any test in the current design.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">NEW-C5 / NEW-C6 (Panel B) — Chart 2 and Chart 3 each need a data field the schema doesn't carry</div>
+      <p class="issue-detail">Chart 2 (RP-2) requires a grey baseline error-vs-horizon curve; <code>error_vs_horizon</code>'s schema has no baseline field, and reporting "computes no metric of its own" so cannot derive one. Chart 3 (RP-3) requires N (sample size, N=200) to compute binomial standard-error bars; the <code>calibration</code> schema block carries no such field, forcing either an undeclared hardcoded duplicate of ADR-J4's constant or a boundary violation of reporting's own "no metric computed" rule. Both are the same defect class as the original C3 finding (a Must-requirement chart needing data the schema doesn't supply), recurring on two more of the four required charts.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">NEW-C7 (Panel F1) — The only described purity-enforcement gate doesn't catch ambient reads</div>
+      <p class="issue-detail">cross-cutting's AST-walk gate (<code>test_import_graph.py</code>) is scoped to block <code>wmj.*</code> imports inside <code>wmj.judge</code> — it says nothing about <code>os</code>, <code>time</code>, <code>sys</code>, or similar direct ambient reads. Same-machine repeated-run tests (TC-NF1-01) would not reliably catch this class, since an ambient read (e.g., a working directory or hostname) is often stable across ten consecutive runs on one machine while still violating NF-1's explicit cross-machine scope.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">NEW-C8 (Panel E) — The same gate also misses dynamic imports</div>
+      <p class="issue-detail">Independently, Panel E found that <code>importlib.import_module("wmj.models")</code> called from inside <code>wmj.judge</code> would not trip the AST-walk gate as described (it scans <code>Import</code>/<code>ImportFrom</code> nodes, not arbitrary function calls), giving JU-1/JU-12's blindness guarantee a second, distinct bypass route through the identical mechanism.</p>
+      <p class="issue-detail"><em>Note:</em> NEW-C7 and NEW-C8 are listed separately because they are different loopholes, but both indict the same single mechanism — see Cross-Panel Themes.</p>
+    </div>
+
+    <h3 id="important-findings">Important (9 new)</h3>
+
+    <table>
+      <caption>Table 2 — Important findings from Round 2 panels</caption>
+      <thead>
+        <tr><th>#</th><th>Panel</th><th>Finding</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>I-1</td><td>C</td><td><code>trials.is_exception</code> (a scalar RMS-distance-vs-band-width test) and <code>exceptions.per_task.observed</code> (a per-dimension joint hyper-rectangle test) are two independently-computed, unreconciled definitions of "exception" — RP-1 could visibly disagree with its own caption count, directly contradicting reporting.md's claim that "a chart/verdict disagreement is structurally impossible."</td></tr>
+        <tr><td>I-2</td><td>E</td><td>NF-4's scan is content-only (<code>git ls-files</code> + file contents) — commit messages and git history are never scanned, and are permanent on a public repo once pushed, in tension with CLAUDE.md's "no window to quietly fix a mistake" framing.</td></tr>
+        <tr><td>I-3</td><td>E</td><td>MU-6's "publish either way" clause is procedural only — nothing detects or prevents a quietly-withheld unfavorable pre-registered run; none of JU-10's seven disclosures cover this specific residual risk.</td></tr>
+        <tr><td>I-4</td><td>E</td><td>No spec-parity mechanism exists between <code>requirements.md</code> (what downstream specs and the build read) and <code>requirements.html</code> (what a human likely approves against) — the two could silently diverge.</td></tr>
+        <tr><td>I-5</td><td>F1</td><td>The new harness-owned envelope (<code>results.py</code>) is never explicitly stated to go through cross-cutting's canonical serializer — the one artefact NF-1's byte-comparison test actually inspects may not be covered by the mechanism designed to guarantee its byte-identity.</td></tr>
+        <tr><td>I-6</td><td>F2</td><td>TC-MU9-01's "repository diff shows zero lines changed outside the new model's file" has no named enforcement mechanism, unlike every sibling gate (NF-6's AST walk, NF-4's <code>git ls-files</code> scan) — a weaker behavioral test could satisfy the test ID without catching a real coupling regression.</td></tr>
+        <tr><td>I-7</td><td>D</td><td>Chunk-count mismatch: implementation-guide.md states "24 chunks" four times; the actual count (independently recounted twice) is 28.</td></tr>
+        <tr><td>I-8</td><td>D</td><td>P2-C05 and P3-C02 both target <code>wmj/models/baselines.py</code>; the guide's claim that P2-C05 "shares no files with any Phase 3 chunk" is unsupportable as written and risks a real merge conflict if followed literally.</td></tr>
+        <tr><td>I-9</td><td>F2</td><td>The registry mechanism's independence (F2 score 7/10) relies on a convention (each model registers itself exactly once) — no runtime check prevents a second, shadowing registration if two models mistakenly call the same registration ID.</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="minor-observations">Minor / Observation</h3>
+
+    <ul>
+      <li>NF-4's forbidden-terms list is deliberately unenumerated (defensible design choice, but leaves only prose guidance for future additions) — Panel E.</li>
+      <li>No logging architecture exists yet anywhere in the specs, so the "could a model name leak via judge-side logging" question has no live channel today — worth a one-line check whenever logging is designed — Panel E.</li>
+      <li>P2-C05's acceptance criterion ("caption matches the ADR-R3 template with real numbers substituted") is vacuous for Chart 2, whose caption template has no numeric slots — Panel D.</li>
+      <li>P5-C01 (rebuilding <code>reporting.style</code>) isn't described with the same explicit "extends" language P5-C03 gets, though the intent is inferable — Panel D.</li>
+      <li><strong>Positive finding (Panel E):</strong> the type-level blindness control (<code>JudgeInput</code> as a plain array/float dataclass with structurally nowhere to place a model identity) is genuine defence in depth, independent of the import gate — the one boundary in this review that holds up cleanly against a "two disagreeing recognisers" test.</li>
+    </ul>
+
+    <h2 id="cross-panel-themes">Cross-Panel Themes</h2>
+
+    <h3 id="theme-1">1. The AST import-graph gate is the sole described enforcement of judge-purity, and two independent panels found it insufficient from two different angles</h3>
+
+    <p>NEW-C7 (ambient reads) and NEW-C8 (dynamic imports) converged independently from unrelated panels examining the gate for different reasons. Per this methodology's confidence rule, independent convergence from unrelated panels is the strongest available signal — this is not two guesses, it's the same weak point found twice by people looking for different things.</p>
+
+    <h3 id="theme-2">2. The <code>trials</code> block, added in v1.1 specifically to unblock RP-1, is still not fully wired</h3>
+
+    <p>Panel B found it from the interface-contract angle (field-name mismatch, missing X-ordering source data) and Panel C found it from the structural angle (missing from JU-9's mandatory list, disagreeing definition of "exception" with the older <code>exceptions</code> block). The block exists, but three of four panels who could have touched it found a different way it doesn't yet close the loop.</p>
+
+    <h3 id="theme-3">3. A pattern of "the fix removed the vague version but replaced it with a wrong precise one" appears twice</h3>
+
+    <p>The double-pendulum EOM (hand-waved → precisely, confidently wrong) and the chunk count (an honest "we added one chunk" claim → a wrong arithmetic total asserted four times). Precision without a recount is not the same as correctness.</p>
+
+    <h2 id="score-per-defect-class">Score per Defect Class</h2>
+
+    <table>
+      <caption>Table 3 — Panel scores, Round 1 vs Round 2 comparison</caption>
+      <thead>
+        <tr><th>Panel</th><th>Round 1</th><th>Round 2</th><th>Trend</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>A — Requirements Coverage</td><td>8/10</td><td>7/10</td><td>New Critical (NF-4 self-defeat) outweighs the two confirmed fixes</td></tr>
+        <tr><td>B — Interface Contracts</td><td>4/10</td><td>5/10</td><td>7 of 9 fixes hold; but 2 new chart-data gaps found on the remaining 2 required charts</td></tr>
+        <tr><td>C — Structural Soundness</td><td>5/10</td><td>4/10</td><td>All 6 fixes hold, but 2 new Criticals (trust_horizon region, JU-9 field list) on core mechanisms</td></tr>
+        <tr><td>D — Implementability</td><td>4/10</td><td>5/10</td><td>Most fixes hold; 1 new Critical (physics bug), 2 new Important (bookkeeping)</td></tr>
+        <tr><td>E — Security (new)</td><td>—</td><td>6/10</td><td>Zero Critical (threat model is genuinely low-stakes: offline, single-author, no auth) but 4 real Important gaps in otherwise well-specified mechanisms</td></tr>
+        <tr><td>F1 — Reproducibility (new)</td><td>—</td><td>5/10</td><td>1 Critical (ambient-read gap), 1 Important (serializer link) in an otherwise sound determinism strategy</td></tr>
+        <tr><td>F2 — Separability (new)</td><td>—</td><td>7/10</td><td>Registry mechanism and envelope split hold cleanly; 1 real gap in test enforcement</td></tr>
+      </tbody>
+    </table>
+
+    <p><em>Note:</em> No overall single number, per <code>review-reference.md</code> (Marzano: independent dimensions, not one collapsed score).</p>
+
+    <h2 id="what-prevents-higher-score">What Prevents a Higher Score</h2>
+
+    <p>The same root cause as Round 1, recurring: specification precision is uneven across the same document. Sections that were the direct target of a named Round-1 finding (z_p, training constants, fixture formulas) are now airtight — independently re-derived and verified correct. Sections that were touched only as a side effect of a Round-1 fix (the <code>trials</code> block's mandatory-field status, the pendulum EOM's actual coefficients, the chunk-count arithmetic after adding one chunk) were not re-verified with the same rigour, and each has a genuine defect.</p>
+
+    <p>This suggests a process fix worth naming for future rounds: <strong>when a fix changes a shared artefact (a schema block, a total count, a formula), re-derive or recount that artefact from scratch rather than trusting the delta was applied correctly everywhere it's referenced.</strong></p>
+
+    <p class="gvm-attribution">Developed using the Grounded Vibe Methodology</p>
+  </main>
+
+  <script>
+    (function () {
+      const toc = document.getElementById('toc');
+      const headings = document.querySelectorAll('h2[id], h3[id]');
+      const links = [];
+
+      headings.forEach(function (h) {
+        const a = document.createElement('a');
+        a.href = '#' + h.id;
+        a.textContent = h.textContent;
+        if (h.tagName === 'H3') a.classList.add('toc-h3');
+        toc.appendChild(a);
+        links.push({ el: a, target: h });
+      });
+
+      function onScroll() {
+        let current = links[0];
+        for (let i = 0; i < links.length; i++) {
+          if (links[i].target.getBoundingClientRect().top <= 80) current = links[i];
+        }
+        links.forEach(function (l) { l.el.classList.remove('active'); });
+        if (current) {
+          current.el.classList.add('active');
+          const tocEl = document.getElementById('toc');
+          const elTop = current.el.offsetTop - tocEl.offsetTop;
+          const elBot = elTop + current.el.offsetHeight;
+          if (elTop < tocEl.scrollTop || elBot > tocEl.scrollTop + tocEl.clientHeight) {
+            tocEl.scrollTop = elTop - tocEl.clientHeight / 2;
+          }
+        }
+      }
+
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    })();
+  </script>
+</body>
+</html>
