@@ -1,6 +1,8 @@
 # World Model Judge — Architecture Overview
 
-Version 1.3 · 30 August 2026 · Synthesises: cross-cutting v1.3, worlds v1.2, models v1.3, judge v1.3, reporting v1.3
+Version 1.4 · 31 August 2026 · Synthesises: cross-cutting v1.4, worlds v1.3, models v1.4, judge v1.4, reporting v1.4
+
+> **Change note (v1.4).** Revised in the design-review-004 repair session. Version references updated to the v1.4 spec suite (worlds v1.3). The NF-4 credibility line in §4 no longer mentions a "CI-vs-local enforcement gap": Round 4 found the CI layer was a phantom — no CI system is built, configured, or listed anywhere in this design, and this document's own §1 System Context says there are no external systems beyond git — so cross-cutting v1.4 deleted the claim rather than building the contradiction; the two real enforcement layers (pre-commit hook, `wmj run` startup gates) are what §4 now names. See design-review-004.html and the repair entry in reviews/calibration.md.
 
 > **Change note (v1.3).** Revised after `/gvm-design-review` design-review-003 (Round 3, dual/blind — 14 independent reviewers). Version references updated to the v1.3 spec suite. No new conceptual-integrity finding this round — Rounds 1–2's fixes to this document held under independent re-check. See design-review-003.html for the full findings, including the two Build Checks promoted to `reviews/calibration.md` (schema/consumer granularity mismatch; self-verified enforcement-mechanism fixes requiring adversarial pressure-testing).
 
@@ -48,7 +50,7 @@ One deployable unit; the containers are the five packages plus two artefact stor
                                             └────────────▶[reporting]───▶[out/]
 ```
 
-(design-review fix: the judge returns only a pure `Verdict`; the harness — never the judge — attaches identity and run metadata, per judge spec v1.3 §5, and writes the resulting envelope through the same canonical serializer as every other byte-compared artefact, cross-cutting v1.3 ADR-002 rule 4.)
+(design-review fix: the judge returns only a pure `Verdict`; the harness — never the judge — attaches identity and run metadata, per judge spec v1.4 §5, and writes the resulting envelope through the same canonical serializer as every other byte-compared artefact, cross-cutting v1.4 ADR-002 rule 4.)
 
 - **`wmj.worlds`** — LV + pendulum, shared RK4 integrator, divergence benchmark, regions, tasks. Pure functions of (state, action).
 - **`wmj.models`** — baselines, fixtures, the direct/ensemble pair; registry-only discovery. Sees `(state, action)` arrays, never world internals.
@@ -80,7 +82,7 @@ The judge's isolation is the load-bearing wall: everything else may know about t
 ## 4. Quality Attributes (how the ASRs are answered)
 
 - **Reproducibility (NF-1, WD-7, MU-8):** the four ADR-002 rules + the ten-run byte gate + `wmj verify`. Platform-scoped, stated in the manifest.
-- **Credibility (NF-4, NF-5, MU-4, JU-10):** fixture labels burned into images; limitations as fixed constants in the judge; the forbidden-terms scan (a gitignored local terms file checked pre-commit, with the CI-vs-local enforcement gap disclosed rather than hidden — cross-cutting v1.3); the agreement-case caption that declines to manufacture a punchline.
+- **Credibility (NF-4, NF-5, MU-4, JU-10):** fixture labels burned into images; limitations as fixed constants in the judge; the forbidden-terms scan (a gitignored local terms file, enforced at exactly two local layers — the pre-commit hook and the `wmj run` startup gates, which also verify the hook is actually activated — with the residual gap named rather than hidden — cross-cutting v1.4); the agreement-case caption that declines to manufacture a punchline.
 - **Separability (NF-6, JU-12, JU-1):** enforced by import-graph AST test, purity-under-blocked-environment test, and identity-free types.
 - **Adaptability (MU-9):** registry + one-interface rule; the zero-diff-outside-own-file test is the contract Mor checks.
 - **Performance (NF-2):** 600-second budget with envelope math (judge spec ADR-J6); single-threaded by design and still two orders of magnitude inside budget.
@@ -120,6 +122,7 @@ Verdict: the system reads as one mind's design. The single idea it expresses eve
 | 1.1 | 2026-08-25 | Design-review fixes (design-review-001): corrected the "no second metric exists anywhere" overclaim (CRPS and RMS distance are both genuinely in use, for distinct purposes); updated the container view to the harness-owned envelope; added ADR-J7 to Key Decisions. |
 | 1.2 | 2026-08-30 | Design-review-002 (Round 2): version references updated to the v1.2 spec suite; NF-4 description updated to the redesigned local-terms-file scan; no new conceptual-integrity finding — Round 1's fix held under independent re-check. |
 | 1.3 | 2026-08-30 | Design-review-003 (Round 3, dual/blind): version references updated to the v1.3 spec suite; no new conceptual-integrity finding. |
+| 1.4 | 2026-08-31 | Design-review-004 repair session: version references updated to the v1.4 spec suite (worlds v1.3); §4's NF-4 line rewritten — the "CI" enforcement layer was a phantom contradicted by this document's own System Context and is deleted from the design, leaving the two real local layers. |
 
 ---
 

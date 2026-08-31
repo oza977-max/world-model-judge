@@ -1,6 +1,8 @@
 # World Model Judge — Test Cases
 
-Version 1.0 · Derived from Requirements v1.2 (25 August 2026, post-review-board and post-audit fixes)
+Version 1.1 · Derived from Requirements v1.2 (25 August 2026, post-review-board and post-audit fixes)
+
+> **Change note (v1.1, 31 August 2026 — design-review-004 repair session).** TC-MU9-01 rewritten to mechanism v3: the Round 3 version wrote its stub into the real production `wmj/models/` directory (its own designed-to-fail case could leave a phantom model behind for a later real run to execute), proved nothing about the production code path, and used an identifier-grep with the same string-evasion weakness the NF-6 gate's history proves fatal. The TC-NF6 family restructured from denylist to allowlist + fixture corpus (cross-cutting spec v1.4): four rounds of enumerated "bad shapes" were each evaded within one round by a shape nobody enumerated; the allowlist has no omission problem, and the evasion-fixture corpus makes the gate's completeness claim executable instead of prose. TC-NF6-05 is superseded (tombstone — absorbed by TC-NF6-03's wholesale `numpy.random` ban); the stale "69 cases total" in the header paragraph (a v1.0 number three additions old) is corrected to the greped count.
 
 ---
 
@@ -22,7 +24,11 @@ itself left as `<spec-value>` — filled in once the technical spec sets it,
 never guessed here.
 
 **Coverage discipline (no silent caps):** every Must requirement gets at
-least one case below. 69 cases total. Depth varies deliberately: single
+least one case below. 79 case IDs total, of which one (TC-NF6-05) is a
+superseded tombstone, leaving 78 live cases — count verified by
+`grep -c '^\*\*TC-'`, not carried forward by arithmetic (the previous "69"
+here was exactly such a carried-forward number, three additions stale).
+Depth varies deliberately: single
 cases for straightforward requirements, two to three for the requirements
 this project's own risk assessment or the review board flagged as
 credibility-fatal (fixtures never-findings, pre-registration, the blind
@@ -187,15 +193,15 @@ Given a fixed training seed,
 When a model is trained twice from that seed,
 Then the two resulting models are identical (and therefore produce identical verdicts).
 
-**TC-MU9-01** · scenario test · executable
-Given a throwaway stub model module written directly into `wmj/models/` at test time (the structural mechanism named in cross-cutting spec ADR-003, `tests/gates/test_registry_isolation.py` — design-review-003 update: Round 3 found the previous git-diff-based mechanism staged, committed, and diffed a fixture it fully controlled end-to-end, so the diff could only ever show the file the test itself wrote — structurally incapable of failing regardless of what a real change did; replaced with a mechanism that tests the actual architectural property instead of a synthetic git operation),
-When `wmj.models.registry.all_models()` is called (exercising the `pkgutil`-based auto-discovery mechanism) and every other package (`wmj/judge`, `wmj/worlds`, `wmj/reporting`, `wmj/harness`) is AST-walked for any reference to the stub's class or function name,
-Then the stub is discovered by `all_models()` with no other file having been edited to make that happen, and zero references to the stub exist anywhere outside `wmj/models/` — proving both halves of MU-9's claim (auto-discovery works; nothing else needs to know a new model exists), not merely one file-count coincidence.
+**TC-MU9-01** (rewritten design-review-004: mechanism v3) · scenario test · executable
+Given a stub model module created in a pytest `tmp_path` directory that is grafted onto the models package by appending to `wmj.models.__path__` via monkeypatch — undone automatically on teardown pass or fail, with registry state snapshot-and-restored, so the real production directory is never written to and no registration leaks between tests (Round 4 found the v1.3 version wrote its stub into the real `wmj/models/`, where its own designed-to-fail case could leave a phantom model behind for a later real `wmj run` to discover and execute),
+When (a) `importlib.invalidate_caches()` is called and `wmj.models.registry.all_models()` is invoked, (b) the roster-construction function of the **actual production code path**, `wmj.harness.trials`, is invoked directly, and (c) `wmj/judge`, `wmj/worlds`, `wmj/reporting`, and `wmj/harness` are AST-checked by the same import-allowlist technique as the NF-6 gate for any import of a `wmj.models` submodule other than `registry` and `base` (mechanical, no string-matching to evade — Round 4 found the v1.3 "reference to the stub's name" grep carried exactly the string-evasion weakness the NF-6 gate's own four-round history proves fatal),
+Then the stub appears in both (a)'s and (b)'s rosters with no other file edited — proving the harness genuinely delegates to the registry rather than holding a second list that happens to agree today — and (c) finds zero forbidden imports (referencing the seven pinned model *name strings* as data is explicitly permitted: names are the sanctioned join keys, imports are the forbidden coupling). Cross-cutting spec v1.4 ADR-003; each of (a), (b), (c) can genuinely fail.
 
-**TC-MU9-02** (negative/phantom-gate, added post-design-review-003) · mutation test · executable
+**TC-MU9-02** (negative/phantom-gate; rewritten design-review-004 to match mechanism v3) · mutation test · executable
 Given the TC-MU9-01 gate,
-When a deliberately introduced reference to a stub model's class name is added to a file under `wmj/judge/` (simulating the exact violation MU-9 forbids),
-Then the gate's AST-reference check must fail. (Same phantom-gate proof as WD-3/WD-7/NF-1/JU-9/JU-11 — Round 3 found TC-MU9-01 had no such pairing and, under the prior mechanism, could not have one.)
+When a deliberately injected import of a concrete `wmj.models` submodule (not `registry` or `base`) is added to a scratch copy of a file under `wmj/judge/` (the exact coupling MU-9 forbids),
+Then the gate's part (c) import-allowlist check must fail. (Same phantom-gate proof as WD-3/WD-7/NF-1/JU-9/JU-11 — Round 3 found TC-MU9-01 had no such pairing and, under the git-diff mechanism, could not have one.)
 
 ---
 
@@ -419,35 +425,33 @@ Given a committed `specs/*.html` or `requirements/*.html` file and its `.md` twi
 When the `.md` file's current SHA-256 hash is compared against the hash embedded in the `.html` file's `<!-- generated-from: ... -->` comment,
 Then the two match — proving the `.html` a human might read is genuinely generated from the exact `.md` a human approves, not a stale or hand-edited copy (design-review-002 introduced this mechanism; design-review-003 found it had no test case, no requirement trace, and no build chunk, and traced it here to NF-5's no-overclaiming principle).
 
-**TC-NF6-01** · property-based test (import graph) · executable
-Given the judge package's import graph,
-When statically analyzed,
-Then it contains no import from the worlds, models, or reporting packages — checked by AST inspection, not by convention.
-
-**TC-NF6-02** (added post-design-review-003) · property-based test (import graph) · executable
+**TC-NF6-01** (rewritten design-review-004: denylist → allowlist) · property-based test (import graph) · executable
 Given the judge package's AST,
-When statically analyzed for imports of any ambient-access module (`os`, `sys`, `time`, `datetime`, `socket`, `pathlib`, `subprocess`, `random`, `threading`, `multiprocessing`, `platform`, `uuid`),
-Then none is found. (Design-review-002 added this check; design-review-003 widened the module list after two independent Round 3 panels each found different omissions.)
+When every `Import`/`ImportFrom` node's top-level module is checked against the allowlist **`{numpy, math, dataclasses, typing}`**,
+Then any import outside the allowlist fails the gate — judge.md §4's own "nothing else" claim, enforced as stated. (This subsumes, with nothing left to enumerate, every prior import-shaped denylist check — the `wmj.*` packages, the twelve ambient modules, `importlib`, `random`, `builtins`, and every module nobody thought to list. Four review rounds each evaded the then-current denylist within one round; an allowlist cannot have the omission problem. NF-6's original "no imports from worlds/models/reporting" is a strict subset of this check.)
 
-**TC-NF6-03** (added post-design-review-003) · property-based test (import graph) · executable
+**TC-NF6-02** (rewritten design-review-004) · property-based test (AST identifiers) · executable
 Given the judge package's AST,
-When statically analyzed for any import of `importlib` or any use of the name `__import__` anywhere (as a direct call, an aliased binding, or an argument to `getattr`),
-Then none is found. (Design-review-003: replaces a narrower check scoped only to direct calls to `importlib.import_module`/`__import__`, which Round 3 found evadable by alias or `getattr` indirection.)
+When scanned for the identifiers `exec`, `eval`, `compile`, `__import__`, `__builtins__`, `globals`, or `vars` appearing **anywhere** — as a `Name` id, an `Attribute` attr, or an import alias, not only as a direct `Call` target,
+Then none is found. (The call-shape scoping was Round 4's confirmed evasion route: `e = eval; e(...)` and `__builtins__.eval(...)` both slipped the v1.3 wording. The judge is pure arithmetic; none of these names has a legitimate use in it. Combined with TC-NF6-01, the realistic indirection routes close: `getattr(builtins, "eval")` needs `import builtins`, which fails the allowlist; `getattr(__builtins__, "eval")` names `__builtins__`, which fails here.)
 
-**TC-NF6-04** (added post-design-review-003) · property-based test (import graph) · executable
+**TC-NF6-03** (rewritten design-review-004) · property-based test (import graph) · executable
 Given the judge package's AST,
-When statically analyzed for any `Call` node targeting `exec` or `eval`,
-Then none is found — closing the string-payload evasion route TC-NF6-03's import-shaped checks cannot see inside.
+When scanned for any `Import`/`ImportFrom` whose dotted module path begins `numpy.random`, and any `Attribute` node whose attr is `random`,
+Then none is found — `numpy.random` is banned **wholesale** in the judge, which computes deterministic metrics and needs no randomness at all (JU-12). (The previous Generator/PCG64 exception implied otherwise and forced a name-by-name pattern that `from numpy.random import rand` and `import numpy.random as npr` both walked straight past; a total ban has no pattern to evade. The bare-`attr == "random"` rule is deliberately over-broad; TC-NF6-06 guards the false-positive side.)
 
-**TC-NF6-05** (added post-design-review-003) · property-based test (import graph) · executable
-Given the judge package's AST,
-When statically analyzed for any `Attribute` access of the form `<numpy-alias>.random.<name>` where `<name>` is not `Generator` or `PCG64`,
-Then none is found — proving ADR-002's ban on legacy-global NumPy randomness (rule 2) is actually enforced by the gate rule 3 names as its enforcement mechanism, not merely asserted.
+**TC-NF6-04 (negative/phantom-gate — the evasion-fixture corpus)** (rewritten design-review-004) · mutation test (fixture corpus) · executable
+Given one fixture file under `tests/gates/fixtures/` for every concrete evasion any review round has documented — bare/aliased/from-imports of forbidden modules; `importlib` aliasing; `getattr` indirection; `__builtins__` attribute routes; `exec`/`eval`/`compile` payloads; both `numpy.random` import idioms; identifier rebinding,
+When the full gate is run against each fixture,
+Then it flags **every** fixture. The corpus is the gate's completeness claim — exactly this, no more: a newly discovered evasion is added as a fixture, turning "is the gate complete?" from a prose argument (which failed four consecutive reviews) into an executable, growing regression suite. Static analysis of Python cannot be proven complete (LANGSEC's own point, disclosed rather than implied away); this is the honest, checkable form of the claim, and it is also the gate family's can-actually-fail proof.
 
-**TC-NF6-06 (negative/phantom-gate)** (added post-design-review-003) · mutation test · executable
-Given each of TC-NF6-02 through TC-NF6-05's checks,
-When a deliberately injected violation matching that specific check is added to a scratch copy of the judge package,
-Then that check must fail. (Same phantom-gate discipline as WD-3/WD-7/NF-1/JU-9/JU-11/MU-9 — design-review-003 found the broadened gate's own test-ID traceability wasn't widened when its scope was, so nothing confirmed the new checks had exercised fixtures.)
+**TC-NF6-05 — superseded (design-review-004)** · tombstone · not executable
+Former content (the `<numpy-alias>.random.<name>` attribute pattern) is absorbed and strengthened by TC-NF6-03's wholesale ban. The ID is retained per this document's append-only discipline so no ID silently vanishes; it appears in no tally except the total.
+
+**TC-NF6-06 (clean-pass / false-positive guard)** (rewritten design-review-004) · scenario test · executable
+Given the real, legitimate judge source,
+When the full gate (TC-NF6-01 through -03) runs against it,
+Then it passes — necessary because TC-NF6-02 and TC-NF6-03 are deliberately over-broad, and a gate that cries wolf gets disabled by the people it inconveniences.
 
 ---
 
@@ -477,11 +481,11 @@ Then that check must fail. (Same phantom-gate discipline as WD-3/WD-7/NF-1/JU-9/
 | | | RP-8 | TC-RP8-01 |
 | NF-1 | TC-NF1-01, -02 | NF-4 | TC-NF4-01, -02, -03 |
 | NF-2 | TC-NF2-01 | NF-5 | TC-NF5-01, -02 |
-| NF-3 | TC-NF3-01 | NF-6 | TC-NF6-01, -02, -03, -04, -05, -06 |
+| NF-3 | TC-NF3-01 | NF-6 | TC-NF6-01, -02, -03, -04, -06 (-05 superseded tombstone) |
 
 **Every Must and the one mechanically-testable Won't (JU-13) has at least one case. Zero orphan requirements, zero orphan cases.** WD-8 and MU-10 are the two Won'ts with nothing to verify by design (they describe absence, not behaviour).
 
-**Totals:** 79 test cases across 45 requirements (70 after design-review-001/002's additions; +9 in this pass, added after `/gvm-design-review` design-review-003 — Round 3, dual/blind — found: TC-MU9-02, a phantom-gate pairing TC-MU9-01 could not previously have, since its prior git-diff mechanism was structurally incapable of failing; TC-JU9-03, a property test enforcing the `exceptions.observed`/`trials.is_exception` invariant judge.md's prose only asserted; TC-NF6-02 through -06, splitting the single `TC-NF6-01` into one ID per AST-gate check plus a phantom-gate pairing, after the gate grew from one check to five across two rounds with no corresponding test-ID growth; TC-NF4-03, proving the run-time confidentiality scan is a real safety net independent of whether the pre-commit hook was ever installed; TC-NF5-02, covering the previously-orphaned `.md`/`.html` spec-parity hash check. Count independently verified via `grep -c '^\*\*TC-'` = 79, not carried forward by arithmetic). 7 negative/phantom-gate cases (TC-WD3-02, TC-WD7-02, TC-NF1-02, TC-JU9-02, TC-JU11-02, TC-MU9-02, TC-NF6-06). 10 property-based cases (TC-JU1-02, TC-JU4-02, TC-JU5-02, TC-JU12-01, TC-NF6-01, TC-NF6-02, TC-NF6-03, TC-NF6-04, TC-NF6-05, TC-JU9-03). 5 cases marked *judged* rather than *executable* (TC-MU6-02, TC-JU10-02, TC-RP5-01, TC-NF4-02, TC-NF5-01 — plain-language and human-comprehension checks that genuinely need a reader, not a script). 3 cases explicitly pending an Open Question being fixed by the technical spec, marked with `<spec-value>` rather than guessed at here (TC-JU8-02, TC-NF2-01, TC-NF3-01). 2 cases marked *(supporting)* — they validate wiring between two requirements rather than being the primary coverage of either (TC-MU2-02, TC-JU8-03).
+**Totals:** 79 test cases across 45 requirements (70 after design-review-001/002's additions; +9 in this pass, added after `/gvm-design-review` design-review-003 — Round 3, dual/blind — found: TC-MU9-02, a phantom-gate pairing TC-MU9-01 could not previously have, since its prior git-diff mechanism was structurally incapable of failing; TC-JU9-03, a property test enforcing the `exceptions.observed`/`trials.is_exception` invariant judge.md's prose only asserted; TC-NF6-02 through -06, splitting the single `TC-NF6-01` into one ID per AST-gate check plus a phantom-gate pairing, after the gate grew from one check to five across two rounds with no corresponding test-ID growth; TC-NF4-03, proving the run-time confidentiality scan is a real safety net independent of whether the pre-commit hook was ever installed; TC-NF5-02, covering the previously-orphaned `.md`/`.html` spec-parity hash check. Count independently verified via `grep -c '^\*\*TC-'` = 79, not carried forward by arithmetic; **v1.1 (design-review-004 repair): one of the 79, TC-NF6-05, is now a superseded tombstone, so 78 cases are live**). 7 negative/phantom-gate cases (TC-WD3-02, TC-WD7-02, TC-NF1-02, TC-JU9-02, TC-JU11-02, TC-MU9-02, TC-NF6-04 — the last replacing TC-NF6-06 in this list under v1.1's restructure: the evasion-fixture corpus is now the gate family's can-actually-fail proof, while TC-NF6-06 is its complementary clean-pass/false-positive guard). 8 property-based cases (TC-JU1-02, TC-JU4-02, TC-JU5-02, TC-JU12-01, TC-NF6-01, TC-NF6-02, TC-NF6-03, TC-JU9-03). 5 cases marked *judged* rather than *executable* (TC-MU6-02, TC-JU10-02, TC-RP5-01, TC-NF4-02, TC-NF5-01 — plain-language and human-comprehension checks that genuinely need a reader, not a script). 3 cases explicitly pending an Open Question being fixed by the technical spec, marked with `<spec-value>` rather than guessed at here (TC-JU8-02, TC-NF2-01, TC-NF3-01). 2 cases marked *(supporting)* — they validate wiring between two requirements rather than being the primary coverage of either (TC-MU2-02, TC-JU8-03).
 
 ---
 

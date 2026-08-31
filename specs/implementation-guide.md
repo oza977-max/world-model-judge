@@ -1,6 +1,8 @@
 # World Model Judge — Implementation Guide
 
-Version 1.3 · 30 August 2026 · Bridges: all specs v1.3 → `/gvm-build` · Requirements v1.2, Test Cases v1.0 (79 cases)
+Version 1.4 · 31 August 2026 · Bridges: all specs v1.4 (worlds v1.3) → `/gvm-build` · Requirements v1.2, Test Cases v1.1 (79 cases, 1 superseded)
+
+> **Change note (v1.4).** Revised in the design-review-004 repair session. This guide was the document Round 4 (and the calibration record's BC-3 build check) showed had never been reconciled against the specs beyond arithmetic — so this pass reconciles it by rule: every test case in test-cases.md was greped against this guide's `[Test: ...]` tags and ten orphans were wired into their owning chunks (TC-NF6-02/03/04/06 → P1-C03; TC-MU1-03 → P3-C03; TC-JU9-03 → P4-C01; TC-JU3-01 → P4-C05 and P5-C03; TC-MU9-02 → P6-C01; TC-NF4-03, TC-NF5-02 → P6-C02). The Wiring Matrix's registry row now names TC-MU9-01's actual v1.4 mechanism (tmp-dir stub via a monkeypatched package `__path__` + production-path roster assertion + import-allowlist AST check, cross-cutting spec v1.4) instead of the git-diff mechanism two reviews ago rejected. The critical path is now three tied 9-chunk branches, not two — P2-C05 → P3-C02 is a hard prerequisite chain into P6-C01 per this guide's own dependency table, so "P2-C05 is off the critical path" was false. Phase 3's deliverable line said "eight registered contestants"; the roster has been seven in every spec since v1.0 (2 baselines + 2 unrigged + 3 fixtures) — the number was never recounted until this pass. See design-review-004.html and reviews/calibration.md.
 
 > **Change note (v1.3).** Revised after `/gvm-design-review` design-review-003 (Round 3, dual/blind). Corrected the stated "critical path (11 chunks)" — it both miscounted its own named chunks (10, not 11) and omitted P3-C05, which the Dependency Network table itself names as a hard prerequisite of P6-C01; the corrected path has 9 chunks across two equal-length branches. No other chunk content changed — `fx-brittle`'s Round 3 redesign (models spec v1.3) removed the extra training-pipeline dependency Round 2's version would have needed, so P3-C05's existing dependency row required no change. See design-review-003.html for the full findings.
 
@@ -22,7 +24,7 @@ Version 1.3 · 30 August 2026 · Bridges: all specs v1.3 → `/gvm-build` · Req
 
 - **P1-C01 · Foundations.** `src` scaffold, `pyproject.toml` with the pinned two-package dependency set + lockfile, canonical serializer, seed plumbing (spawned `PCG64` streams), single-thread env guard, `errors.py` conventions. Tests: serializer canonical-bytes round-trip; seed-spawn stability; thread-guard assertion. *Spec: cross-cutting ADR-002/003, Dependency Budget.* [Test: groundwork for TC-NF1-01, TC-NF3-01] ~1 session.
 - **P1-C02 · MVP slice (user-facing).** Minimal LV world (`transition` + shared RK4), persistence + linear baselines, judge `skill.py` (CRPS + skill), `python -m wmj run --skeleton` writing a `wmj-skeleton/0` JSON report. Acceptance: clean run from checkout; two consecutive runs byte-identical. *Spec: worlds §4.1/4.3, models ADR-M2, judge ADR-J1.* [Test: TC-WD1-01 (LV half), TC-MU2-02 seed] ~1 session.
-- **P1-C03 · Gates.** `tests/gates/`: judge import-graph AST test; WD-3 integrator-identity gate + its negative (mismatched dt must fail); ten-run byte-identity harness over the skeleton output. *Spec: cross-cutting ADR-003, worlds ADR-W1.* [Test: TC-NF6-01, TC-WD3-01, TC-WD3-02, TC-NF1-01 (skeleton scope)] ~1 session.
+- **P1-C03 · Gates.** `tests/gates/`: the judge import-allowlist AST gate and its whole family (banned-identifier scan, wholesale `numpy.random` ban, the evasion-fixture corpus it must reject, and the clean-pass guard proving it accepts legitimate judge code — cross-cutting spec v1.4's restructured gate); WD-3 integrator-identity gate + its negative (mismatched dt must fail); ten-run byte-identity harness over the skeleton output. *Spec: cross-cutting ADR-003, worlds ADR-W1.* [Test: TC-NF6-01, TC-NF6-02, TC-NF6-03, TC-NF6-04, TC-NF6-06, TC-WD3-01, TC-WD3-02, TC-NF1-01 (skeleton scope)] ~1 session.
 
 ### Phase 2 — Worlds complete (deliverable: both worlds + benchmark artefacts)
 
@@ -32,11 +34,11 @@ Version 1.3 · 30 August 2026 · Bridges: all specs v1.3 → `/gvm-build` · Req
 - **P2-C04 · Region labelling.** In/out labelling with axis attribution, boundary determinism. *Needs C01+C02.* [Test: TC-WD5-01, TC-WD5-02] ∥ *parallel with P2-C03.*
 - **P2-C05 · First real chart (user-facing, design-review addition).** A second, deliberately early thin vertical slice: creates `wmj/models/baselines.py` **containing only the persistence baseline's spread-fitting logic** (design-review-002 fix — this chunk creates the real file, not a throwaway stand-in; P3-C02 below sequentially extends it) and wires it plus P1-C02's existing `skill.py`/CRPS code to the LV world's real trajectories and P2-C03's real divergence curve, then renders Chart 2 (error-vs-horizon, reporting ADR-R2) with a real caption (reporting ADR-R3) to `out/charts/lv-persistence-horizon.png`. This is *not* the full reporting package — just `reporting.style` (minimal) and `reporting.horizon_plot`, extended later in Phase 5 to cover every model and chart type. Acceptance: the rendered chart and caption exist, are non-empty, and the caption text is the ADR-R3 template verbatim (design-review-002 fix — Chart 2's template has no numeric slots, unlike Charts 1 and 4, so "with real numbers substituted" overstated what this chunk's acceptance test actually checks). *Needs P1-C02, P2-C03.* [Test: TC-RP2-01 (partial scope: one model, one world — extended to full scope in Phase 5)] ~1 session.
 
-### Phase 3 — Models (deliverable: all eight registered contestants + prereg tooling)
+### Phase 3 — Models (deliverable: all seven registered contestants + prereg tooling)
 
 - **P3-C01 · MLP core.** Forward/backward/Adam, gradient-check-first (the failing finite-difference test precedes backprop). *Spec: models ADR-M3 shared architecture.*
 - **P3-C02 · Baseline spreads.** **Extends P2-C05's `wmj/models/baselines.py`** (design-review-002 fix — both chunks target the same file; this one is sequential after P2-C05, not parallel with it) with the linear-extrapolation baseline's training-residual spread fitting and registry wiring for both baselines. [Test: TC-MU1-01/02 (baselines), TC-MU2-01] ∥ *parallel with P3-C01, not with P2-C05.*
-- **P3-C03 · Model A (direct).** Variance head, Gaussian NLL training. *Needs C01.* [Test: TC-MU1-01/02] ∥
+- **P3-C03 · Model A (direct).** Variance head, Gaussian NLL training. *Needs C01.* [Test: TC-MU1-01/02, TC-MU1-03 (reset() actually clears rollout state)] ∥
 - **P3-C04 · Model B (ensemble).** K=5, pre-registered point rule + `sqrt(1+1/K)`·std(ddof=1) spread mapping. *Needs C01.* [Test: TC-MU5-02, TC-MU5-03] ∥ *parallel with C03.*
 - **P3-C05 · Fixtures.** The three one-corruption wrappers, `is_fixture` flag. *Needs C03.* [Test: TC-MU3-01/02/03 (behavioural halves), TC-MU4-01 (code surface)]
 - **P3-C06 · Training data + determinism.** Trajectory dataset generation, start-disjointness assertion, train-twice-identical test. *Needs C01, P2-C01/02.* [Test: TC-MU7-01, TC-MU8-01]
@@ -44,24 +46,24 @@ Version 1.3 · 30 August 2026 · Bridges: all specs v1.3 → `/gvm-build` · Req
 
 ### Phase 4 — Judge complete (deliverable: full verdicts from arrays)
 
-- **P4-C01 · Types + verdict assembly.** `JudgeInput`, `Verdict`, limitations constants, refuse-on-missing-field. [Test: TC-JU1-01, TC-JU9-01, TC-JU9-02, TC-JU10-01]
+- **P4-C01 · Types + verdict assembly.** `JudgeInput`, `Verdict`, limitations constants, refuse-on-missing-field. [Test: TC-JU1-01, TC-JU9-01, TC-JU9-02, TC-JU9-03, TC-JU10-01]
 - **P4-C02 · Skill (extend P1-C02).** Per-task/region skill vs both baselines; anti-gaming property test. [Test: TC-JU2-01, TC-JU4-02] ∥ *C02–C05 parallel after C01.*
 - **P4-C03 · Calibration + sharpness.** Four-level coverage in/out region; width monotonicity property. [Test: TC-JU4-01, TC-JU5-01, TC-JU5-02] ∥
 - **P4-C04 · Exceptions + bands.** Trial-wise counting, band assignment from thresholds data, hedging cross-flag. *Needs P3-C07 format.* [Test: TC-JU8-01, TC-JU8-02, TC-JU8-03] ∥
-- **P4-C05 · Climatology + horizons.** Switch step, conditioned climatology (16 bins, re-measured invariant), trust horizons in dual units. *Needs P2-C03 artefact shape.* [Test: TC-JU6-01, TC-JU6-02, TC-JU7-01, TC-JU7-02] ∥
+- **P4-C05 · Climatology + horizons.** Switch step, conditioned climatology (16 bins, re-measured invariant), trust horizons in dual units. *Needs P2-C03 artefact shape.* [Test: TC-JU3-01 (error-vs-horizon block, judge half), TC-JU6-01, TC-JU6-02, TC-JU7-01, TC-JU7-02] ∥
 - **P4-C06 · Blindness/purity properties.** Label-swap invariance, blocked-environment purity, no-learned-component static check. *Needs C01–C05.* [Test: TC-JU1-02, TC-JU12-01, TC-JU13-01]
 
 ### Phase 5 — Reporting (deliverable: charts + page from verdicts)
 
 - **P5-C01 · Style + captions.** Shared Matplotlib style, colour semantics, `mark_fixture`, caption templates. *Spec: reporting ADR-R1/R3/R4.*
 - **P5-C02 · Exception plot.** [Test: TC-RP1-01, TC-RP8-01] ∥ *C02–C04 parallel after C01.*
-- **P5-C03 · Horizon + calibration plots.** Extends P2-C05's prototype horizon plot to every model/world/region and adds the calibration chart. [Test: TC-RP2-01 (full scope), TC-RP3-01] ∥
+- **P5-C03 · Horizon + calibration plots.** Extends P2-C05's prototype horizon plot to every model/world/region and adds the calibration chart. [Test: TC-RP2-01 (full scope), TC-RP3-01, TC-JU3-01 (rendered half: model curve and WD-4 reference on the same axes, same units)] ∥
 - **P5-C04 · Comparison table + page + writer.** Table with disagreement marking, `results.html`, verdict/manifest writer via the canonical serializer. [Test: TC-RP4-01, TC-RP4-02, TC-RP6-01] ∥
 
 ### Phase 6 — Integration closure and the judged run (deliverable: the published result)
 
-- **P6-C01 · Full wiring.** `python -m wmj run`: gates → benchmarks → training/load → rollouts (all models × worlds × regions, 200 trials) → judging → reporting; `python -m wmj verify` byte-comparison mode. Closes every seam left open by P2–P5 (this is the integration wiring chunk; no deferred seam survives it). [Test: TC-MU3-01/02/03 (judged halves), TC-MU4-01 (all surfaces), TC-MU9-01, full-scope TC-NF1-01/02]
-- **P6-C02 · Startup verification + NF gates.** Clean-checkout single-command test, wall-clock budget check (< 600 s), dependency-manifest gate, forbidden-terms scan. This chunk's acceptance test is the product startup verification. [Test: TC-RP7-01, TC-NF2-01, TC-NF3-01, TC-NF4-01]
+- **P6-C01 · Full wiring.** `python -m wmj run`: gates → benchmarks → training/load → rollouts (all models × worlds × regions, 200 trials) → judging → reporting; `python -m wmj verify` byte-comparison mode. Closes every seam left open by P2–P5 (this is the integration wiring chunk; no deferred seam survives it). [Test: TC-MU3-01/02/03 (judged halves), TC-MU4-01 (all surfaces), TC-MU9-01, TC-MU9-02 (its phantom-gate negative), full-scope TC-NF1-01/02]
+- **P6-C02 · Startup verification + NF gates.** Clean-checkout single-command test, wall-clock budget check (< 600 s), dependency-manifest gate, forbidden-terms scan. This chunk's acceptance test is the product startup verification. [Test: TC-RP7-01, TC-NF2-01, TC-NF3-01, TC-NF4-01, TC-NF4-03, TC-NF5-02]
 - **P6-C03 · The pre-registered judged run.** `check_prereg` certification → full pipeline on the unrigged models → publish `out/` → record the MU-6 either-way publication. Procedural checklist + mechanical certification. [Test: TC-MU5-01, TC-MU6-02 (judged), TC-JU10-02 / TC-RP5-01 / TC-NF4-02 / TC-NF5-01 (judged, human pass)]
 
 ---
@@ -77,7 +79,7 @@ Version 1.3 · 30 August 2026 · Bridges: all specs v1.3 → `/gvm-build` · Req
 | P2-C02 | P1-C02 | P2-C03/04, P3-C06 | P2-C01 |
 | P2-C03 | P2-C01, P2-C02 | P4-C05, P6-C01 | P2-C04 |
 | P2-C04 | P2-C01, P2-C02 | P6-C01 | P2-C03 |
-| P2-C05 | P1-C02, P2-C03 | (demonstration only; extended by P5-C03) | P3 phase (not on critical path) |
+| P2-C05 | P1-C02, P2-C03 | P3-C02 (creates the `baselines.py` it extends); prototype chart extended by P5-C03 | every P3 chunk except P3-C02 |
 | P3-C01 | P1-C01 | P3-C03/04 | P3-C02, P3-C07 |
 | P3-C02 | P1-C02, P2-C05 | P6-C01 | P3-C01, P3-C07 |
 | P3-C03 | P3-C01, P3-C06 | P3-C05 | P3-C04 |
@@ -105,7 +107,7 @@ P2-C01 ∥ P2-C02        P3-C01 ∥ P3-C02 ∥ P3-C07
    └───┬────┘              │                │
  P2-C03 ∥ P2-C04       P3-C06               │
    │   │                   │                │
-   │   └─► P2-C05 (first real chart; off critical path; extended by P5-C03)
+   │   └─► P2-C05 ─► P3-C02 (first real chart; a third tied critical-path branch — design-review-004 repair; extended by P5-C03)
    │                       │                │
    │                 P3-C03 ∥ P3-C04        │
    │                       │                │
@@ -119,7 +121,7 @@ P2-C01 ∥ P2-C02        P3-C01 ∥ P3-C02 ∥ P3-C07
                            P6-C01 ─ P6-C02 ─ P6-C03
 ```
 
-**Critical path (9 chunks — design-review-003 correction: the previous "11 chunks" line both miscounted its own named chunks, 10 not 11, and omitted P3-C05, which the Dependency Network table above names as a hard prerequisite of P6-C01; independently recounted twice, matching both the raw dependency table and a from-scratch longest-path trace):** P1-C01 → P1-C02 → P2-C01 → *(two branches of equal length, both required before P6-C01 since it needs all of P2–P5; either may be the actual bottleneck depending on session-to-session variance)* — **judge branch:** P2-C03 → P4-C05 → P4-C06; **models branch:** P3-C06 → P3-C03 → P3-C05 — → P6-C01 → P6-C02 → P6-C03.
+**Critical path (9 chunks, three tied branches — design-review-004 repair: the v1.3 line named two branches but this guide's own dependency table makes P2-C05 → P3-C02 a third hard prerequisite chain into P6-C01 of exactly the same length, so "P2-C05 is off the critical path" — stated twice in v1.3 — was false; re-derived from scratch against the dependency table):** P1-C01 → P1-C02 → P2-C01 → *(three branches of equal length, all required before P6-C01 since it needs all of P2–P5; any may be the actual bottleneck depending on session-to-session variance)* — **judge branch:** P2-C03 → P4-C05 → P4-C06; **models branch:** P3-C06 → P3-C03 → P3-C05; **chart/baselines branch:** P2-C03 → P2-C05 → P3-C02 — → P6-C01 → P6-C02 → P6-C03. *(The v1.3 "9 chunks across two equal-length branches" arithmetic itself was right; what it missed was the third branch of the same length.)*
 
 ---
 
@@ -141,7 +143,7 @@ P2-C01 ∥ P2-C02        P3-C01 ∥ P3-C02 ∥ P3-C07
 | `reporting.style.mark_fixture` (producer) | consumed by every chart renderer | P5-C02..C04 | P6-C01 (TC-RP8-01 fixture-label acceptance) |
 | `harness.serialize` (producer) | consumed by skeleton, thresholds writer, verdict writer, manifest | P1-C02, P3-C07, P5-C04 | P1-C03 (byte-identity gate is the serializer's failing consumer test) |
 | `judge.types` (producer) | consumed by every judge module + reporting reader | P4-C01, P5-C04 | P4-C01 (TC-JU1-01 structural-blindness test) |
-| `wmj.models.registry` (producer) | consumed by `harness.trials` discovery | P6-C01 | P6-C01 (TC-MU9-01 zero-diff acceptance, now via the named `tests/gates/test_registry_isolation.py` git-diff mechanism, design-review-002 — cross-cutting spec v1.3 ADR-003) |
+| `wmj.models.registry` (producer) | consumed by `harness.trials` discovery | P6-C01 | P6-C01 (TC-MU9-01 acceptance via `tests/gates/test_registry_isolation.py` — design-review-004 mechanism: a stub model written to a tmp dir grafted in via a monkeypatched `wmj.models.__path__`, discovered through the *production* `harness.trials` roster call, plus an import-allowlist AST check that no package outside `wmj/models/` imports a concrete model module — cross-cutting spec v1.4 ADR-003; supersedes both Round 2's git-diff mechanism and Round 3's write-into-the-real-package variant) |
 
 No row has an empty wiring-chunk or `Demanded by` cell; no exemptions claimed.
 
@@ -151,7 +153,7 @@ No row has an empty wiring-chunk or `Demanded by` cell; no exemptions claimed.
 
 - **Context per chunk:** this guide's chunk entry + cross-cutting spec + the one relevant domain-spec section + the named TC-IDs. Never load all five specs into a build session.
 - **Chunk size:** each chunk above is scoped to one session (~1–3 hours of agent work). If a chunk runs long, split by data variation (Cohn): e.g. P2-C01/C02 are already the worked example — same structure, different world.
-- **Strict TDD:** the chunk's named TC-IDs are translated to failing pytest tests first; implementation follows. Negative/phantom-gate cases (TC-WD3-02, TC-WD7-02, TC-NF1-02, TC-JU9-02, TC-JU11-02) are written as mutation tests in the same chunk as their gate.
+- **Strict TDD:** the chunk's named TC-IDs are translated to failing pytest tests first; implementation follows. Negative/phantom-gate cases — all seven: TC-WD3-02, TC-WD7-02, TC-NF1-02, TC-JU9-02, TC-JU11-02, TC-MU9-02, TC-NF6-04 (design-review-004 repair: the previous sentence enumerated five and was never updated when Round 3 grew the family — an enumeration maintained by hand, now stated as the complete list with its count so the next addition has to touch the number too; TC-NF6-06, the complementary clean-pass guard, rides in the same chunk) — are written as mutation tests in the same chunk as their gate.
 - **Test co-location:** every chunk includes its tests; there are no "write tests" chunks anywhere in this guide.
 
 ## Parallel Work Identification (share-nothing)
@@ -172,6 +174,7 @@ Deferred seams and their closing chunks: model training deferred from P3 rollout
 | 1.1 | 2026-08-25 | Design-review fix (design-review-001): added P2-C05, a second thin vertical slice (one real chart from real data) landing at chunk 8 rather than the previous plan's first further user-visible capability at chunk 19 (this "23"/"19" arithmetic was itself later found wrong in design-review-002 — see v1.2 row) — Phases 2–5 had otherwise reverted to a fully horizontal, layer-by-layer build after P1-C02, which the guide's own MVP-1 rule exists to forbid. 6 phases, "24" chunks (later corrected). |
 | 1.2 | 2026-08-30 | Design-review fixes (design-review-002, Round 2): corrected the chunk count everywhere in this document (true total 28, not 24; true pre-P2-C05 total 27, not 23 — an arithmetic error present since v1.0 and never caught until an independent recount); fixed the false "P2-C05 shares no files with any Phase 3 chunk" parallel-safety claim (both target `wmj/models/baselines.py`) by making P3-C02 sequentially extend P2-C05's file instead; corrected P2-C05's acceptance criterion (Chart 2's caption template has no numeric slots to substitute); named the concrete `test_registry_isolation.py` mechanism for TC-MU9-01. |
 | 1.3 | 2026-08-30 | Design-review fix (design-review-003, Round 3, dual/blind): corrected the critical-path line — 9 chunks across two equal-length branches, not "11" (which both miscounted its own list and omitted P3-C05). |
+| 1.4 | 2026-08-31 | Design-review-004 repair session (full reconciliation, not arithmetic-only): wired ten orphaned test cases into their owning chunks; Wiring Matrix registry row updated to TC-MU9-01's v1.4 mechanism (tmp-dir stub + monkeypatched `__path__` + production-path roster assertion + import-allowlist); critical path corrected to three tied branches (P2-C05 → P3-C02 was always a prerequisite chain into P6-C01); "eight registered contestants" corrected to seven; phantom-gate list completed (7 cases, count stated). |
 
 ---
 

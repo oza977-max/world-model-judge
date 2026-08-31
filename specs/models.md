@@ -1,6 +1,8 @@
 # World Model Judge — Models Specification
 
-Version 1.3 · 30 August 2026 · Domain 2 of Requirements v1.2 · References: cross-cutting spec v1.3, worlds spec v1.2
+Version 1.4 · 31 August 2026 · Domain 2 of Requirements v1.2 · References: cross-cutting spec v1.4, worlds spec v1.3
+
+> **Change note (v1.4 — the design-review-004 structural repair).** This round repairs by rule, not by instance, per the four-round pattern recorded in `reviews/calibration.md`. ADR-M1 gains the **uniform factory signature** — `factory(ctx: WorldContext, rng) -> Model`, with `WorldContext` defined in `wmj.models.base` (the judge's own deliberate-duplication pattern) and constructed only by the harness — one decision that closes Round 4's three interlocking Criticals (the models→worlds import contradiction, the two-worlds selection gap, and the mutual exclusion with TC-MU9-01). The registry contract is pinned (`register(name, factory)`, `DuplicateModelError` on collision, `all_models()` returning sorted-name order as a stated contract). The seven canonical model names are pinned as literal join keys, and the roster count is corrected to **seven** everywhere ("eight" was never true against this document's own enumeration). `fx-brittle`'s trigger now checks both WD-5 axes (state box and action interval) via `ctx`. ADR-M5's GitHub-API mitigation is **removed** (undisclosed network dependency, silent ~90-day decay) in favour of plain disclosure. See design-review-004.html.
 
 > **Change note (v1.3).** Revised after `/gvm-design-review` design-review-003 (Round 3, dual/blind). `fx-brittle` redesigned twice over: it is now a genuine post-hoc wrapper around a normally-trained Model A (no separate training run), and its in/out boundary is exactly the world's declared training-region box rather than an independently-chosen sub-region — closing both a wrapper-framing contradiction and a region-label mismatch that three independent reviewers converged on. Fixtures' registration path stated explicitly. `region_labels`' JSON example fixed to the canonical per-trial shape (judge spec v1.3). A third residual risk (prereg commit-timestamp forgery) disclosed, with a partial GitHub-hosting-dependent mitigation. See design-review-003.html for the full findings.
 
@@ -64,7 +66,42 @@ Model (protocol, wmj.models.base):
   predict(state, action) -> Prediction   # mean: float64[d], spread: float64[d] (1 sd)
 ```
 
-**Consequences:** Rollout-local state is invisible to the judge (which sees only arrays) and harmless to determinism (reset() makes every rollout self-contained) — **provided `reset()` actually clears it (design-review fix — this was previously asserted but never tested)**: §8 adds a cross-rollout isolation test, since a model that silently leaked state across JU-8's 200 independent trials would corrupt the independence assumption the whole exception-band derivation depends on, undetected by any other test in this document. TC-MU1-01/02 check the format and its cross-model identity; the registry (`wmj.models.registry.register(factory)`) is the only discovery path (MU-9).
+**The uniform factory signature and `WorldContext` (design-review-004 repair — this one decision closes three Round 4 Criticals at once).** Round 4 found that (a) `fx-brittle` needed the world's training-region box but "models never import world internals" (§6) forbids reaching into `wmj.worlds` for it; (b) no per-world selection mechanism existed for a fixture running against both worlds; and (c) the only workaround — harness special-casing `fx-brittle` by name — would trip the very isolation gate (TC-MU9-01) built to forbid such coupling. All three dissolve if world context reaches **every** model the same way, so no model is special:
+
+```
+WorldContext (frozen dataclass, wmj.models.base — defined HERE, not imported from worlds,
+              following the same deliberate-duplication pattern the judge already uses
+              for its own input types, cross-cutting ADR-003):
+  world_name: str                          # "lv" | "pendulum" — for weights-file keying, never judged
+  state_dim: int                           # d
+  action_dim: int                          # a
+  training_state_box: float64[d, 2]        # per-dimension [low, high] of the WD-5 training box
+  training_action_interval: float64[2]     # [low, high] of the trained action range
+
+Factory (every registered model, no exceptions):
+  factory(ctx: WorldContext, rng: numpy.random.Generator) -> Model
+```
+
+The **harness** constructs one `WorldContext` per world from the world's own declared constants (`World.regions()`, worlds spec ADR-W4) — one producer, one construction site, no re-derived copies — and calls every registered factory with it identically, once per world. A model that doesn't need world context ignores its `ctx` argument (the baselines do); `fx-brittle` reads `ctx.training_state_box` and `ctx.training_action_interval` from its argument. No `models → worlds` import exists anywhere; no factory is called differently from any other; the per-world question is answered structurally (one factory, one instance per world, each holding that world's context).
+
+**The registry contract, pinned (design-review-004 repair — Round 4 found the mechanism named but its interface unspecified, and no duplicate-name rule):**
+
+```
+wmj.models.registry:
+  register(name: str, factory: Factory) -> None
+      # module-level call at import time; raises DuplicateModelError (fail loudly,
+      # cross-cutting Error-Handling rule 1) if the name is already registered
+  all_models() -> dict[str, Factory]
+      # triggers auto-discovery (cross-cutting ADR-003), then returns the registered
+      # factories keyed by name, in SORTED-NAME order — the ordering is part of the
+      # contract, stated here so determinism never silently depends on any discovery
+      # mechanism's internal behaviour; model_ref indices (judge spec §5 envelope)
+      # are assigned in this sorted order and are therefore reproducible by contract
+```
+
+**The seven canonical model names, pinned as literal join keys** (the same discipline worlds.md applies to region names — Round 4 found the harness must pick out specific models by name for MU-2's baseline extraction and MU-5's unrigged-pair check, with no pinned vocabulary to match against): `"persistence"`, `"linear"`, `"direct"`, `"ensemble"`, `"fx-overconfident"`, `"fx-honest-rough"`, `"fx-brittle"`. **The roster is seven contestants** — design-review-004 repair: "eight registered contestants"/"8 models" appeared in three specs and was never true against this document's own enumeration (2 baselines + direct + ensemble + 3 fixtures = 7), the same never-recounted-number defect class as the chunk-count error two rounds earlier.
+
+**Consequences:** Rollout-local state is invisible to the judge (which sees only arrays) and harmless to determinism (reset() makes every rollout self-contained) — **provided `reset()` actually clears it (design-review fix — this was previously asserted but never tested)**: §8 adds a cross-rollout isolation test, since a model that silently leaked state across JU-8's 200 independent trials would corrupt the independence assumption the whole exception-band derivation depends on, undetected by any other test in this document. TC-MU1-01/02 check the format and its cross-model identity; the registry is the only discovery path (MU-9), and harness code referencing the pinned name *strings* above (data, not Python identifiers) is explicitly permitted and does not violate MU-9's isolation — TC-MU9-01's import-graph check (cross-cutting ADR-003) forbids importing model *submodules*, not naming models by their registered string keys.
 
 ### ADR-M2 — Baselines: persistence and linear extrapolation, with honest training-residual spreads
 
@@ -115,9 +152,9 @@ Model (protocol, wmj.models.base):
 |---|---|---|---|
 | `fx-overconfident` | spread × 0.25, mean untouched | accurate but cocky → calibration fails despite good accuracy | TC-MU3-01 |
 | `fx-honest-rough` | mean + seeded noise (σ = 2× the model's spread); spread widened by the exact formula `spread ← sqrt(base_spread² + noise_σ²)` (design-review fix — "widened to match the true resulting error" was prose; this closed form is exact because it's the true variance of `mean + independent Gaussian noise`, so the fixture is honest by construction rather than by an empirical post-hoc fit) | rougher but honest → calibration passes with worse accuracy | TC-MU3-02 |
-| `fx-brittle` | **(design-review-002/003 fix — see below)** at each `predict(state, action)` call, checks whether `state` lies inside the world's declared `"training"` region box (worlds spec ADR-W4 — the identical constant the harness's own WD-5 region-labelling uses, imported directly, not re-derived); if inside, returns Model A's unmodified prediction; if outside, replaces the mean with `state` itself (a naive "nothing changes" prediction — badly wrong for a fast-moving or chaotic out-of-region trajectory) and leaves spread untouched | great at home, catastrophic away → only the in/out region split surfaces it | TC-MU3-03 |
+| `fx-brittle` | **(design-review-002/003/004 fix — see below)** at each `predict(state, action)` call, checks whether `state` lies inside `ctx.training_state_box` **and** `action` lies inside `ctx.training_action_interval` (both halves of WD-5's own either-axis out-of-region rule, worlds spec ADR-W4 — design-review-004 repair: the v1.3 trigger checked the state box only, so an in-state/out-of-action trial would have been graded out-of-region by the harness but treated as in-region by the fixture); if both hold, returns Model A's unmodified prediction; if either fails, replaces the mean with `state` itself (a naive "nothing changes" prediction — badly wrong for a fast-moving or chaotic out-of-region trajectory) and leaves spread untouched | great at home, catastrophic away → only the in/out region split surfaces it | TC-MU3-03 |
 
-**Design-review-003 fix — `fx-brittle` redesigned twice over.** Round 2 named a specific corruption ("the first state dimension's training interval is halved") that Round 3 found contradicted this ADR's own governing sentence two ways: (1) it required a separate, narrower-data training run, not a post-hoc wrapper around an already-trained Model A like its two siblings; (2) region membership for grading (WD-5) is a **world-level** property shared by every model, so the fixture's own narrower training footprint didn't align with the boundary it would be graded against — roughly half of what the harness would label "in-region" was territory the fixture never trained on, undermining the very demonstration MU-3 needs. The redesign above fixes both at once: `fx-brittle` is now a genuine post-hoc wrapper (Model A is trained exactly like every other contestant, no separate training run, no dependency on models.md §4's training-data pipeline beyond what `fx-overconfident`/`fx-honest-rough` already need), and its in/out boundary *is* the world's declared training-region box — the same constant WD-5's own region-labelling reads — so there is no possibility of the two disagreeing. **Fixtures register via `wmj.models.registry.register()` exactly like every other model** (design-review-003 clarification — previously unstated).
+**Design-review-003/004 fixes — `fx-brittle` redesigned, then re-wired.** Round 2's corruption ("half the training box") required a separate training run and misaligned with WD-5's world-level boundary; Round 3 made it a genuine post-hoc wrapper keyed to the world's declared box — but specified the box as "imported directly" from `wmj.worlds`, which Round 4 found contradicts this document's own §6 rule ("models never import world internals"), left the two-worlds selection question open, and collided with TC-MU9-01's isolation gate. **Round 4's repair (ADR-M1's uniform factory + `WorldContext`) resolves all of it structurally:** the box and action interval arrive through the same `ctx` argument every factory receives — no import, no per-world ambiguity (one instance per world, each holding its own context), no harness special-casing, and the trigger now covers both WD-5 axes, so the fixture's in/out boundary and the harness's region label are computed from the same constants delivered through one construction site. `fx-brittle` remains a pure wrapper: Model A trained exactly like every other contestant, no extra training-pipeline dependency. **Fixtures register via `wmj.models.registry.register()` exactly like every other model** (design-review-003 clarification).
 
 All three set `is_fixture = True`; the flag flows through the harness into the verdict record and onto every chart (MU-4's three surfaces — code, record, rendered chart — are exactly TC-MU4-01's checklist; the rendering rule is the reporting spec's RP-8 section).
 
@@ -135,14 +172,15 @@ All three set `is_fixture = True`; the flag flows through the harness into the v
 
 **A second, distinct residual risk (design-review-002 addition — Round 2's Security panel):** MU-6's publish-either-way clause is procedural in a stronger sense than the paragraph above covers — nothing in this design detects *non-publication*. A judged run of the unrigged models could be executed, its result observed as unfavourable, and simply never committed; there is no artefact, log, or check anywhere in the pipeline that proves a judged run occurred if its output was withheld, since the only record of anything is what actually gets committed. This is a different failure mode from git-history rewriting (which alters a committed record) — this is a record that never gets made in the first place. No JU-10 disclosure covers this specific scenario (checked against all seven verbatim strings in judge spec ADR-J7). As with the git-rewritability risk, no technical control in a single-author, offline, no-server-side-witness project fully closes this; it is disclosed here rather than presented as solved.
 
-**A third residual risk, and a partial mitigation (design-review-003 addition — Round 3's blind Security panel):** a git commit's author/committer timestamp is ordinary metadata the committer supplies (`git commit --date=...`, or the `GIT_AUTHOR_DATE`/`GIT_COMMITTER_DATE` environment variables) — no history rewrite is needed to set a `prereg/` commit's *original* timestamp to any value at the moment it is first made, which is a simpler and easier-to-execute action than the rewritability risk already disclosed above. **Partial mitigation:** because this repository is hosted on a public GitHub remote, `check_prereg` additionally cross-references GitHub's own server-received push timestamp for the commit (available via the GitHub API, e.g. the commit's associated push event or the repository's event log) against the commit's self-reported date — a value the committer does not control and cannot backdate, since GitHub records it at the moment the push actually arrives. This closes the easy case (a locally-forged timestamp that was never actually pushed until later) but is disclosed honestly as GitHub-hosting-dependent, not a portable technical control: a sufficiently early, deliberately-timed push of a backdated commit is not caught by this cross-check, and the mechanism would need re-specifying if the repository ever moved off GitHub.
+**A third residual risk (design-review-003 addition; mitigation removed by design-review-004 repair):** a git commit's author/committer timestamp is ordinary metadata the committer supplies (`git commit --date=...`, or the `GIT_AUTHOR_DATE`/`GIT_COMMITTER_DATE` environment variables) — no history rewrite is needed to set a `prereg/` commit's *original* timestamp to any value at the moment it is first made, which is a simpler and easier-to-execute action than the rewritability risk disclosed above. Round 3 added a GitHub-API push-timestamp cross-check as a "partial mitigation"; Round 4 found it introduced an undisclosed network dependency contradicting the architecture's own "no external systems but git" claim (architecture-overview §1), specified no offline/failure behaviour for a pipeline whose target machine is an ordinary laptop, and — because GitHub's events API retains only a bounded recent window — would have silently decayed to no protection for any prereg commit older than roughly ninety days, undisclosed. **It is removed rather than patched.** Like the two risks above, this one has no technical control that a single-author, offline, no-server-side-witness project can honestly claim; a reader who wants stronger assurance can independently note the public repository's push time at the moment prereg lands (anyone watching the public repo can do this; the design just doesn't pretend the pipeline does it for them). Named, not solved — the same disclosure discipline as its siblings.
 
 ## 4. Component Design
 
 ```
 wmj/models/
   base.py        # Model protocol, Prediction dataclass (re-exported from shared shapes)
-  registry.py    # register(factory) / all_models() — the only discovery path (MU-9)
+  registry.py    # register(name, factory) / all_models() — the only discovery path (MU-9);
+                 # full contract incl. DuplicateModelError and sorted-name ordering in ADR-M1
   baselines.py   # persistence, linear extrapolation (ADR-M2)
   mlp.py         # hand-rolled MLP: forward, backward, Adam, gradient check hook
   direct.py      # Model A (ADR-M3)
@@ -155,7 +193,7 @@ tests/models/    # gradient check, format checks, fixture behaviour, determinism
 
 ## 5. API Boundary Contracts
 
-What the harness extracts from models for the judge — the only model-shaped data the judge ever sees (JU-1). Arrays are pre-shaped `[n_trials, H, d]` (judge spec v1.3 §4); a trial's own row in that first axis is its boundary, so there is no separate boundary-marker field (design-review fix — v1.0 named a `trial_boundaries: [n_trials] int` field here that judge.md's own array shapes made undefined and redundant; removed):
+What the harness extracts from models for the judge — the only model-shaped data the judge ever sees (JU-1). Arrays are pre-shaped `[n_trials, H, d]` (judge spec v1.4 §4); a trial's own row in that first axis is its boundary, so there is no separate boundary-marker field (design-review fix — v1.0 named a `trial_boundaries: [n_trials] int` field here that judge.md's own array shapes made undefined and redundant; removed):
 
 ```json
 {
@@ -168,11 +206,11 @@ What the harness extracts from models for the judge — the only model-shaped da
 }
 ```
 
-`is_fixture` and the model's `name` are *not* part of `JudgeInput` (the judge must stay blind) and are never computed by anything in this package's own model code — the harness assembles them into the harness-owned envelope (judge spec v1.3 §5) alongside the judge's pure `Verdict` once judging completes, which is what reporting actually consumes (design-review fix: v1.0 described this as the harness holding "a mapping" reporting separately "rejoins"; the envelope is the single object that replaces both, per Keeling's single-producer-per-fact principle applied in the judge spec).
+`is_fixture` and the model's `name` are *not* part of `JudgeInput` (the judge must stay blind) and are never computed by anything in this package's own model code — the harness assembles them into the harness-owned envelope (judge spec v1.4 §5) alongside the judge's pure `Verdict` once judging completes, which is what reporting actually consumes (design-review fix: v1.0 described this as the harness holding "a mapping" reporting separately "rejoins"; the envelope is the single object that replaces both, per Keeling's single-producer-per-fact principle applied in the judge spec).
 
 ## 6. Integration Points
 
-- **← worlds:** training data generated through the world interface with the worlds spec's regions and action ranges; models never import world internals — they see `(state, action)` arrays.
+- **← worlds:** training data generated through the world interface with the worlds spec's regions and action ranges; models never import world internals — they see `(state, action)` arrays, **plus the harness-constructed `WorldContext` every factory receives uniformly (ADR-M1, design-review-004 repair — this is the one sanctioned channel for world facts to reach a model, and it is data handed in, never an import reaching out)**.
 - **→ judge:** the boundary contract above; the judge spec owns `JudgeInput`.
 - **→ harness:** registry discovery, training orchestration, prereg checks, train/eval disjointness assertion.
 
@@ -209,6 +247,7 @@ What the harness extracts from models for the judge — the only model-shaped da
 | 1.1 | 2026-08-25 | Design-review fixes (design-review-001): pinned weight initialization, Model A's exact NLL formula, resolved the full-batch/mini-batch contradiction (mini-batch 32, gradient check separately full-batch), pinned Adam's ε; `fx-honest-rough`'s spread now an exact formula; `fx-brittle`'s "half the training box" now names the specific axis and split; added TC-MU1-03 (reset-isolation test); §5 dropped the undefined `trial_boundaries` field and now points at the judge spec's harness-owned envelope; ADR-M5 traces the MU-1 format explicitly into `prereg/recipe.md`. |
 | 1.2 | 2026-08-30 | Design-review fix (design-review-002, Round 2): named a second residual risk in ADR-M5 — non-publication of an unfavourable judged run is undetectable by any mechanism in this design, distinct from the existing git-rewritability disclosure. |
 | 1.3 | 2026-08-30 | Design-review fixes (design-review-003, Round 3, dual/blind): redesigned `fx-brittle` as a post-hoc wrapper keyed to the world's own declared region box (fixing a wrapper-framing contradiction and a region-label mismatch); stated fixtures' registration path explicitly; fixed `region_labels`' example to the canonical shape; named a third residual risk (prereg timestamp forgery) with a partial mitigation. |
+| 1.4 | 2026-08-30 | Design-review-004 structural repair: uniform factory signature + `WorldContext` (ADR-M1) closing the models↔worlds layering contradiction, the two-worlds gap, and the TC-MU9-01 collision in one decision; registry contract pinned (named registration, duplicate error, sorted-order return); seven canonical names pinned; roster corrected 8→7; `fx-brittle` trigger covers both WD-5 axes; GitHub-API prereg mitigation removed in favour of plain disclosure. |
 
 ---
 

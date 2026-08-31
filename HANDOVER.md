@@ -2,9 +2,31 @@
 
 ## CURRENT STATE
 
-**Phase:** Technical specification complete and **three times design-reviewed**,
-all seven documents at **v1.3** (worlds.md untouched since v1.2 — Round 3 found
-no defect assigned to it). `/gvm-tech-spec` ran in full; Round 1 (quick-scan, 4
+**Phase:** Technical specification complete, **four times design-reviewed**, and
+now **structurally repaired** — specs at **v1.4** (worlds.md at v1.3), test
+cases at **v1.1** (79 IDs, 1 superseded tombstone, 78 live). Round 4 (second
+dual/blind, 14 reviewers, targeted at pressure-testing Round 3's two flagship
+fixes per BC-2) found both flagship fixes failed — and failed *into each other*
+(the `fx-brittle` redesign and the new TC-MU9-01 mechanism were mutually
+exclusive on the one fixture exercising both). Four consecutive "Do not build"
+verdicts with a non-shrinking defect population led to a root-cause diagnosis
+recorded in `reviews/calibration.md`: fixes were being made at the size of the
+finding, not the size of the rule, and verified by prose re-reading, which
+cannot check code-behaviour claims. The user approved a **structural repair
+session** (31 Aug) executing all five moves of calibration.md's structural
+recommendation: (1) one canonical Verdict-schema keying rule verified via a
+block×axis table (judge v1.4); (2) a `WorldContext` + uniform
+`factory(ctx, rng)` signature dissolving the models↔worlds layering question
+(models v1.4); (3) the AST gate rebuilt as allowlist + banned identifiers +
+wholesale `numpy.random` ban + an executable evasion-fixture corpus
+(cross-cutting v1.4, TC-NF6 family restructured, TC-MU9-01 mechanism v3);
+(4) a full implementation-guide reconciliation (10 orphaned test cases wired,
+three-branch critical path, roster corrected 8→7); (5) the phantom CI layer
+and GitHub-API dependency deleted from the design. **These repairs are
+self-verified only — Round 5 (dual/blind, mandatory) is the pending next step
+and its explicit job is to pressure-test the five repair groups.**
+
+Earlier history: `/gvm-tech-spec` ran in full; Round 1 (quick-scan, 4
 panels) found 10 Critical + 16 Important, patched into v1.1; Round 2 (full,
 strict, +Security/Quality-Attribute panels) found 8 new Critical + 9 new
 Important plus 3 partial/regressed Round-1 fixes, patched into v1.2.
@@ -48,7 +70,11 @@ Round 2's handover posed and Round 3 answered "keep reviewing": accept the
 residual risk and proceed to `/gvm-build` at Phase 1 / P1-C01, 28 chunks per
 the (now twice-independently-confirmed) implementation guide.
 
-Last updated 2026-08-30 (design-review-003 fixes).
+**Known cosmetic debt:** the `specs/*.html` Tufte twins are stale at v1.1 —
+the NF5-02 spec-parity hash check exists precisely to catch this at build
+time; regenerate them when the spec set next stabilises (post-Round-5).
+
+Last updated 2026-08-31 (design-review-004 structural repair; Round 5 pending).
 
 ---
 

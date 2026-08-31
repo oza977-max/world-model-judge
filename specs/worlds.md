@@ -1,6 +1,8 @@
 # World Model Judge — Worlds Specification
 
-Version 1.2 · 30 August 2026 · Domain 1 of Requirements v1.2 · References: cross-cutting spec v1.3
+Version 1.3 · 31 August 2026 · Domain 1 of Requirements v1.2 · References: cross-cutting spec v1.4
+
+> **Change note (v1.3 — the design-review-004 structural repair).** Round 4 found this document was the missing third leg of the `region_labels` "unified across all three domain specs" claim (its version banner and changelog carried no trace of the Round 3 unification, because none was ever applied here). Fixed: §5 now states the canonical `{region_name, axis}` label shape verbatim, ADR-W4 states the `null`-when-in-region fourth axis value it was cited for but never contained, and §4.2 declares the pendulum's natural cycle **absent** explicitly (grounding judge spec ADR-J5's nullable `natural_units` convention) rather than leaving the field's pendulum value undefined. See design-review-004.html.
 
 > **Change note (v1.2).** Revised after `/gvm-design-review` design-review-002 (Round 2, independent re-check under strict criteria). **The v1.1 double-pendulum equations of motion, written out explicitly to fix a Round 1 finding, contained a coefficient error**: re-deriving the equal-mass case from the Euler–Lagrange equations shows `denom1`, `denom2`, and θ̈₁'s leading gravity term all need the coefficient `(2m₁+m₂)`, which specializes to **3·m** for equal masses — the v1.1 text used `2·m` in all three places (θ̈₂'s numerator, which needs the different `(m₁+m₂)=2m` coefficient, was already correct). Because the reference implementation and TC-WD1-01's hand-verified 15-significant-digit constants were both stated to be computed from the v1.1 (buggy) formula, **the previous reference constants are invalid and must be recomputed from the corrected formula below before TC-WD1-01 can be implemented** — this is flagged explicitly rather than silently carried forward, since no test in the suite as designed could have caught the original error (it was self-consistently wrong). See design-review-002.html for the full findings.
 
@@ -91,7 +93,7 @@ The negative test proves check 1 fails on a mismatched `dt` between two ground-t
 
 **Status:** Accepted. [Requirement: WD-5] [Test: TC-WD5-01, TC-WD5-02]
 
-**Decision:** Regions are axis-aligned boxes over state dimensions and an interval over the action. Membership is **closed on the training region**: a point exactly on the training boundary is in-region (TC-WD5-01's boundary determinism). An evaluation is labelled out-of-region if *either* its start state is outside the training state box *or* any action in its rollout is outside the trained action interval — and the label records *which axis* (state, action, or both), per WD-5's "say which" clause (TC-WD5-02).
+**Decision:** Regions are axis-aligned boxes over state dimensions and an interval over the action. Membership is **closed on the training region**: a point exactly on the training boundary is in-region (TC-WD5-01's boundary determinism). An evaluation is labelled out-of-region if *either* its start state is outside the training state box *or* any action in its rollout is outside the trained action interval — and the label records *which axis* (`"state"`, `"action"`, or `"both"`; **`null` when the trial is fully in-region** — design-review-004 repair: judge.md's schema always carried this fourth value, but this ADR, cited as its source, never stated it), per WD-5's "say which" clause (TC-WD5-02).
 
 ## 4. Component Design — the two worlds, exactly
 
@@ -156,6 +158,7 @@ State (θ₁, θ₂, ω₁, ω₂).
 | Conserved quantity | total mechanical energy E(θ₁, θ₂, ω₁, ω₂) | the "energy shell" WD-3 bounds and JU-6 conditions on |
 | Action | u = Action[0] ∈ [−2.0, 2.0] rad/s, pivot impulse: ω₁ ← ω₁ + u | the lever: kick the first joint's angular velocity |
 | Angles | stored unwrapped (not mod 2π) | distance and the flip task need the winding; reporting may display wrapped |
+| Natural cycle | **none — declared absent, not omitted** (design-review-004 repair) | the double pendulum is chaotic with no natural period; JU-7's `natural_units` is therefore `null` for this world (judge spec ADR-J5's nullable convention), unlike LV, whose near-equilibrium period is declared in §4.1 |
 
 **Regions (WD-5):** training region name `"training"`; out-region name **`"out-near-inverted"`** (design-review fix — the naming convention was demonstrated only for LV in v1.0; region names are the join key models.md's `region_labels` and this document's own §5 artefacts use to pick a specific curve/table, so every out-region needs one, named for what makes it out-of-distribution): states θ₁, θ₂ ∈ [−0.3, 0.3] rad, ω₁, ω₂ ∈ [−0.5, 0.5] rad/s (low-energy, near-regular) for training; θ₁ ∈ [2.5, π] (near-inverted, chaotic regime), θ₂ ∈ [−0.3, 0.3], ω ∈ [−0.5, 0.5] for `"out-near-inverted"`. Trained actions u ∈ [−1.0, 1.0]; out-of-range |u| ∈ (1.0, 2.0].
 
@@ -202,7 +205,14 @@ The divergence artefact — the shape the judge and reporting consume (produced 
 
 Field names, nesting, and units are fixed here; the judge spec references this contract rather than restating it. A trajectory artefact is simply `float64[H+1, d]` plus the action sequence `float64[H, a]`. Note the `steps` array runs 0..H inclusive (`H+1` entries) — judge spec §4 matches this exactly rather than the earlier, mismatched `[H]` shape, so every step-indexed curve in the system (divergence, error-vs-horizon) shares one zero-based origin.
 
-**The region-name join key (design-review fix):** every trial the harness hands to the judge carries a region label naming exactly one of the keys in the `regions` object above (`"training"`, `"out-high-amplitude"` for LV; `"training"`, `"out-near-inverted"` for the pendulum) — never a bare in/out boolean. This is what lets the judge and reporting pick the correct divergence curve and climatology bin table for a given trial even though each world currently declares only one out-region; the mechanism generalises without change if a world later declares more.
+**The region label, canonical shape stated here as well as cited (design-review-004 repair — Round 4 found cross-cutting.md claiming this shape was "cited by worlds/models/judge specs alike" while this document, the label's own producer spec, described it only in prose):** every trial the harness hands to the judge carries one label of the exact shape
+
+```
+{"region_name": "training" | "out-high-amplitude" | "out-near-inverted" | <any declared region key>,
+ "axis": "state" | "action" | "both" | null}
+```
+
+— `region_name` naming exactly one key in the `regions` object above, never a bare in/out boolean, and `axis` per ADR-W4's four-value convention (`null` = fully in-region). Identical, field for field, to judge spec §4's `region_labels` entry shape and models spec §5's boundary example. This is what lets the judge and reporting pick the correct divergence curve and climatology bin table for a given trial even though each world currently declares only one out-region; the mechanism generalises without change if a world later declares more.
 
 **The conditioned-climatology table (design-review fix — this artefact was consumed by the judge spec's ADR-J5 but never given a producer contract here, the section reserved for exactly that):** produced by `wmj.harness.benchmarks` alongside the divergence artefact, from one continuous 200,000-step null-action reference trajectory per world started at the training region's centre, binned by the world's own `conserved()` value into 16 equal-population bins:
 
@@ -256,6 +266,7 @@ Hand-verified reference values for TC-WD1-01: one LV step from (4.0, 2.5) with u
 | 1.0 | 2026-08-25 | Initial version. All world constants pinned; integrator ADR decided (RK4 fixed-step, drift bound 1e-6 relative). |
 | 1.1 | 2026-08-25 | Design-review fixes (design-review-001): WD-3's gate restated as two real checks (ground-truth call-site identity; model dt-alignment) since no model calls an integrator; double-pendulum EOM and energy written out explicitly with a named sign convention; LV clamp-handling unified into one rule with no run-type exceptions; named every region (including the pendulum's out-region, previously unnamed) as the join key judge/models specs use; added the conditioned-climatology table's producer contract to §5. |
 | 1.2 | 2026-08-30 | Design-review fixes (design-review-002, Round 2): corrected a coefficient error in the v1.1 double-pendulum EOM (`denom1`/`denom2`/θ̈₁'s gravity term needed `3·m`, not `2·m`, for equal masses) — the v1.1 formula was self-consistently wrong and undetectable by any test as designed; flagged the TC-WD1-01 pendulum reference constant as invalid and requiring recomputation from the corrected formula. |
+| 1.3 | 2026-08-30 | Design-review-004 structural repair: canonical `{region_name, axis}` label shape stated verbatim in §5; ADR-W4 gains the `null` axis value judge.md always cited it for; pendulum's natural cycle declared absent explicitly (§4.2), grounding the nullable `natural_units` convention. |
 
 ---
 
