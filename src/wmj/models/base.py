@@ -57,6 +57,51 @@ def component_key(*parts: str) -> tuple[int]:
 
 
 @dataclass(frozen=True)
+class Prediction:
+    """One model's prediction at one step (models spec ADR-M1).
+
+    In plain words: every model, no matter how it works inside, says
+    the same two things back — a per-dimension best guess (`mean`) and
+    a per-dimension one-standard-deviation error bar (`spread`). That
+    fixed shape is what lets the judge grade every model the same way.
+    """
+
+    mean: np.ndarray  # float64[d]
+    spread: np.ndarray  # float64[d], one standard deviation
+
+
+@dataclass(frozen=True)
+class WorldContext:
+    """World geometry handed to every model factory (models spec ADR-M1).
+
+    In plain words: a model is never allowed to import the world it's
+    being trained for (that coupling is banned, ADR-003) — so whatever
+    it needs to know about that world's shape and scale arrives here
+    instead, as plain data, the same way for every model.
+    """
+
+    world_name: str
+    state_dim: int
+    action_dim: int
+    training_state_box: np.ndarray  # float64[d, 2]
+    training_action_interval: np.ndarray  # float64[a, 2]
+    scale: np.ndarray  # float64[d]
+
+
+@dataclass(frozen=True)
+class TrainingData:
+    """The seeded training trajectories every factory fits against.
+
+    Built once per world by the harness and hand identically to every
+    registered factory — one producer, one construction site (models
+    spec ADR-M1).
+    """
+
+    states: np.ndarray  # float64[N, H+1, d]
+    actions: np.ndarray  # float64[N, H, a]
+
+
+@dataclass(frozen=True)
 class SeedSource:
     """Handed to every model factory as data (models spec ADR-M1).
 
