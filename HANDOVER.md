@@ -170,14 +170,21 @@ fork. See `design-review/design-review-007.html` and the "Round 7 result" entry 
 - **ADR-004 needs rethinking, not patching** — 5+ panels independently found its pseudocode doesn't typecheck against the registry contract (executed `AttributeError`), baselines are consumed before they're populated (4 panels, same computed sorted order), and — the deepest finding — its "one region per JudgeInput" **contradicts** the multi-region `region_labels` design stable since Round 3 (C-cal, B-cal).
 - **The wiring gap recurred a third consecutive round** on different IDs each time (6 panels: TC-MU6-04/05, TC-NF1-07, TC-RP7-02 unwired, misattribution repeated).
 
-New standing pattern, **BC-5 (candidate)**: every "mutate in place" fix needs to generalize to *every reachable binding* of the guarded object — module-level, submodule-level, class-vs-instance — not just the first one found. See `design-review/design-review-008.html` and the "Round 8 result" entry in `reviews/calibration.md`. **Awaiting user triage before the next fix pass.**
+New standing pattern, **BC-5 (candidate)**: every "mutate in place" fix needs to generalize to *every reachable binding* of the guarded object — module-level, submodule-level, class-vs-instance — not just the first one found. See `design-review/design-review-008.html` and the "Round 8 result" entry in `reviews/calibration.md`.
+
+**Update — Round 8 fixes applied (31 Aug, specs → v1.8, test-cases → v1.5, commit `dc67a99`).** The user asked for both open questions explained in plain English, then chose "switch to whole-exam" for ADR-004 and "fix everything now."
+- **BC-5 fix:** purity guards generalized to every reachable binding — `os.environ` patched at the class (`os._Environ`), `numpy.random` patched at both module and private-submodule level, `numpy.datetime64`'s rebind disclosed honestly. Side effect (executed): the `getrandom()` residual Round 7 disclosed is now closed; the residual narrows to `ctypes`+pre-capture only. `TC-NF1-01` now pins separate-process runs.
+- **ADR-004 rewritten** ("whole exam, one report card"): a `JudgeInput` now carries every region a world declares, in one call per model — matching the `region_labels` design stable since Round 3, not the broken one-region-per-call design. Fixes the registry-contract typecheck bug, the baseline-ordering bug, and the unspecified collation step as a side effect (one `Verdict` per (model, world) directly). Simulated end-to-end before writing.
+- **Mechanical cluster:** `component_key` rejects non-`str` parts (TC-NF1-08); `models→judge`/`models→reporting` gate added (TC-NF6-09); `out/` write ownership decided once (reporting is the sole writer); `check_prereg` git-ordering pinned (`--reverse`); `TC-MU9-01(c)` false positive fixed; MU-5 margin overclaim corrected; worlds-registry asymmetry disclosed; four v1.7 orphans actually wired (TC-MU6-04/05, TC-NF1-07, TC-RP7-02); missing v1.7 changelog row added.
+
+**Next: a Round 9 (dual/blind) is owed by BC-2** — no external panel has yet seen the generalized purity guards or the rewritten ADR-004. The user owns whether/when to run it.
 
 **Known debt:** the `specs/*.html` twins carry a deterministic staleness banner (they
 regenerate with the NF5-02 parity hash at build time, P6-C02). The older "What exists"
 table below is itself stale (says v1.3/v1.0) — Round 6 flagged it; refresh when next
 editing this file.
 
-Last updated 2026-08-31 (design-review-008 — Round 8 complete; awaiting user triage).
+Last updated 2026-08-31 (Round 8 fixes applied, specs v1.8 / test-cases v1.5, commit dc67a99; Round 9 owed by BC-2).
 
 ---
 
