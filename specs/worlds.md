@@ -1,6 +1,8 @@
 # World Model Judge — Worlds Specification
 
-Version 1.3 · 31 August 2026 · Domain 1 of Requirements v1.2 · References: cross-cutting spec v1.4
+Version 1.4 · 31 August 2026 · Domain 1 of Requirements v1.2 · References: cross-cutting spec v1.5
+
+> **Change note (v1.4 — design-review-005 repair).** Round 5 found `RegionSpec` (the producer the harness builds `WorldContext` from) had no declared field schema, and that `training_action_interval` was a flat `[2]` where a per-action-dimension `[a, 2]` is correct. §4.3 now gives `RegionSpec` and `Task` full field schemas and adds the action-dimension `a` to the World protocol, so the one `WorldContext` construction site has a contract to read against. This supports the models-spec fix (WorldContext now carries `scale` and a training-data channel, models spec ADR-M1). See design-review-005.html.
 
 > **Change note (v1.3 — the design-review-004 structural repair).** Round 4 found this document was the missing third leg of the `region_labels` "unified across all three domain specs" claim (its version banner and changelog carried no trace of the Round 3 unification, because none was ever applied here). Fixed: §5 now states the canonical `{region_name, axis}` label shape verbatim, ADR-W4 states the `null`-when-in-region fourth axis value it was cited for but never contained, and §4.2 declares the pendulum's natural cycle **absent** explicitly (grounding judge spec ADR-J5's nullable `natural_units` convention) rather than leaving the field's pendulum value undefined. See design-review-004.html.
 
@@ -175,15 +177,34 @@ Tolerances are quantitatively different within each world by construction (TC-WD
 ```
 World (protocol, wmj.worlds.base):
   d: int                      # state dimensionality
+  a: int                      # action dimensionality (LV a=1, pendulum a=1 — see §4.1/§4.2)
   dt: float                   # shared step size (the WD-3 constant)
   transition(state, action) -> next_state        # pure; ADR-W2 semantics
   conserved(state) -> float                      # V or E; used by WD-3 gate and JU-6
   regions() -> RegionSpec                        # training + out boxes, state and action
   tasks() -> tuple[Task, ...]                    # name, kind, tolerance, horizon
-  scale: float64[d]                              # normalisation vector
+  scale: float64[d]                              # per-state-dimension normalisation vector (ADR-W3)
 ```
 
-`Task` and `RegionSpec` are frozen dataclasses in `wmj.worlds.base`. Worlds hold **no mutable state and no RNG** — `transition` is a pure function, which is what makes TC-WD7-01's cross-process byte-identity achievable and TC-WD7-02's injected-RNG mutation detectable.
+**`RegionSpec` and `Task`, given their field schema (design-review-005 repair — Round 5 found `RegionSpec` was named as the producer the harness builds `WorldContext` from, but its fields were never declared, unlike every other cross-package type; a builder had to invent them):**
+
+```
+RegionSpec (frozen dataclass, wmj.worlds.base):
+  training_state_box: float64[d, 2]     # per-state-dimension [low, high] of the WD-5 training box
+  training_action_interval: float64[a, 2]  # per-action-dimension [low, high] of the trained action range
+  out_regions: tuple[OutRegion, ...]    # each: {region_name: str, axis: "state"|"action"|"both",
+                                        #        state_box: float64[d,2], action_box: float64[a,2]}
+      # region_name is the world's declared out-region vocabulary (§5); "training" is reserved
+Task (frozen dataclass, wmj.worlds.base):
+  name: str                   # "lv-control" | "lv-planning" | "dp-control" | "dp-planning"
+  kind: str                   # "control" | "planning"
+  tolerance: float            # τ, normalised distance (ADR-W3)
+  horizon: int                # the task's evaluation horizon in steps
+```
+
+The **harness** reads `training_state_box`, `training_action_interval`, and `scale` straight off `RegionSpec`/`World` to construct each `WorldContext` (models spec ADR-M1) — one producer, one construction site; the field names above are that construction's contract. `Task` and `RegionSpec` are frozen dataclasses in `wmj.worlds.base`. Worlds hold **no mutable state and no RNG** — `transition` is a pure function, which is what makes TC-WD7-01's cross-process byte-identity achievable and TC-WD7-02's injected-RNG mutation detectable.
+
+**Note on `training_action_interval`'s shape (design-review-005):** it is `[a, 2]` — per-action-dimension, not a flat `[2]`. Both worlds declared here have `a = 1`, so it is a single `[1, 2]` row today; the per-dimension shape is stated so a later multi-action world needs no schema change (the same generalise-without-change discipline §5 applies to region labels). `WorldContext` mirrors this shape (models spec ADR-M1).
 
 ## 5. API Boundary Contracts
 
@@ -267,6 +288,7 @@ Hand-verified reference values for TC-WD1-01: one LV step from (4.0, 2.5) with u
 | 1.1 | 2026-08-25 | Design-review fixes (design-review-001): WD-3's gate restated as two real checks (ground-truth call-site identity; model dt-alignment) since no model calls an integrator; double-pendulum EOM and energy written out explicitly with a named sign convention; LV clamp-handling unified into one rule with no run-type exceptions; named every region (including the pendulum's out-region, previously unnamed) as the join key judge/models specs use; added the conditioned-climatology table's producer contract to §5. |
 | 1.2 | 2026-08-30 | Design-review fixes (design-review-002, Round 2): corrected a coefficient error in the v1.1 double-pendulum EOM (`denom1`/`denom2`/θ̈₁'s gravity term needed `3·m`, not `2·m`, for equal masses) — the v1.1 formula was self-consistently wrong and undetectable by any test as designed; flagged the TC-WD1-01 pendulum reference constant as invalid and requiring recomputation from the corrected formula. |
 | 1.3 | 2026-08-30 | Design-review-004 structural repair: canonical `{region_name, axis}` label shape stated verbatim in §5; ADR-W4 gains the `null` axis value judge.md always cited it for; pendulum's natural cycle declared absent explicitly (§4.2), grounding the nullable `natural_units` convention. |
+| 1.4 | 2026-08-31 | Design-review-005 repair: `RegionSpec` and `Task` given full field schemas (§4.3) so the `WorldContext` construction site has a producer contract; `training_action_interval` shape corrected from flat `[2]` to per-action-dimension `[a, 2]`; action-dimension `a` added to the World protocol. |
 
 ---
 

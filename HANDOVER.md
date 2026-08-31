@@ -70,11 +70,32 @@ Round 2's handover posed and Round 3 answered "keep reviewing": accept the
 residual risk and proceed to `/gvm-build` at Phase 1 / P1-C01, 28 chunks per
 the (now twice-independently-confirmed) implementation guide.
 
-**Known cosmetic debt:** the `specs/*.html` Tufte twins are stale at v1.1 —
-the NF5-02 spec-parity hash check exists precisely to catch this at build
-time; regenerate them when the spec set next stabilises (post-Round-5).
+**Update — Round 5 complete, and its fixes applied ("fix all").** Specs are at
+**v1.5** (worlds v1.4), test-cases at **v1.2** (85 IDs, 84 live). Round 5 (third
+dual/blind, 14 reviewers) returned the fifth "Do not build" but was the first
+round to *clear* prior defects rather than reshuffle them — the critical-path
+arithmetic and BC-3 reconciliation held under independent re-derivation, and the
+Round-4 fx-brittle/registry mutual exclusion is genuinely dissolved. What it then
+reached, with executable adversarial review, was a deeper layer: three design-level
+findings that the "fix all" pass *decided* rather than patched —
+(1) the judge-purity gate cannot be a static-analysis boundary in Python, so
+TC-JU12-01's **runtime effect-guarding harness is now the load-bearing control**
+and the AST gate is lint; (2) the model interface gained a `TrainingData` channel
+and `WorldContext.scale` (6 of 7 models were unbuildable without them);
+(3) seed derivation is now content-addressed so adding a model shifts no other's
+stream. Everything else (13 Critical + 15 Important) was fixed at rule-size; see
+`reviews/calibration.md`'s "Round 5 fixes applied" entry and
+`design-review/design-review-005.html`. The critical path was honestly
+re-derived to **10 chunks** (the new file-ownership/prereg-count edges lengthen the
+reporting branch — a real graph change, not a recount error).
 
-Last updated 2026-08-31 (design-review-004 structural repair; Round 5 pending).
+**Known debt:** the `specs/*.html` twins are stale and now carry a deterministic
+staleness banner pointing to the authoritative `.md`; they regenerate with the
+NF5-02 parity hash at build time (P6-C02). The v1.5 fixes are **self-verified only**
+— a Round 6 dual/blind review would pressure-test the enforcement-mechanism
+changes (the runtime purity harness especially), per BC-2, if wanted.
+
+Last updated 2026-08-31 (design-review-005 repair — "fix all" applied).
 
 ---
 
