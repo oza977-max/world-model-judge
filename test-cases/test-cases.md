@@ -1,6 +1,8 @@
 # World Model Judge — Test Cases
 
-Version 1.2 · Derived from Requirements v1.2 (25 August 2026, post-review-board and post-audit fixes)
+Version 1.3 · Derived from Requirements v1.2 (25 August 2026, post-review-board and post-audit fixes)
+
+> **Change note (v1.3, 31 August 2026 — design-review-006 repair, execution-verified).** The enforcement-mechanism cases now match mechanisms that were *run* before being written: TC-JU12-01 corrected to mutate-in-place (the `sys.modules` swap was executed failing), with TC-JU12-02 confirmed to fire and TC-JU12-03 added for numpy's C clock; TC-NF4-01 corrected to `--batch` (the `--batch-check` form emits no content — executed) with a plant-and-detect can-fail proof; TC-NF1-03 verified and TC-NF1-04 (two-implementation `component_key` convergence) added; TC-MU4-02 now rebuilds `direct` via `seeds.rng_for` (executed bit-identical); TC-MU9-03 made buildable via in-process `list-models`; TC-MU6-03 (per-model prereg) and TC-MU7-02 (seed-purpose independence) added; TC-JU9-01 now lists nine mandatory groups (adds `limitations`). Four new cases (TC-JU12-03, TC-NF1-04, TC-MU6-03, TC-MU7-02): 89 IDs, 88 live. See design-review-006.html.
 
 > **Change note (v1.2, 31 August 2026 — design-review-005 repair session).** Six new cases wired to their chunks: TC-NF6-07 (models→worlds import gate — the claim the WorldContext ADR was built on, previously unenforced), TC-MU9-03 (the CLI path routes through the registry), TC-JU12-02 (runtime-purity phantom-gate — a `__globals__`-routed `os` read the guard must catch), TC-NF1-03 (seed derivation is content-addressed — no shift on roster change), TC-MU4-02 (fixture inner net weight-identical to `direct`), TC-RP-CARD-01 (the model card is rendered). Rewrites: TC-JU12-01 specified as the load-bearing effect-guarding purity control (the static AST lint no longer claims completeness — Round 5 executed reflection escapes it cannot see); TC-WD3-01 corrected to assert shared-ground-truth-integrator + dt-alignment (not the impossible "model used the identical integrator class"); TC-JU4-01 and TC-MU3-03 updated to the region-key shape and the both-axes `fx-brittle` scenario; TC-MU9-01 teardown clears `sys.modules` and force-registers before snapshot, part (c) joins module+name; TC-NF6-02/04 reframed as lint (completeness disclaimed). Three `<spec-value>` placeholders filled from the settled specs (N=200, 600 s, `{numpy, matplotlib}`). 85 IDs, 84 live (TC-NF6-05 tombstone). See design-review-005.html.
 
@@ -26,9 +28,9 @@ itself left as `<spec-value>` — filled in once the technical spec sets it,
 never guessed here.
 
 **Coverage discipline (no silent caps):** every Must requirement gets at
-least one case below. 85 case IDs total, of which one (TC-NF6-05) is a
-superseded tombstone, leaving 84 live cases — count verified by
-`grep -c '^\*\*TC-'`, not carried forward by arithmetic (the previous "79"/"69"
+least one case below. 89 case IDs total, of which one (TC-NF6-05) is a
+superseded tombstone, leaving 88 live cases — count verified by
+`grep -c '^\*\*TC-'`, not carried forward by arithmetic (the previous "85"/"79"/"69"
 here were exactly such carried-forward numbers, stale by later additions).
 Depth varies deliberately: single
 cases for straightforward requirements, two to three for the requirements
@@ -160,10 +162,10 @@ Given any fixture model's output — in code comments, in the verdict record, an
 When each surface is inspected,
 Then the fixture label appears on all three, not just one (RP-8's "travels with the image" requirement, checked at every surface named in MU-4).
 
-**TC-MU4-02 (fixture inner net is weight-identical to `direct`)** (new, design-review-005) · scenario test · executable
-Given a fixture (e.g. `fx-overconfident`) and the registered `direct` model, both built by their factories from the same `(ctx, training)` in one run,
-When the fixture's wrapped inner network weights are compared to `direct`'s trained weights,
-Then they are bit-identical — proving "a copy of Model A" (models ADR-M4) is genuinely the same trained network (via the content-addressed seed keyed on `"direct"`, cross-cutting ADR-002 rule 2), not a second independent training run that would make the fixture differ from `direct` by two things instead of its one intended corruption (design-review-005 — Round 5 found the uniform factory gave a fixture no channel to obtain `direct`'s weights, so the only buildable reading retrained a fresh net).
+**TC-MU4-02 (fixture inner net is weight-identical to `direct`)** (design-review-005; buildable design-review-006) · scenario test · executable
+Given a fixture (e.g. `fx-overconfident`) and the registered `direct` model, both built by their factories from the same `(ctx, seeds, training)` in one run,
+When the fixture — which builds its inner core via **`seeds.rng_for("direct", …)`** (the `SeedSource` handed to every factory, defined in `wmj.models.base`, so no `models→harness` import — design-review-006 gave the fixture this channel, which Round 6 found the v1.5 wording lacked) — has its inner-network weights compared to `direct`'s trained weights,
+Then they are **bit-identical** — Round 6 executed exactly this rebuild (`C7 fixture rebuild == direct weights: True`), proving "a copy of Model A" (models ADR-M4) is genuinely the same trained network, not a second independent training run.
 
 **TC-MU5-01** · boundary value analysis · executable
 Given the two unrigged models' one-step skill scores, per task and region,
@@ -190,10 +192,20 @@ Given the pre-registered prediction of which unrigged model ranks better,
 When the actual judged result comes in either matching or contradicting that prediction,
 Then both outcomes are published unchanged and neither triggers a re-run, re-tuning, or quiet edit to the prediction document.
 
+**TC-MU6-03 (per-model prereg entry, not just file presence)** (new, design-review-006) · scenario test · executable
+Given a newly-registered unrigged model (`not is_baseline and not is_fixture`) whose `name` does **not** appear in the committed `prereg/recipe.md`/`prediction.md`,
+When `check_prereg` runs before a judged run,
+Then it refuses (the specific model has no pre-registration entry) — closing the gap Round 6 found where the v1.5 check was roster-agnostic (it asserted the `prereg/` files as a whole were committed and pre-dated the run, so a new unrigged model passed as "pre-registered" without any text about it ever being written into `prereg/`). This makes MU-6's "mechanically checkable" true per-model (models ADR-M5).
+
 **TC-MU7-01** · scenario test · executable
 Given a model's training data and its evaluation rollouts,
 When the initial conditions of every evaluation rollout are checked against every training initial condition,
 Then no evaluation rollout starts from a state used in training, for either world.
+
+**TC-MU7-02 (train/eval/benchmark start streams are independent by seed purpose)** (new, design-review-006) · property-based test · executable
+Given the content-addressed seeding with distinct `purpose` key parts (`seeds.rng_for(world, region, "train-starts" | "eval-starts" | "benchmark-starts")`, cross-cutting ADR-002 rule 2),
+When the first draws of the three streams for the same `(world, "training")` are compared,
+Then they differ — Round 6 executed this (`C4 purpose keys differ: True`), proving the `purpose` discriminator prevents the collision Round 6 found in the v1.5 key (which had only {model, world, region, index}, so training starts and evaluation starts keyed to the *same* seed and would coincide, silently defeating MU-7 disjointness and JU-8 independence by construction rather than only by the after-the-fact check TC-MU7-01 performs).
 
 **TC-MU8-01** · scenario test · executable
 Given a fixed training seed,
@@ -210,10 +222,10 @@ Given the TC-MU9-01 gate,
 When a deliberately injected **`from wmj.models import <submodule>`** (the shape a `node.module`-only check misses — design-review-005) into a scratch copy of a file under `wmj/judge/` (the exact coupling MU-9 forbids),
 Then the gate's part (c) import-allowlist check must fail. (Phantom-gate proof; the injected shape is specifically the one a naive implementer would let through, so the case exercises the real failure mode.)
 
-**TC-MU9-03 (CLI routes through the registry)** (new, design-review-005) · scenario test · executable
-Given the grafted-stub setup of TC-MU9-01,
-When the **actual `python -m wmj run` CLI entry** is invoked (not just `harness.trials` in isolation) and its assembled model roster is captured,
-Then the stub appears in it — proving the CLI path genuinely routes through `harness.trials`/the registry rather than holding its own list that happens to agree today (design-review-005 — Round 5 found part (b)'s direct call left a "the CLI holds its own list" gap one layer up).
+**TC-MU9-03 (CLI routes through the registry)** (design-review-005; made buildable design-review-006) · scenario test · executable
+Given the grafted-stub setup of TC-MU9-01 (an in-process `wmj.models.__path__` monkeypatch),
+When the CLI's **`list-models`** dispatch is invoked **in-process** (`wmj.harness.cli`'s entry function for `list-models`, which prints the roster `harness.trials` assembles and exits — the cheap internal command added in P6-C01, design-review-006), so the in-process graft is visible,
+Then the stub appears in the CLI's printed roster — proving the real CLI dispatch path routes through `harness.trials`/the registry, not a separately-maintained list. **Design-review-006 fix:** Round 6 found the v1.5 wording ("actual `python -m wmj run` CLI entry") implied a subprocess, which starts a fresh interpreter that cannot see the in-process graft (so the test would fail whether the CLI is wired right or not) *and* would trip the full-pipeline cost and `ModelContractError`; invoking the in-process `list-models` dispatch tests the real delegation cheaply and unambiguously.
 
 ---
 
@@ -297,7 +309,7 @@ Then it is flagged as a fault via the sharpness cross-check (JU-5), not silently
 **TC-JU9-01** · scenario test · executable
 Given a completed judging run,
 When the verdict record is produced,
-Then it contains all eight required field groups (design-review-002 update: `trials` and `climatology` were added to the Verdict schema in v1.1 but omitted from this list until Round 2 found the gap — judge spec v1.2 §5) — skill scores, error-vs-horizon with divergence benchmark, calibration+sharpness in/out of region, exception counts vs. thresholds, per-trial outcome/band/exception data, conditioned-climatology agreement, per-task-and-region trust horizons, not-tested list — in one structured record.
+Then it contains all **nine** required field groups (design-review-002 made it eight after `trials`/`climatology` were found omitted; design-review-006 adds `limitations` as the ninth — Round 6 found judge.md's own enumeration excluded it while reporting.md's model card called it mandatory) — skill scores, error-vs-horizon with divergence benchmark, calibration+sharpness per (task, region), exception counts vs. thresholds, per-trial outcome/band/exception data, conditioned-climatology agreement, per-task-and-region trust horizons, not-tested list, **and the seven `limitations` disclosures** — in one structured record, and `verdict.py` refuses (raises) if any of the nine is missing or null (TC-JU9-02).
 
 **TC-JU9-02 (negative/phantom-gate)** · mutation test · executable
 Given a judging run where one required field (e.g. the calibration data) cannot be computed,
@@ -329,15 +341,20 @@ Given a thresholds/bands file edited or committed *after* a judging run has alre
 When that run's validity is checked,
 Then the run is flagged invalid / the check refuses to certify it — proof the "fixed before judging" requirement can actually catch a violation, not just describe one.
 
-**TC-JU12-01** (specified as the load-bearing purity control, design-review-005) · property-based test (purity) · executable
+**TC-JU12-01** (load-bearing purity control; mechanism corrected design-review-006 to mutate-in-place) · property-based test (purity) · executable
 Given the judge's full call graph run on a representative real `JudgeInput`,
-When it executes inside a context manager that replaces every **shared ambient capability object** — the real `os` module in `sys.modules`, `builtins.open`/`io.open`, `time`/`datetime` clock entries, `socket`, `subprocess`, and `numpy.random`'s generator constructors and legacy globals — with objects that raise `AmbientAccessError` on **any** access (cross-cutting ADR-002 rule 3, judge §4),
-Then the judge produces the correct verdict from its passed-in arguments alone and **no guard fires**. Because the guards sit on the shared capability objects, not on identifiers the code names, an impure operation trips at the point of its *effect* however it was reached — a `numpy` C-level file read, an `os` recovered via `().__class__.__base__.__subclasses__()` or `<fn>.__globals__['os']`, all fail. This is the load-bearing purity control (the static AST gate TC-NF6-01/02 is fast lint, not proof — design-review-005: Round 5 executed reflection escapes of the static gate that only an effect-guarding runtime test can catch).
+When it executes inside a context manager that, for every shared ambient capability object, **sets raising attributes on the one real object every holder already references** — `setattr(os, 'system'|'getcwd'|'getenv', raise)`, `os.environ` → a raising proxy, and likewise `builtins.open`/`io.open`, `time`/`datetime` entry points, `socket`, `subprocess`, `numpy.random`'s `Generator`/`default_rng`/legacy globals, **and numpy's own C-level clock `numpy.datetime64`** — restoring every saved attribute in a `finally` (cross-cutting ADR-002 rule 3, judge §4),
+Then the judge produces the correct verdict from its passed-in arguments alone and **no guard fires**. Because the guard is on the shared object's own attributes — **not** a `sys.modules` swap (design-review-006: Round 6 *executed* the v1.5 `sys.modules['os'] = guard` wording and proved it never reaches numpy's already-bound `os`, so `np.get_include.__globals__['os'].getcwd()` ran for real; the mutate-in-place fix was then executed and tripped the guard) — an impure operation trips at the point of its *effect* however it was reached (reflection via `__globals__['os']` or `().__class__.__base__.__subclasses__()` ends at the same mutated object). This is the load-bearing control; the static AST gate (TC-NF6-01/02) is fast lint.
 
-**TC-JU12-02 (negative/phantom-gate for the runtime purity harness)** (new, design-review-005) · mutation test · executable
+**TC-JU12-02 (negative/phantom-gate for the runtime purity harness)** (design-review-005; confirmed executable design-review-006) · mutation test · executable
+Given the TC-JU12-01 harness (mutate-in-place),
+When a judge function in a scratch copy is mutated to read `os.environ` reached via `some_fn.__globals__['os']` (the exact reflection escape, importing nothing and naming no banned identifier),
+Then the harness's guard must fire (`AmbientAccessError`) — Round 6 confirmed the mutate-in-place harness catches this exact route (the v1.5 `sys.modules`-swap harness did NOT, so this phantom-gate would have failed its own assertion; it now passes as designed).
+
+**TC-JU12-03 (numpy C-level clock guard)** (new, design-review-006) · mutation test · executable
 Given the TC-JU12-01 harness,
-When a judge function in a scratch copy is mutated to read `os.environ` reached via `some_fn.__globals__['os']` (the exact Round-5 reflection escape, which imports nothing and names no banned identifier),
-Then the harness's guard must fire (`AmbientAccessError`) — proving the runtime control catches the escape class the static lint cannot see, and that TC-JU12-01 can actually fail rather than passing vacuously.
+When a judge function in a scratch copy is mutated to call `numpy.datetime64('now')` (numpy's own C clock, which reads wall time without touching Python-level `os`/`time`),
+Then the guard must fire — Round 6 executed `np.datetime64('now')` returning real wall-clock time while `sys.modules['time']` was guarded, so `numpy.datetime64` needs its own explicit guard; this case proves that guard is present and can fail.
 
 **TC-JU13-01** · scenario test · executable
 Given the judge's source code and its dependency list,
@@ -412,10 +429,15 @@ Given the NF-1 byte-identity check,
 When a deliberately unseeded floating-point operation (e.g. unordered parallel summation) is injected into the judge,
 Then the byte-identity check must fail. (Same phantom-gate proof as WD-3/WD-7 — this is the requirement the project's own Assumption 5 flags as most likely to bite, so it gets the same negative-case discipline.)
 
-**TC-NF1-03 (seed derivation is content-addressed — no shift on roster change)** (new, design-review-005) · property-based test · executable
-Given the content-addressed seed derivation (`component_key` + `SeedSequence(entropy=[run_seed, *key])`, cross-cutting ADR-002 rule 2),
+**TC-NF1-03 (seed derivation is content-addressed — no shift on roster change)** (design-review-005; verified design-review-006) · property-based test · executable
+Given the content-addressed derivation via `SeedSource`/`component_key` (cross-cutting ADR-002 rule 2, `wmj.models.base`),
 When the derived seeds for the seven-model roster are computed, then one new model whose name sorts alphabetically *before* existing names is added and the derivation is recomputed,
-Then every pre-existing component's derived seed is **byte-identical** across the two computations — proving adding a model shifts no other component's stream (the property ADR-002 rule 2 claims). *(Design-review-005 — Round 5 executed a demonstration that the natural positional-`spawn` implementation, consistent with the sorted-name `model_ref` convention, reassigned every model's stream on such an addition; this test forbids that implementation.)*
+Then every pre-existing component's derived seed is **byte-identical** across the two computations — Round 6 executed this and it held (`C3 no-shift (add 'aardvark'): True`), while the rejected positional-`spawn` implementation reassigned every seed.
+
+**TC-NF1-04 (component_key is pinned enough that two implementations converge)** (new, design-review-006) · property-based test · executable
+Given the pinned `component_key` construction (blake2b of `":".join(str(p) for p in parts)`, `digest_size=8`, one big-endian int as a 1-tuple — cross-cutting ADR-002 rule 2, no "e.g."),
+When two independent implementations written from the pinned text alone derive keys for the same `(name, world, region, purpose)` tuples,
+Then they produce **identical** keys and therefore identical `SeedSequence` streams — Round 6 executed this (`C3 two-impl convergence: True`), closing the gap where the v1.5 "e.g." wording let four textually-conforming readings diverge (so a sceptic re-deriving a published seed from the spec gets the same bytes — the project's independent-verification mission).
 
 **TC-NF2-01** (placeholder filled, design-review-005) · scenario test · executable
 Given the full result set,
@@ -427,10 +449,10 @@ Given the project's dependency manifest,
 When compared against the technical spec's named minimal package list — **runtime `{numpy, matplotlib}`, dev `{pytest}`** (cross-cutting ADR-001 / Dependency Budget),
 Then no dependency outside that named list is present. *(Design-review-005: the list is filled from cross-cutting's Dependency Budget, which the v1.0 case was pending.)*
 
-**TC-NF4-01** · scenario test · executable
-Given the full repository text, its commit-message history, **and every historical file-content blob across every commit** (design-review-002 update: cross-cutting spec's scan mechanism covers `git log` as well as tracked file content; design-review-003 update: Round 3 found the identical permanence argument that motivated the commit-message scan applies to file content too — a term committed and later removed from a file is exactly as permanently visible via `git show` as one in a commit message — so historical blobs are now scanned the same way),
+**TC-NF4-01** (scan-command corrected design-review-006) · scenario test · executable
+Given the full repository text, its commit-message history, **and every object in the local database enumerated via `git cat-file --batch-all-objects --batch`** (design-review-006 repair — Round 6 *executed* the v1.5 `--batch-check` command and found it emits only `<sha> <type> <size>`, never content, so the scan searched nothing and would pass green over any planted term; `--batch` emits each object's full content, which is what the scan greps: executed, `--batch-check` found 0 matches for a planted term, `--batch` found it),
 When scanned for a maintained list of forbidden terms (employer name, internal team/committee names — the list itself declared and kept current in the technical spec, in a gitignored local file per the mechanism, never in a tracked one),
-Then no match is found — the one place this project's honesty requirements have real, checkable teeth on a public, first-commit repo.
+Then no match is found. **The mechanism is proven can-fail (design-review-006): a companion check plants a known term into a throwaway commit, runs the exact `--batch` command, and asserts the scan detects it — so a green result means the scan actually looked, not that the command was inert** (the failure mode Round 6 executed against `--batch-check`). This is the one place this project's honesty requirements have real, checkable teeth on a public, first-commit repo.
 
 **TC-NF4-03** (added post-design-review-003) · scenario test · executable
 Given a fresh clone of the repository with the one-time `git config core.hooksPath .githooks` setup step never run,
@@ -501,23 +523,23 @@ Then none is found — enforcing "models never import world internals" (models �
 | WD-8 | — (Won't; nothing to verify) | JU-9 | TC-JU9-01, -02, -03 |
 | MU-1 | TC-MU1-01, -02, -03 | JU-10 | TC-JU10-01, -02 |
 | MU-2 | TC-MU2-01, -02 | JU-11 | TC-JU11-01, -02 |
-| MU-3 | TC-MU3-01, -02, -03 | JU-12 | TC-JU12-01, -02 |
+| MU-3 | TC-MU3-01, -02, -03 | JU-12 | TC-JU12-01, -02, -03 |
 | MU-4 | TC-MU4-01, -02 | JU-13 | TC-JU13-01 |
 | MU-5 | TC-MU5-01, -02, -03 | RP-1 | TC-RP1-01 |
-| MU-6 | TC-MU6-01, -02 | RP-2 | TC-RP2-01 |
-| MU-7 | TC-MU7-01 | RP-3 | TC-RP3-01 |
+| MU-6 | TC-MU6-01, -02, -03 | RP-2 | TC-RP2-01 |
+| MU-7 | TC-MU7-01, -02 | RP-3 | TC-RP3-01 |
 | MU-8 | TC-MU8-01 | RP-4 | TC-RP4-01, -02 |
 | MU-9 | TC-MU9-01, -02, -03 | RP-5 | TC-RP5-01 |
 | MU-10 | — (Won't; nothing to verify) | RP-6 | TC-RP6-01, RP-CARD-01 |
 | JU-1 | TC-JU1-01, -02 | RP-7 | TC-RP7-01 |
 | | | RP-8 | TC-RP8-01 |
-| NF-1 | TC-NF1-01, -02, -03 | NF-4 | TC-NF4-01, -02, -03 |
+| NF-1 | TC-NF1-01, -02, -03, -04 | NF-4 | TC-NF4-01, -02, -03 |
 | NF-2 | TC-NF2-01 | NF-5 | TC-NF5-01, -02 |
 | NF-3 | TC-NF3-01 | NF-6 | TC-NF6-01, -02, -03, -04, -06, -07 (-05 superseded tombstone) |
 
 **Every Must and the one mechanically-testable Won't (JU-13) has at least one case. Zero orphan requirements, zero orphan cases.** WD-8 and MU-10 are the two Won'ts with nothing to verify by design (they describe absence, not behaviour).
 
-**Totals:** 79 test cases across 45 requirements (70 after design-review-001/002's additions; +9 in this pass, added after `/gvm-design-review` design-review-003 — Round 3, dual/blind — found: TC-MU9-02, a phantom-gate pairing TC-MU9-01 could not previously have, since its prior git-diff mechanism was structurally incapable of failing; TC-JU9-03, a property test enforcing the `exceptions.observed`/`trials.is_exception` invariant judge.md's prose only asserted; TC-NF6-02 through -06, splitting the single `TC-NF6-01` into one ID per AST-gate check plus a phantom-gate pairing, after the gate grew from one check to five across two rounds with no corresponding test-ID growth; TC-NF4-03, proving the run-time confidentiality scan is a real safety net independent of whether the pre-commit hook was ever installed; TC-NF5-02, covering the previously-orphaned `.md`/`.html` spec-parity hash check. Count independently verified via `grep -c '^\*\*TC-'` = 85, not carried forward by arithmetic; **design-review-005 (v1.2) added six cases (TC-NF6-07, TC-MU9-03, TC-JU12-02, TC-NF1-03, TC-MU4-02, TC-RP-CARD-01) to the 79; one ID, TC-NF6-05, is a superseded tombstone, so 84 cases are live**). 8 negative/phantom-gate cases (TC-WD3-02, TC-WD7-02, TC-NF1-02, TC-JU9-02, TC-JU11-02, TC-MU9-02, TC-NF6-04, and TC-JU12-02 — the last new in v1.2, the runtime purity harness's own can-fail proof; TC-NF6-06 is the complementary clean-pass/false-positive guard, not counted here). 10 property-based cases (TC-JU1-02, TC-JU4-02, TC-JU5-02, TC-JU12-01, TC-NF6-01, TC-NF6-02, TC-NF6-03, TC-NF6-07, TC-JU9-03, TC-NF1-03). 6 cases marked *judged* rather than *executable* (TC-MU6-02, TC-JU10-02, TC-RP5-01, TC-NF4-02, TC-NF5-01, TC-RP-CARD-01 — plain-language and human-comprehension checks that genuinely need a reader, not a script). **All three former `<spec-value>` placeholders are now filled** from the settled specs (TC-JU8-02 → N=200, TC-NF2-01 → 600 s, TC-NF3-01 → `{numpy, matplotlib}`+dev `{pytest}`; design-review-005 — no case now carries an unresolved `<spec-value>`). 2 cases marked *(supporting)* — they validate wiring between two requirements rather than being the primary coverage of either (TC-MU2-02, TC-JU8-03).
+**Totals:** 89 case IDs (88 live) across 45 requirements — grown round by round (70 after design-review-001/002; +9 after `/gvm-design-review` design-review-003 — Round 3, dual/blind — found: TC-MU9-02, a phantom-gate pairing TC-MU9-01 could not previously have, since its prior git-diff mechanism was structurally incapable of failing; TC-JU9-03, a property test enforcing the `exceptions.observed`/`trials.is_exception` invariant judge.md's prose only asserted; TC-NF6-02 through -06, splitting the single `TC-NF6-01` into one ID per AST-gate check plus a phantom-gate pairing, after the gate grew from one check to five across two rounds with no corresponding test-ID growth; TC-NF4-03, proving the run-time confidentiality scan is a real safety net independent of whether the pre-commit hook was ever installed; TC-NF5-02, covering the previously-orphaned `.md`/`.html` spec-parity hash check. Count independently verified via `grep -c '^\*\*TC-'` = **89**, not carried forward by arithmetic; **design-review-006 (v1.3) added four cases (TC-JU12-03, TC-NF1-04, TC-MU6-03, TC-MU7-02) to the 85; one ID, TC-NF6-05, is a superseded tombstone, so 88 cases are live**). 9 negative/phantom-gate cases (TC-WD3-02, TC-WD7-02, TC-NF1-02, TC-JU9-02, TC-JU11-02, TC-MU9-02, TC-NF6-04, TC-JU12-02, and TC-JU12-03 — the last new in v1.3, the numpy-C-clock can-fail proof; TC-NF6-06 is the complementary clean-pass guard, not counted here). 12 property-based cases (TC-JU1-02, TC-JU4-02, TC-JU5-02, TC-JU12-01, TC-NF6-01, TC-NF6-02, TC-NF6-03, TC-NF6-07, TC-JU9-03, TC-NF1-03, TC-NF1-04, TC-MU7-02). 6 cases marked *judged* rather than *executable* (TC-MU6-02, TC-JU10-02, TC-RP5-01, TC-NF4-02, TC-NF5-01, TC-RP-CARD-01 — plain-language and human-comprehension checks that genuinely need a reader, not a script). **All three former `<spec-value>` placeholders are now filled** from the settled specs (TC-JU8-02 → N=200, TC-NF2-01 → 600 s, TC-NF3-01 → `{numpy, matplotlib}`+dev `{pytest}`; design-review-005 — no case now carries an unresolved `<spec-value>`). 2 cases marked *(supporting)* — they validate wiring between two requirements rather than being the primary coverage of either (TC-MU2-02, TC-JU8-03).
 
 ---
 

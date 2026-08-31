@@ -113,9 +113,25 @@ three misplaced wirings). **v1.5's own fix-all planted 5 of the 10 Criticals** (
 self-verified — the BC-2 pattern). See `design-review/design-review-006.html` and the
 "Round 6 result" entry in `reviews/calibration.md`.
 
-**Path to green:** fix the two mechanism clusters — **this time verified by execution,
-not prose** — and Round 7 could plausibly clear to "Build with caveats". Fixes not yet
-applied; pending user triage.
+**Update — Round 6 fixes applied with execution-verification (31 Aug, specs → v1.6,
+test-cases v1.3), then Round 7 dispatched.** The user chose "fix all with
+execution-verification this time." The BC-2 discipline was finally honoured: every
+enforcement-mechanism fix was written as a python3 script and **run before the spec was
+written**, with the executed result cited in the text — the purity harness (mutate-in-place,
+executed catching the escape the `sys.modules` swap missed; guards `numpy.datetime64`),
+the NF-4 scan (`--batch` executed finding a planted term `--batch-check` missed), and the
+seeding (`SeedSource`+pinned `component_key` in `models.base`: two-impl convergence, fixture
+rebuild of `direct`, ensemble K=5, and train/eval/benchmark purpose-key independence all
+executed True). Plus the prose/wiring fixes (skill one-step `h=1`, Verdict example, ninth
+mandatory `limitations`, `interval_levels` single-producer, `meta.platform` composite,
+`is_baseline` flag, per-model `check_prereg`, the three re-placed wirings, `wmj list-models`
+for TC-MU9-03, `N_train=2000`, `model_ref`-shift disclosure). See the "Round 6 fixes applied"
+entry in `reviews/calibration.md` and `design-review-006.html`.
+
+**Round 7 (full dual/blind) is running to independently re-verify** — because BC-2 says
+self-verification, even execution-based, is not the same as an independent adversarial
+re-run. That is the whole discipline: the fix ran here; Round 7 checks whether it survives
+someone else running it.
 
 **Known debt:** the `specs/*.html` twins carry a deterministic staleness banner (they
 regenerate with the NF5-02 parity hash at build time, P6-C02). The older "What exists"

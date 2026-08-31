@@ -1,6 +1,6 @@
 # World Model Judge — Worlds Specification
 
-Version 1.4 · 31 August 2026 · Domain 1 of Requirements v1.2 · References: cross-cutting spec v1.5
+Version 1.4 · 31 August 2026 · Domain 1 of Requirements v1.2 · References: cross-cutting spec v1.6
 
 > **Change note (v1.4 — design-review-005 repair).** Round 5 found `RegionSpec` (the producer the harness builds `WorldContext` from) had no declared field schema, and that `training_action_interval` was a flat `[2]` where a per-action-dimension `[a, 2]` is correct. §4.3 now gives `RegionSpec` and `Task` full field schemas and adds the action-dimension `a` to the World protocol, so the one `WorldContext` construction site has a contract to read against. This supports the models-spec fix (WorldContext now carries `scale` and a training-data channel, models spec ADR-M1). See design-review-005.html.
 

@@ -1,6 +1,8 @@
 # World Model Judge — Architecture Overview
 
-Version 1.5 · 31 August 2026 · Synthesises: cross-cutting v1.5, worlds v1.4, models v1.5, judge v1.5, reporting v1.5
+Version 1.6 · 31 August 2026 · Synthesises: cross-cutting v1.6, worlds v1.4, models v1.6, judge v1.6, reporting v1.6
+
+> **Change note (v1.6 — design-review-006 repair, execution-verified).** Version references updated to the v1.6 suite. The §2 judge-isolation note is unchanged in substance but the runtime purity harness it names is now specified as *mutate-the-shared-object-in-place* (cross-cutting v1.6 ADR-002 rule 3) after Round 6 executed the v1.5 `sys.modules`-swap wording and proved it did not reach numpy's pre-bound `os`. No conceptual-integrity claim changed. See design-review-006.html.
 
 > **Change note (v1.5 — design-review-005 repair).** Version references updated to the v1.5 spec suite (worlds v1.4). The envelope diagram in §2 used the field name `name` where the schema and every consumer use `model_name` — corrected (Round 5). The judge-isolation "load-bearing wall" §2 note now reflects the reframe cross-cutting v1.5 made: the *runtime* purity harness (TC-JU12-01) is the load-bearing control (it guards effects, so reflection escapes trip); the static AST gate is fast lint, not proof. No conceptual-integrity claim in §6 changed. See design-review-005.html.
 
@@ -52,7 +54,7 @@ One deployable unit; the containers are the five packages plus two artefact stor
                                             └────────────▶[reporting]───▶[out/]
 ```
 
-(design-review fix: the judge returns only a pure `Verdict`; the harness — never the judge — attaches identity and run metadata, per judge spec v1.5 §5, and writes the resulting envelope through the same canonical serializer as every other byte-compared artefact, cross-cutting v1.5 ADR-002 rule 4.)
+(design-review fix: the judge returns only a pure `Verdict`; the harness — never the judge — attaches identity and run metadata, per judge spec v1.6 §5, and writes the resulting envelope through the same canonical serializer as every other byte-compared artefact, cross-cutting v1.6 ADR-002 rule 4.)
 
 - **`wmj.worlds`** — LV + pendulum, shared RK4 integrator, divergence benchmark, regions, tasks. Pure functions of (state, action).
 - **`wmj.models`** — baselines, fixtures, the direct/ensemble pair; registry-only discovery. Sees `(state, action)` arrays, never world internals.
@@ -61,7 +63,7 @@ One deployable unit; the containers are the five packages plus two artefact stor
 - **`wmj.harness`** — the only package that imports everything: seeding, orchestration, gates, prereg checks, CLI.
 - **`prereg/`** (committed) and **`out/`** (generated) — the ledger and the product.
 
-The judge's isolation is the load-bearing wall: everything else may know about the judge; the judge knows about nothing (cross-cutting ADR-003). Its purity is enforced at runtime by TC-JU12-01's effect-guarding harness — the load-bearing control — with the static AST import gate as fast lint on top (cross-cutting v1.5 reframed these roles after Round 5 showed a static gate cannot bound Python reflection; the runtime harness guards effects, so a reflection route to `os` still trips).
+The judge's isolation is the load-bearing wall: everything else may know about the judge; the judge knows about nothing (cross-cutting ADR-003). Its purity is enforced at runtime by TC-JU12-01's effect-guarding harness — the load-bearing control — with the static AST import gate as fast lint on top (cross-cutting v1.5 reframed these roles after Round 5 showed a static gate cannot bound Python reflection; the runtime harness guards effects by mutating the shared `os`/`builtins` objects in place, so a reflection route to `os` still trips — Round 6 executed this).
 
 ## 3. Key Decisions (the ADRs that shape everything)
 
@@ -84,7 +86,7 @@ The judge's isolation is the load-bearing wall: everything else may know about t
 ## 4. Quality Attributes (how the ASRs are answered)
 
 - **Reproducibility (NF-1, WD-7, MU-8):** the four ADR-002 rules + the ten-run byte gate + `wmj verify`. Platform-scoped, stated in the manifest.
-- **Credibility (NF-4, NF-5, MU-4, JU-10):** fixture labels burned into images; limitations as fixed constants in the judge; the forbidden-terms scan (a gitignored local terms file, enforced at exactly two local layers — the pre-commit hook and the `wmj run` startup gates, which also verify the hook is actually activated — with the residual gaps — including web-UI/no-pre-push bypasses — named rather than hidden, cross-cutting v1.5); the agreement-case caption that declines to manufacture a punchline.
+- **Credibility (NF-4, NF-5, MU-4, JU-10):** fixture labels burned into images; limitations as fixed constants in the judge; the forbidden-terms scan (a gitignored local terms file, enforced at exactly two local layers — the pre-commit hook and the `wmj run` startup gates, which also verify the hook is actually activated — with the residual gaps — including web-UI/no-pre-push bypasses — named rather than hidden, cross-cutting v1.6); the agreement-case caption that declines to manufacture a punchline.
 - **Separability (NF-6, JU-12, JU-1):** enforced by import-graph AST test, purity-under-blocked-environment test, and identity-free types.
 - **Adaptability (MU-9):** registry + one-interface rule; the zero-diff-outside-own-file test is the contract Mor checks.
 - **Performance (NF-2):** 600-second budget with envelope math (judge spec ADR-J6); single-threaded by design and still two orders of magnitude inside budget.
