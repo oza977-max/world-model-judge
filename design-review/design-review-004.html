@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>World Model Judge — Design Review 004</title>
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+
+    body {
+      font-family: "ET Book", Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif;
+      color: #111;
+      background: #fffff8;
+      line-height: 1.6;
+      padding: 2rem 1rem 6rem;
+      max-width: 1480px;
+      margin: 0 auto;
+    }
+
+    /* ── Typography ── */
+    h1 {
+      font-size: 2.4rem;
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.4rem;
+      color: #111;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 400;
+      font-style: italic;
+      margin-top: 3rem;
+      margin-bottom: 1rem;
+      color: #111;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 0.3rem;
+    }
+
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-top: 2rem;
+      margin-bottom: 0.6rem;
+      color: #333;
+    }
+
+    p, li {
+      font-size: 1rem;
+      line-height: 1.7;
+      margin-bottom: 0.8rem;
+      max-width: 1000px;
+    }
+
+    ul, ol { padding-left: 1.4rem; margin-bottom: 1.2rem; }
+    li { margin-bottom: 0.4rem; }
+
+    .subtitle {
+      font-size: 1.1rem;
+      font-style: italic;
+      color: #555;
+      margin-bottom: 2.5rem;
+      max-width: 1000px;
+    }
+
+    .date {
+      font-size: 0.9rem;
+      color: #888;
+      margin-bottom: 0.2rem;
+    }
+
+    /* ── Floating TOC (Left Side) ── */
+    nav.toc {
+      position: fixed;
+      top: 2rem;
+      left: 2rem;
+      width: 220px;
+      max-height: calc(100vh - 4rem);
+      overflow-y: auto;
+      background: #fffff8;
+      border-right: 2px solid #ddd;
+      padding: 1rem 1rem 1rem 0;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      z-index: 100;
+    }
+
+    nav.toc .toc-title {
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #999;
+      margin-bottom: 0.6rem;
+    }
+
+    nav.toc a {
+      color: #555;
+      text-decoration: none;
+      display: block;
+      padding: 0.15rem 0;
+      transition: color 0.15s;
+    }
+
+    nav.toc a:hover { color: #111; }
+    nav.toc a.active { color: #111; font-weight: 600; }
+    nav.toc .toc-h3 { padding-left: 0.8rem; font-size: 0.78rem; color: #888; }
+    nav.toc .toc-h3:hover { color: #555; }
+
+    /* Offset main content for left TOC */
+    main {
+      margin-left: 260px;
+      max-width: 1000px;
+    }
+
+    /* ── Sidenotes (Right Margin) ── */
+    .sidenote {
+      float: right;
+      clear: right;
+      width: 220px;
+      margin-right: -260px;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      color: #666;
+      padding-left: 1rem;
+      border-left: 2px solid #e0e0e0;
+    }
+
+    /* ── Tables (Few's principles) ── */
+    table {
+      border-collapse: collapse;
+      margin: 1.5rem 0 2rem;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      width: auto;
+      min-width: 480px;
+    }
+
+    thead th {
+      text-align: left;
+      font-weight: 600;
+      padding: 0.5rem 1rem 0.5rem 0;
+      border-bottom: 2px solid #333;
+      color: #111;
+    }
+
+    tbody td {
+      padding: 0.45rem 1rem 0.45rem 0;
+      border-bottom: 1px solid #e8e8e8;
+      vertical-align: top;
+    }
+
+    tbody tr:last-child td { border-bottom: 2px solid #333; }
+    tbody tr:nth-child(even) { background: #f9f9f4; }
+
+    caption {
+      font-style: italic;
+      font-size: 0.88rem;
+      color: #666;
+      text-align: left;
+      margin-bottom: 0.4rem;
+    }
+
+    /* ── Inline Code ── */
+    code {
+      font-family: "Menlo", "Consolas", "Monaco", monospace;
+      font-size: 0.88rem;
+      background: #f0f0e8;
+      padding: 0.1rem 0.35rem;
+      border-radius: 2px;
+    }
+
+    /* ── Verdict Box (review components) ── */
+    .verdict {
+      border: 2px solid #333;
+      padding: 1.2rem 1.5rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+    }
+
+    .verdict-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+      margin-bottom: 0.3rem;
+    }
+
+    .verdict-text {
+      font-size: 1.3rem;
+      font-weight: 400;
+      color: #111;
+      margin-bottom: 0.4rem;
+    }
+
+    .verdict-basis {
+      font-size: 0.88rem;
+      color: #555;
+      max-width: 1000px;
+    }
+
+    .verdict.ready { border-color: #27ae60; background: #f0faf4; }
+    .verdict.ready .verdict-text { color: #27ae60; }
+
+    .verdict.caveats { border-color: #e67e22; background: #fef8f0; }
+    .verdict.caveats .verdict-text { color: #e67e22; }
+
+    .verdict.not-ready { border-color: #c0392b; background: #fdf0ef; }
+    .verdict.not-ready .verdict-text { color: #c0392b; }
+
+    /* ── Structural Recommendation Callout ── */
+    .structural-recommendation {
+      border: 2px solid #c0392b;
+      border-left: 6px solid #c0392b;
+      padding: 1.5rem 1.5rem;
+      margin: 2.5rem 0;
+      max-width: 1000px;
+      background: #fff5f3;
+    }
+
+    .structural-recommendation-header {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #c0392b;
+      margin-bottom: 0.6rem;
+    }
+
+    .structural-recommendation h3 {
+      margin-top: 0;
+      color: #c0392b;
+    }
+
+    .structural-recommendation p {
+      margin-bottom: 0.8rem;
+    }
+
+    .structural-recommendation ol {
+      margin: 1.2rem 0;
+    }
+
+    .structural-recommendation li {
+      margin-bottom: 0.6rem;
+    }
+
+    /* ── Reconciliation Note ── */
+    .reconciliation {
+      border: 2px solid #27ae60;
+      padding: 1rem 1.5rem;
+      margin: 1.5rem 0 2rem;
+      max-width: 1000px;
+      background: #f0faf4;
+    }
+
+    .reconciliation-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #27ae60;
+      margin-bottom: 0.4rem;
+    }
+
+    .reconciliation p {
+      font-size: 0.92rem;
+      color: #333;
+      margin-bottom: 0.6rem;
+    }
+
+    /* ── Review Components (score card, issues, criteria) ── */
+    .score-card {
+      background: #f7f7f0;
+      border: 2px solid #333;
+      padding: 1.5rem 2rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+      text-align: center;
+    }
+
+    .overall-score {
+      font-size: 2.4rem;
+      font-weight: 400;
+      color: #111;
+      margin-bottom: 0.8rem;
+    }
+
+    .score-breakdown {
+      display: flex;
+      justify-content: space-around;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .score-item {
+      font-size: 0.88rem;
+      color: #555;
+    }
+
+    .issue {
+      border-left: 3px solid;
+      padding: 0.8rem 1rem;
+      margin: 0.8rem 0;
+      max-width: 1000px;
+    }
+
+    .issue.critical {
+      border-left-color: #c0392b;
+      background: #fdf0ef;
+    }
+
+    .issue.important {
+      border-left-color: #e67e22;
+      background: #fef8f0;
+    }
+
+    .issue.minor {
+      border-left-color: #7f8c8d;
+      background: #f7f7f4;
+    }
+
+    .issue-title {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 0.3rem;
+    }
+
+    .issue-detail {
+      font-size: 0.92rem;
+      color: #555;
+      margin-bottom: 0.3rem;
+    }
+
+    .issue-location {
+      font-size: 0.78rem;
+      color: #999;
+      font-style: italic;
+    }
+
+    .criterion {
+      display: flex;
+      align-items: baseline;
+      gap: 0.8rem;
+      margin: 0.6rem 0;
+      max-width: 1000px;
+    }
+
+    .criterion-name {
+      font-weight: 600;
+      color: #333;
+      min-width: 160px;
+    }
+
+    .criterion-score {
+      font-size: 0.85rem;
+      font-weight: 600;
+      min-width: 40px;
+    }
+
+    .criterion-score.high { color: #27ae60; }
+    .criterion-score.mid { color: #e67e22; }
+    .criterion-score.low { color: #c0392b; }
+
+    .criterion-note {
+      font-size: 0.88rem;
+      color: #666;
+    }
+
+    /* ── GVM Attribution ── */
+    .gvm-attribution {
+      font-size: 0.75rem;
+      color: #999;
+      font-style: italic;
+      text-align: center;
+      margin-top: 3rem;
+      margin-bottom: 0;
+      max-width: none;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 1200px) {
+      nav.toc {
+        position: static;
+        width: 100%;
+        max-height: none;
+        border-right: none;
+        border-bottom: 1px solid #ddd;
+        padding: 1rem 0;
+        margin-bottom: 2rem;
+      }
+      main { margin-left: 0; }
+      .sidenote {
+        float: none;
+        width: 100%;
+        margin: 0.8rem 0;
+        padding: 0.6rem 0 0.6rem 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="toc" id="toc">
+    <div class="toc-title">Contents</div>
+  </nav>
+
+  <main>
+    <p class="date">Round 4 (Dual/Blind) · Full review, strict criteria · 7 panels × 2 = 14 independent reviewers · 30 August 2026</p>
+    <h1>World Model Judge — Design Review 004</h1>
+    <p class="subtitle">Deterministic harness for evaluating learned simulators — dual/blind review of technical specifications v1.2–v1.3 with structural recommendation.</p>
+
+    <h2 id="verdict">Verdict</h2>
+    <div class="verdict not-ready">
+      <div class="verdict-label">Verdict</div>
+      <div class="verdict-text">Do not build</div>
+      <p class="verdict-basis">Fourth consecutive "Do not build" verdict. Unlike Rounds 2–3, this report leads with a structural recommendation because the evidence for it is now overwhelming. The defect population size is not shrinking round over round despite constant review depth and increasing scrutiny — fixing findings one at a time and re-reviewing the whole document set from scratch each round is not converging.</p>
+    </div>
+
+    <div class="reconciliation">
+      <div class="reconciliation-label">Reconciliation Note (Dual-Review Process Working)</div>
+      <p>Panel F1-blind claimed <code>wmj.models.registry</code>'s directory-walk discovery order was unconstrained. Panel F1-calibrated checked this against CPython's actual <code>pkgutil</code> source (<code>pkgutil._iter_file_finder_modules</code> calls <code>filenames.sort()</code> before yielding) and found the concern <strong>does not hold</strong> — discovery order is deterministic. <strong>F1-blind's finding is DISPROVEN by direct evidence and is dropped from this report's Critical list.</strong> This is recorded prominently because it demonstrates the dual-review mechanism catching a plausible-sounding but factually wrong finding before it reached the user — exactly its purpose.</p>
+    </div>
+
+    <h2 id="structural-recommendation">The Structural Recommendation</h2>
+    <div class="structural-recommendation">
+      <div class="structural-recommendation-header">Critical Path Recommendation: Change Fixing Strategy Before Round 5</div>
+      <p>Four rounds, four "Do not build" verdicts, and a Build Check created specifically to prevent a recurring pattern (BC-1) has now recurred through the very round meant to close it. This is not evidence the review process is failing — every citation in this report was independently reached by 2+ reviewers with zero shared context, and one panel this round used ground-truth verification to correctly overturn a wrong finding. The process is working. <strong>What isn't working is fixing findings one at a time and re-reviewing the whole document set from scratch each round.</strong></p>
+
+      <p>The recommendation, concretely: before a Round 5, do a single deliberate, non-review pass that:</p>
+      <ol>
+        <li><strong>Canonicalize the Verdict schema:</strong> Give every block one canonical <code>(task, region, horizon_step)</code> keying convention, applied uniformly, checked once by writing out the full schema and verifying every block against every ADR that defines a fact varying by one of those three axes — not chart-by-chart as each is separately noticed.</li>
+        <li><strong>Resolve the layering question:</strong> Clarify the <code>wmj.models</code> ↔ <code>wmj.worlds</code> layering explicitly, as an architecture decision with its own ADR, rather than letting each fixture's design silently assume an answer.</li>
+        <li><strong>Fix AST-check evasions:</strong> Replace every remaining "enumerate the call shapes I can think of" AST check with the "ban the enabling name/import outright" pattern the project's own TC-NF6-03 already demonstrates works.</li>
+        <li><strong>Reconcile the implementation guide:</strong> Do one pass reconciling <code>implementation-guide.md</code> against the full current requirements/test-case/spec set, chunk by chunk, rather than patching only the specific line each round's findings happened to touch.</li>
+        <li><strong>Remove undisclosed dependencies:</strong> Remove or properly scope the two new "mitigations" that quietly introduced network/CI dependencies (the GitHub push-timestamp check, the disclosed-but-unbuilt CI backstop) contradicting the project's own "no external systems but git" architecture claim.</li>
+      </ol>
+
+      <p><strong>Rationale:</strong> Capture-recapture logic (used after Round 1) implies this now: four rounds of finding a comparable population size each time means the population isn't shrinking through incremental fixes — the fix strategy itself needs to change, not just continue at higher review depth. This is the textbook case per this project's own Build Check BC-2 logic extended to its natural conclusion: if adversarial pressure-testing keeps finding the fixes wrong, the fixing process itself — not just each individual fix — needs to change.</p>
+    </div>
+
+    <h2 id="executive-summary">What Held From Round 3, and Failed This Round</h2>
+    <p>The two highest-priority items flagged for pressure-testing — <code>fx-brittle</code>'s redesign and the registry auto-discovery/TC-MU9-01 mechanism — were pressure-tested hard this round, and both failed, in ways more serious than what they replaced:</p>
+
+    <ul>
+      <li><code>fx-brittle</code>'s new corruption rule requires importing a worlds-package constant into the models package — directly contradicting models.md's own stated rule, in the same document, that "models never import world internals." <strong>Six independent panel-runs</strong> (across four different panels) converged on this, unprompted.</li>
+      <li>The new TC-MU9-01 structural test and the <code>fx-brittle</code> fix are <strong>mutually exclusive</strong>: the only layering-preserving way to fix <code>fx-brittle</code>'s import problem requires <code>harness.trials</code> to reference <code>fx-brittle</code> by name — which is exactly what the new TC-MU9-01 AST-walk is built to fail on.</li>
+      <li>The new mechanism's own cleanup step has no exception-safety, and because it writes into the <strong>actual production model directory</strong> (not a scratch location), a failed test run can leave a phantom model that a real <code>wmj run</code> then executes.</li>
+      <li>The two brand-new AST checks added this round both use the exact "enumerate call shapes" technique that a third check three lines earlier explicitly identifies as insufficient and replaces. Four independent panels found concrete one-line evasions.</li>
+      <li><code>implementation-guide.md</code> has only ever been touched for chunk-count arithmetic and was never reconciled against the growing spec/test suite: its Wiring Matrix still describes a disproven mechanism, 10 of 79 test cases are never wired to any build chunk (including the sole test for a Must requirement, unwired since Round 1), and its critical path is still wrong.</li>
+      <li><strong>BC-1 (the schema/consumer granularity Build Check, promoted specifically to stop this) recurred a fourth consecutive round</strong> — in the very blocks Round 3 restructured.</li>
+    </ul>
+
+    <h2 id="critical-findings">New Findings — Critical</h2>
+
+    <div class="issue critical">
+      <div class="issue-title">NC-1 — <code>fx-brittle</code>'s corruption rule violates the models layering constraint</div>
+      <p class="issue-detail"><em>6 independent panel-runs</em></p>
+      <p class="issue-detail"><code>fx-brittle</code>'s corruption rule requires importing a <code>wmj.worlds</code> region-box constant into <code>wmj.models.fixtures</code>, directly contradicting models.md's own stated rule ("models never import world internals — they see <code>(state, action)</code> arrays") and architecture-overview's container view ("Sees <code>(state, action)</code> arrays, never world internals"). No wiring mechanism resolves this: the <code>Model</code> protocol has no slot for a world reference, and the registry/factory interface takes none.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">NC-2 — No mechanism specifies which training-region <code>fx-brittle</code> uses across multiple worlds</div>
+      <p class="issue-detail"><em>1 panel, high-confidence architectural reasoning</em></p>
+      <p class="issue-detail">No mechanism specifies how a single registered <code>fx-brittle</code> instance would select the correct training-region box when run against <strong>both</strong> worlds (LV and pendulum have different boxes and different state dimensionality). <code>predict(state, action)</code> carries no world identifier.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">NC-3 — The two flagship Round 3 fixes are mutually exclusive</div>
+      <p class="issue-detail"><em>1 panel, directly follows from NC-1/NC-2</em></p>
+      <p class="issue-detail">The only layering-preserving fix to NC-1 — harness-side construction-time injection — requires <code>harness.trials</code> to reference <code>fx-brittle</code>'s specific class/function name, which is exactly what the new TC-MU9-01 AST-walk (added this round) is designed to fail on. The two flagship Round 3 fixes are mutually exclusive on the one real fixture that exercises both.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">NC-4 — Exception-unsafe cleanup writes to production directory</div>
+      <p class="issue-detail"><em>2 independent panels</em></p>
+      <p class="issue-detail">The new <code>test_registry_isolation.py</code> mechanism has no exception-safe cleanup, and because its stub file is written into <code>wmj/models/</code> — the actual production discovery directory, not a scratch location — a failed test run (which the design's own text says can happen) can leave a phantom model that a subsequent real <code>wmj run</code> auto-discovers and executes.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">NC-5 — <code>fx-brittle</code> corruption trigger incomplete</div>
+      <p class="issue-detail"><em>2 independent panels, converging with a 3rd from a different angle</em></p>
+      <p class="issue-detail"><code>fx-brittle</code>'s corruption trigger checks only the state sub-box, not the action interval, even though WD-5/ADR-W4 defines out-of-region as state-outside-box <strong>or</strong> action-outside-range — contradicting the fix's own claim of "no possibility of disagreeing" with the harness's region labelling.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">NC-6 — New AST checks both use disproven "enumerate call shapes" technique</div>
+      <p class="issue-detail"><em>4 independent panels, 2 distinct evasion sets found</em></p>
+      <p class="issue-detail">The two AST checks added this round (<code>exec</code>/<code>eval</code> ban, <code>numpy.random.*</code> ban) both use "enumerate call shapes," which the same document's TC-NF6-03 (added in the same round) explicitly says is insufficient and replaces with "ban the name outright." Concrete evasions: <code>from numpy.random import rand; rand()</code>; <code>e = eval; e(...)</code>; <code>__builtins__.__import__(...)</code>/<code>__builtins__.eval(...)</code> (neither check names <code>__builtins__</code>); <code>compile()</code> + executing the resulting code object (named by no check at all).</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">NC-7 — Implementation guide wiring matrix describes disproven mechanism</div>
+      <p class="issue-detail"><em>5 independent panel-runs</em></p>
+      <p class="issue-detail"><code>implementation-guide.md</code>'s Wiring Matrix still describes TC-MU9-01's enforcement as "the named <code>tests/gates/test_registry_isolation.py</code> git-diff mechanism, design-review-002" — the exact mechanism cross-cutting.md v1.3 explicitly says was replaced because it was "structurally incapable of failing." A builder following this row would rebuild the disproven mechanism.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">NC-8 — Ten test cases never wired to any build chunk</div>
+      <p class="issue-detail"><em>1 panel, mechanically verified: 0 matches on grep</em></p>
+      <p class="issue-detail"><code>implementation-guide.md</code> never wires 10 of the suite's 79 test cases to any build chunk, including <code>TC-JU3-01</code> — the sole test for JU-3, a Must requirement, unwired since Round 1 (not a Round 3 regression; a pre-existing gap only now surfaced by explicitly checking build-plan/test-suite reconciliation).</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">NC-9 — Critical path still wrong a third time</div>
+      <p class="issue-detail"><em>2 independent panels, from-scratch recomputation both times</em></p>
+      <p class="issue-detail">The "corrected" 9-chunk critical path (Round 3's own fix) is still wrong: a third branch (<code>P2-C05 → P3-C02</code>) ties for longest path into P6-C01, but the guide's Dependency Network table labels <code>P2-C05</code> itself "not on critical path" — a direct internal contradiction.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">NC-10 — BC-1 recurred: schema blocks still not unified</div>
+      <p class="issue-detail"><em>1 panel, mechanically verified: 4th consecutive round of the same shape, promoted to BC-1</em></p>
+      <p class="issue-detail"><code>calibration</code>/<code>sharpness</code> — the blocks Round 3 itself restructured this round — still use <code>_in_region</code>/<code>_out_region</code> field-name suffixes instead of an explicit region key, contradicting the same round's own change-note claim of "matching every sibling block." <code>error_vs_horizon</code> was left with no task dimension at all.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">NC-11 — Undisclosed CI dependency contradicts architecture</div>
+      <p class="issue-detail"><em>1 panel</em></p>
+      <p class="issue-detail">NF-4's disclosure describes a "CI" re-run of the confidentiality scan as an existing enforcement layer; no CI system is built, configured, or even listed anywhere, and architecture-overview.md's own System Context explicitly states "no other external systems... no network, no services" — a claim Round 3 re-certified with "no new conceptual-integrity finding" in the same round this contradiction was introduced.</p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">NC-12 — GitHub push-timestamp mitigation has undisclosed dependencies and decay window</div>
+      <p class="issue-detail"><em>2 independent panels</em></p>
+      <p class="issue-detail">The GitHub push-timestamp mitigation added this round for prereg-timestamp forgery introduces an undisclosed network dependency (contradicting the "no network" architecture claim), has no specified fail-open/fail-closed behavior, and — per Panel E-calibrated's research into GitHub's actual API retention — silently degrades to no protection at all for any prereg commit older than GitHub's ~90-day Events API window, with no disclosure of that decay.</p>
+    </div>
+
+    <h2 id="important-findings">New Findings — Important</h2>
+
+    <div class="issue important">
+      <div class="issue-title">NI-1 — Registry return contract unspecified</div>
+      <p class="issue-detail"><em>3 independent panels</em></p>
+      <p class="issue-detail"><code>wmj.models.registry.all_models()</code>'s return contract (factories? instances? what shape?) is never specified, despite being the sole MU-9 discovery mechanism and having a named consumer (<code>harness.trials</code>) three times in the Wiring Matrix.</p>
+    </div>
+
+    <div class="issue important">
+      <div class="issue-title">NI-2 — No test proves registry is actually called</div>
+      <p class="issue-detail"><em>2 independent panels</em></p>
+      <p class="issue-detail">No test proves <code>harness.trials</code> actually calls <code>all_models()</code> rather than maintaining a separately-hardcoded roster that happens to agree today — the two-path-divergence risk the calibration prompt asked about directly.</p>
+    </div>
+
+    <div class="issue important">
+      <div class="issue-title">NI-3 — No canonical model name pinned</div>
+      <p class="issue-detail"><em>1 panel, positively confirmed absent</em></p>
+      <p class="issue-detail">No canonical <code>name</code> string is pinned for either baseline or the matched unrigged pair, despite MU-2/JU-2/MU-5 all requiring the harness to identify <strong>specific</strong> models by name — and no test (including the new TC-MU9-01) could catch a mismatch, since it only exercises an arbitrary throwaway model.</p>
+    </div>
+
+    <div class="issue important">
+      <div class="issue-title">NI-4 — No duplicate-name check in registry</div>
+      <p class="issue-detail"><em>1 panel, positively confirmed real</em></p>
+      <p class="issue-detail">No duplicate-model-name check exists in <code>register()</code> — two submodules registering the same name would silently collide, violating the project's own "fail loudly, never partially" convention.</p>
+    </div>
+
+    <div class="issue important">
+      <div class="issue-title">NI-5 — Mid-process file creation may need cache invalidation</div>
+      <p class="issue-detail"><em>2 independent panels, converging via different technical routes</em></p>
+      <p class="issue-detail"><code>pkgutil.iter_modules</code>'s interaction with mid-process file creation (TC-MU9-01's own stub-write step) likely needs <code>importlib.invalidate_caches()</code>, and/or raises an idempotency question (a deleted stub file's registration may persist in-process) — neither addressed anywhere.</p>
+    </div>
+
+    <div class="issue important">
+      <div class="issue-title">NI-6 — AST gate scope narrower than its credited coverage</div>
+      <p class="issue-detail"><em>1 panel</em></p>
+      <p class="issue-detail">ADR-002 rule 3 credits the AST gate as enforcing "no ambient inputs" across worlds, models, <strong>and</strong> judge, but the gate is textually scoped to <code>wmj.judge</code> only — worlds/models have no structural enforcement, only empirical byte-identity tests that wouldn't catch a stable-but-wrong ambient read.</p>
+    </div>
+
+    <div class="issue important">
+      <div class="issue-title">NI-7 — Region labels fix claimed but never applied</div>
+      <p class="issue-detail"><em>1 panel, mechanically verified</em></p>
+      <p class="issue-detail"><code>region_labels</code> is claimed "unified across all three domain specs" but worlds.md's own version banner is still v1.2 with no changelog entry for it — the claimed fix was never actually applied there, only referenced in prose.</p>
+    </div>
+
+    <div class="issue important">
+      <div class="issue-title">NI-8 — <code>axis</code> value set disagrees between two defining documents</div>
+      <p class="issue-detail"><em>1 panel</em></p>
+      <p class="issue-detail"><code>axis</code>'s value set disagrees between the two documents that define it: worlds.md's ADR-W4 defines a 3-value enum with no <code>null</code> case; judge.md cites ADR-W4 as the source for a 4th value (<code>null</code>) that ADR-W4's text never states.</p>
+    </div>
+
+    <div class="issue important">
+      <div class="issue-title">NI-9 — Trial count ambiguity threatens runtime budget</div>
+      <p class="issue-detail"><em>1 panel</em></p>
+      <p class="issue-detail">JU-8's N=200 trial count is ambiguous as to whether it multiplies per (region, task) — a 2–4× difference that could blow NF-2's 600-second runtime budget depending on which reading is correct.</p>
+    </div>
+
+    <div class="issue important">
+      <div class="issue-title">NI-10 — <code>natural_units</code> has no defined value for pendulum</div>
+      <p class="issue-detail"><em>1 panel</em></p>
+      <p class="issue-detail">JU-7's <code>natural_units</code> field has no defined value for the pendulum (which has no natural period, unlike LV) — the schema's only worked example is LV-only.</p>
+    </div>
+
+    <div class="issue important">
+      <div class="issue-title">NI-11 — Chart 2 caption template violates its own acceptance test</div>
+      <p class="issue-detail"><em>1 panel, mechanically verified: 4 sentences, RP-5 requires 2-3</em></p>
+      <p class="issue-detail">Chart 2's own authored caption template violates RP-5's sentence-count requirement and would fail its own acceptance test (TC-RP5-01) on day one.</p>
+    </div>
+
+    <div class="issue important">
+      <div class="issue-title">NI-12 — NF-4 historical-blob scan misses reflog content</div>
+      <p class="issue-detail"><em>1 panel</em></p>
+      <p class="issue-detail">The NF-4 historical-blob scan (<code>git rev-list --objects --all</code>) doesn't reach reflog-only-reachable content (amended/rebased/reset-away commits) or dropped/popped stash entries — the same permanence argument that motivated the scan applies to these, unaddressed.</p>
+    </div>
+
+    <div class="issue important">
+      <div class="issue-title">NI-13 — Pre-existing <code>core.hooksPath</code> setting defeats hook activation</div>
+      <p class="issue-detail"><em>1 panel</em></p>
+      <p class="issue-detail">The <code>.githooks/pre-commit</code> activation depends on <code>core.hooksPath</code> being set correctly; nothing checks whether a pre-existing, unrelated <code>core.hooksPath</code> setting (common with other tooling) silently defeats it — a silent, undetectable failure mode distinct from the disclosed "never configured" gap.</p>
+    </div>
+
+    <h2 id="score-per-defect-class">Score per Defect Class</h2>
+
+    <table>
+      <caption>Table 1 — Round-by-round scores across all defect classes (0–10 scale)</caption>
+      <thead>
+        <tr>
+          <th>Panel</th>
+          <th>R1</th>
+          <th>R2</th>
+          <th>R3</th>
+          <th>R4</th>
+          <th>Trend</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>A — Requirements Coverage</td>
+          <td style="text-align: center;">8</td>
+          <td style="text-align: center;">7</td>
+          <td style="text-align: center;">6</td>
+          <td style="text-align: center;">4</td>
+          <td>↓↓ — BC-1 recurred 4th time in exact blocks just "fixed"; 10 orphaned test cases found</td>
+        </tr>
+        <tr>
+          <td>B — Interface Contracts</td>
+          <td style="text-align: center;">4</td>
+          <td style="text-align: center;">5</td>
+          <td style="text-align: center;">4</td>
+          <td style="text-align: center;">3</td>
+          <td>↓ — fx-brittle contradiction, region_labels not actually unified, registry contract unspecified</td>
+        </tr>
+        <tr>
+          <td>C — Structural Soundness</td>
+          <td style="text-align: center;">5</td>
+          <td style="text-align: center;">4</td>
+          <td style="text-align: center;">4</td>
+          <td style="text-align: center;">3</td>
+          <td>↓ — the two flagship fixes found mutually exclusive</td>
+        </tr>
+        <tr>
+          <td>D — Implementability</td>
+          <td style="text-align: center;">4</td>
+          <td style="text-align: center;">5</td>
+          <td style="text-align: center;">6</td>
+          <td style="text-align: center;">5</td>
+          <td>↓ — critical path still wrong a 3rd time, though chunk count held</td>
+        </tr>
+        <tr>
+          <td>E — Security</td>
+          <td style="text-align: center;">6</td>
+          <td style="text-align: center;">5</td>
+          <td style="text-align: center;">5</td>
+          <td style="text-align: center;">4</td>
+          <td>↓ — two brand-new checks both evadable; undisclosed CI/network dependencies</td>
+        </tr>
+        <tr>
+          <td>F1 — Reproducibility</td>
+          <td style="text-align: center;">5</td>
+          <td style="text-align: center;">4</td>
+          <td style="text-align: center;">4</td>
+          <td style="text-align: center;">5</td>
+          <td>↑ — one blind finding correctly disproven by direct stdlib verification; one new overclaim found</td>
+        </tr>
+        <tr>
+          <td>F2 — Separability</td>
+          <td style="text-align: center;">7</td>
+          <td style="text-align: center;">3</td>
+          <td style="text-align: center;">3</td>
+          <td style="text-align: center;">2</td>
+          <td>↓↓ — the replacement mechanism is worse than what it replaced in a new dimension (production-directory pollution)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="what-prevents-higher-score">What Prevents a Higher Score</h2>
+    <p>Named plainly: three consecutive rounds of "fix the specific finding, re-review everything" has not converged. The defect population size is not shrinking round over round despite constant review depth and increasing scrutiny — this round found more Critical findings than Round 3, on a smaller and more targeted set of changes. This is the textbook case for switching strategies rather than continuing the same one at higher cost, per this project's own Build Check BC-2 logic extended to its natural conclusion: if adversarial pressure-testing keeps finding the fixes wrong, the fixing process itself — not just each individual fix — needs to change.</p>
+
+    <p class="gvm-attribution">Developed using the Grounded Vibe Methodology</p>
+  </main>
+
+  <script>
+    (function () {
+      const toc = document.getElementById('toc');
+      const headings = document.querySelectorAll('h2[id], h3[id]');
+      const links = [];
+
+      headings.forEach(function (h) {
+        const a = document.createElement('a');
+        a.href = '#' + h.id;
+        a.textContent = h.textContent;
+        if (h.tagName === 'H3') a.classList.add('toc-h3');
+        toc.appendChild(a);
+        links.push({ el: a, target: h });
+      });
+
+      function onScroll() {
+        let current = links[0];
+        for (let i = 0; i < links.length; i++) {
+          if (links[i].target.getBoundingClientRect().top <= 80) current = links[i];
+        }
+        links.forEach(function (l) { l.el.classList.remove('active'); });
+        if (current) {
+          current.el.classList.add('active');
+          const tocEl = document.getElementById('toc');
+          const elTop = current.el.offsetTop - tocEl.offsetTop;
+          const elBot = elTop + current.el.offsetHeight;
+          if (elTop < tocEl.scrollTop || elBot > tocEl.scrollTop + tocEl.clientHeight) {
+            tocEl.scrollTop = elTop - tocEl.clientHeight / 2;
+          }
+        }
+      }
+
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    })();
+  </script>
+</body>
+</html>

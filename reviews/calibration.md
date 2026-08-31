@@ -11,24 +11,25 @@ Project-level calibration layer for GVM review skills (`/gvm-design-review`, `/g
 | 1 | 2026-08-25 | design | — (see per-panel) | 8 | 4 | 5 | 4 | n/a | n/a | n/a |
 | 2 | 2026-08-30 | design | — (see per-panel) | 7 | 5 | 4 | 5 | 6 | 5 | 7 |
 | 3 | 2026-08-30 | design (dual/blind) | — (see per-panel) | 6 | 4 | 4 | 6 | 5 | 4 | 3 |
+| 4 | 2026-08-30 | design (dual/blind) | — (see per-panel) | 4 | 3 | 3 | 5 | 4 | 5 | 2 |
 
-No overall single number is reported for design review, per `review-reference.md`. **Round 3 is the first dual/blind round (shared rule 16, triggers automatically at 2+ prior rounds)** — each of the 7 panels ran twice: once calibrated (sees this file, checks named Round 2 fixes for regression) and once fully blind (no calibration data, no knowledge of any prior round). 14 independent reviewers total. Panel D's score rose despite the round's overall severity because its two highest-stakes checks — an independent from-scratch re-derivation of the double-pendulum EOM, and an independent recount of the implementation guide's chunk total — were BOTH confirmed correct by two separate reviewers each. Panel F2's score fell sharply because the TC-MU9-01 mechanism, credited in Round 2 as fixing a "no enforcement" finding, was found this round to be structurally incapable of ever failing.
+No overall single number is reported for design review, per `review-reference.md`. Dual/blind (shared rule 16) has now run twice — Round 4 again dispatched 7 panels × 2 (calibrated + blind), 14 independent reviewers, prioritising adversarial pressure-testing of Round 3's two flagship fixes (`fx-brittle`'s redesign; the registry auto-discovery/TC-MU9-01 mechanism) per this file's own recommendation after Round 3. **Both failed pressure-testing, in ways more serious than what they replaced** — see Resolved Findings below. Panel F1's score rose despite the general trend because the dual-review mechanism itself produced its cleanest demonstration yet of working correctly: F1-calibrated read the actual CPython `pkgutil` source and used it to disprove a plausible-sounding finding from F1-blind, rather than letting it stand. Panel F2 fell to its lowest score of any round: the replacement TC-MU9-01 mechanism introduced a new failure mode (production-directory pollution on test failure) worse in kind than the tautology it replaced.
 
 ---
 
 ## Dimension Benchmarks
 
-| Dimension | R1 | R2 | R3 | Trend |
-|---|---|---|---|---|
-| Requirements Coverage (Panel A) | 8/10 | 7/10 | 6/10 | ↓ — 2 independent panels found the spec-parity check is an orphan design element; the NF-4 hook-install gap deepens |
-| Interface Contracts (Panel B) | 4/10 | 5/10 | 4/10 | ↓ — `calibration`/`sharpness` both found missing their own required task dimension; `region_labels` found inconsistent across 3 documents |
-| Structural Soundness (Panel C) | 5/10 | 4/10 | 4/10 | flat — `climatology` region gap and the `fx-brittle` regression offset the confirmed EOM/count fixes |
-| Implementability (Panel D) | 4/10 | 5/10 | 6/10 | ↑ — the two highest-stakes checks (EOM re-derivation, chunk recount) both independently confirmed correct twice over |
-| Security (Panel E, new R2) | — | 6/10 | 5/10 | ↓ — NF-4 self-defeat genuinely fixed, but the replacement hook has no install path and the scan still misses historical blobs |
-| Reproducibility (Panel F1, new R2) | — | 5/10 | 4/10 | ↓ — the two literally-named Round 2 evasions are closed, but `numpy.random.*` legacy calls and an incomplete ambient-module list remain |
-| Separability (Panel F2, new R2) | — | 7/10 | 3/10 | ↓↓ — the named TC-MU9-01 mechanism turned out to be tautological (cannot fail by construction); no registry discovery mechanism specified |
+| Dimension | R1 | R2 | R3 | R4 | Trend |
+|---|---|---|---|---|---|
+| Requirements Coverage (Panel A) | 8/10 | 7/10 | 6/10 | 4/10 | ↓↓ — BC-1 recurred a 4th consecutive round in the exact blocks Round 3 just restructured; 10 test cases found orphaned from any build chunk, one (TC-JU3-01) unwired since Round 1 |
+| Interface Contracts (Panel B) | 4/10 | 5/10 | 4/10 | 3/10 | ↓ — `fx-brittle` contradiction; `region_labels` claimed-unified but never applied to worlds.md; registry return contract unspecified |
+| Structural Soundness (Panel C) | 5/10 | 4/10 | 4/10 | 3/10 | ↓ — the two flagship Round 3 fixes found mutually exclusive on the one fixture exercising both |
+| Implementability (Panel D) | 4/10 | 5/10 | 6/10 | 5/10 | ↓ — the "corrected" critical path is still wrong (a 3rd tied branch omitted); chunk count (28) held |
+| Security (Panel E) | — | 6/10 | 5/10 | 4/10 | ↓ — two brand-new checks (`exec`/`eval`, `numpy.random`) both evadable; undisclosed CI and network dependencies introduced this round |
+| Reproducibility (Panel F1) | — | 5/10 | 4/10 | 5/10 | ↑ — dual review's cleanest self-correction yet: a blind finding was checked against real CPython source and disproven |
+| Separability (Panel F2) | — | 7/10 | 3/10 | 2/10 | ↓↓ — the replacement TC-MU9-01 mechanism can pollute the production model directory on its own designed-to-fail case |
 
-**Round 3 closes the honesty gap named after Round 2, and finds it was worth closing.** Genuine dual/blind independent re-verification (not self-review) confirmed the two highest-risk Round 2 fixes hold: the corrected double-pendulum EOM was independently re-derived from Euler–Lagrange from scratch by two separate reviewers and matches exactly; the corrected chunk count (28) was independently recounted by two separate reviewers and matches exactly. Everything else fixed in v1.2 was re-examined and found either solid or genuinely regressed/incomplete — see Resolved Findings below. Fresh strict scanning by all 14 reviewers surfaced roughly 12 new Critical and 12 new Important findings, dominated by one recurring structural theme (schema blocks missing a task/region/step key their own defining ADR requires — now the third round this exact shape has appeared) and one recurring process theme (every new enforcement mechanism Round 2 introduced has a real gap one level below what it explicitly checked for). See `design-review/design-review-003.html` for the full findings, findings-by-convergence table, and the structural recommendation. **Verdict: Do not build**, unchanged from Rounds 1–2, pending the user's triage.
+**Round 4 pressure-tested Round 3's two flagship fixes, per this file's own recommendation, and both failed.** `fx-brittle`'s redesign requires an import models.md's own rules forbid, with no wiring mechanism that doesn't also break the new TC-MU9-01 test — the two Round 3 fixes are mutually exclusive on the one fixture that exercises both, undisclosed by either. Separately, dual review produced its clearest demonstration yet of working as designed: F1-blind's claim about nondeterministic registry-discovery order was checked by F1-calibrated against actual CPython `pkgutil` source and found false — recorded honestly as a disproven finding, not silently dropped. Four rounds have now each found a comparable-or-larger defect population despite continuously increasing scrutiny; **this round's entry carries an explicit structural recommendation (see Build Checks) that continued one-finding-at-a-time patching is no longer the right lever.** See `design-review/design-review-004.html` for the full findings, convergence table, and reconciliation record. **Verdict: Do not build**, unchanged since Round 1.
 
 ---
 
@@ -63,15 +64,19 @@ No overall single number is reported for design review, per `review-reference.md
 ### Panel F2 — Separability (new R2)
 - **Best (R2) observed:** the harness-owned envelope's construction was found to require zero model-specific branching — genuine, verified defence in depth for the modifiability scenario.
 - **Worst (R3) observed:** the named TC-MU9-01 mechanism (`test_registry_isolation.py`) stages, commits, and diffs a fixture file it fully controls end-to-end — the diff can only ever show the one file the test itself chose to write. It is structurally incapable of ever failing, regardless of what a real developer's actual changeset does. Two independent reviewers (one blind, one calibrated) reached this conclusion with zero shared context — the strongest form of convergence this methodology produces.
+- **Worst (R4) observed:** the replacement mechanism's cleanup step has no exception-safety, and its stub file is written into `wmj/models/` — the actual production discovery directory. A failed test run (which the design's own text says can happen) can leave a phantom model a subsequent real `wmj run` auto-discovers and executes. Independently confirmed by both the calibrated and blind reviewers. Worse in kind than the tautology it replaced: the old mechanism was inert; this one can corrupt a real run.
+
+### Dual review self-correction, Round 4 (an anchor example for the mechanism itself, not a project dimension)
+Panel F1-blind claimed `wmj.models.registry`'s directory-walk discovery order was filesystem-dependent and therefore nondeterministic. Panel F1-calibrated did not take this on faith — it ran `python3 -c "import pkgutil, inspect; print(inspect.getsource(pkgutil._iter_file_finder_modules))"` against the live CPython stdlib and found `filenames.sort()` runs before yielding, meaning discovery order is deterministic regardless of filesystem/inode layout. The finding was recorded as **disproven by direct evidence**, not silently dropped and not left as an unresolved disagreement. This is the calibration process's best demonstration yet of the difference between "plausible-sounding" and "verified" — worth keeping as the reference example for what adversarial pressure-testing should look like (per BC-2).
 
 ---
 
-## Recurring Findings — two shapes promoted to Build Checks this round (see below)
+## Recurring Findings — both Build Checks recurred a 4th consecutive round
 
-Round 2 flagged two defect *shapes* worth tracking, since GVM's methodology calls out recurring shapes, not just recurring exact findings. Round 3 confirmed both a third time, which is shared rule 21's exact promotion trigger:
+1. **Schema/consumer granularity mismatch (BC-1).** R1: Chart 1. R2: Chart 2, Chart 3. R3: `calibration`, `sharpness`, `climatology`, `region_labels`, Chart 4, Chart 1's horizon_step. **R4: `calibration`/`sharpness` STILL don't carry a region key** (Round 3's own restructuring only added the task key, kept `_in_region`/`_out_region` suffixes — a claim of "matching every sibling block" that was checkable and false against the JSON two lines below it) **and `error_vs_horizon` was left with no task dimension at all.** Four consecutive rounds, promoted after the third, and recurred through the very round meant to close it.
+2. **A fix closes the literal finding and leaves an adjacent, structurally similar gap one level down (BC-2).** R1→R2: pendulum EOM missing, then wrong. R2→R3: NF-4 instruction fixed, hook/history gaps remain; AST gate's 2 evasions closed, 3 new ones remain. **R3→R4: `fx-brittle`'s redesign and the new TC-MU9-01 mechanism — the two fixes this file explicitly told Round 4 to pressure-test first — both failed, and failed into each other** (mutually exclusive, not merely each individually incomplete). The two newest AST checks (`exec`/`eval`, `numpy.random`) reintroduced the exact "enumerate call shapes" weakness a third check in the same document, same round, explicitly names and fixes.
 
-1. **Schema/consumer granularity mismatch.** R1: Chart 1 (`trials` block missing). R2: Chart 2 (baseline curves), Chart 3 (`n_trials`). R3: `calibration` and `sharpness` missing their required task key, `climatology` missing its required region key, `region_labels` inconsistent across three documents, Chart 4's region-to-column mapping undeclared, Chart 1's horizon_step dimension unaccounted for — six more instances in one round. **Promoted to Build Check BC-1.**
-2. **A fix closes the literal finding and leaves an adjacent, structurally similar gap one level down.** R1→R2: the pendulum EOM formula was missing, then wrong. R2→R3: the NF-4 self-defeating instruction is fixed, but the replacement hook has no install path and the scan still misses file-content history; the AST gate's two named evasions are closed, but alias/`exec`/`numpy.random` evasions remain; TC-MU9-01 gained a named mechanism that turns out to be tautological. **Promoted to Build Check BC-2.**
+**Both Build Checks have now recurred in the exact round assigned to close them, for a fourth consecutive time. Per shared rule 21 this does not call for retiring either check — they are still triggering, not stale — but it is itself evidence worth escalating: promotion to a Build Check has not measurably slowed the recurrence rate. See the structural recommendation below.
 
 ---
 
@@ -117,34 +122,64 @@ Round 2 flagged two defect *shapes* worth tracking, since GVM's methodology call
 
 **11 of 15 distinct Round 2 items hold cleanly (including both of the two flagged as highest-risk). 2 are confirmed-resolved-as-scoped with a new adjacent gap. 2 are genuine regressions.** Full detail in `design-review/design-review-003.html`.
 
-**Round 3's own new findings** (~12 Critical, ~12 Important) are listed in `design-review/design-review-003.html` — not duplicated here.
+**Round 3's own new findings** (~12 Critical, ~12 Important) are listed in `design-review/design-review-003.html`.
+
+**Round 3's 15 distinct items, independently dual/blind re-checked in Round 4:**
+
+| # | Finding | Round 4 status |
+|---|---|---|
+| `fx-brittle` redesign (post-hoc wrapper keyed to world's region box) | **REGRESSION** — requires an import models.md's own rules forbid ("models never import world internals"); 6 independent panel-runs converged |
+| No world-selection mechanism for `fx-brittle` across 2 worlds | **NEW, follows directly from the above** |
+| TC-MU9-01 structural test (auto-discovery + AST reference walk) | **REGRESSION, worse in kind** — no exception-safe cleanup; stub written into the production `wmj/models/` directory; a failed run (which the design says can happen) can leave a phantom model a real `wmj run` then executes |
+| The above two fixes' interaction | **NEW CRITICAL, undisclosed by either Round 3 fix** — mutually exclusive: fixing `fx-brittle`'s layering violation the only clean way requires `harness.trials` to name `fx-brittle`, which the new TC-MU9-01 AST-walk is built to fail on |
+| AST gate widened to 5 checks | **PARTIAL** — the 2 literally-named Round 2/3 evasions close; the 2 brand-new checks (`exec`/`eval`, `numpy.random`) both use the exact "enumerate call shapes" pattern a 3rd check in the same round explicitly names as insufficient; concrete one-line evasions found by 4 panels |
+| `wmj.models.registry` auto-discovery named explicitly | **CONFIRMED-RESOLVED for the discovery-order concern** (F1-blind's nondeterminism claim disproven against real CPython source by F1-calibrated) **but PARTIAL overall** — return contract, idempotency, and mid-process cache-invalidation all unspecified |
+| NF-4 historical-blob scan | **PARTIAL** — closes committed-then-removed file content; misses reflog-only-reachable commits and dropped stash entries |
+| `.githooks/pre-commit` install path named | **PARTIAL** — the disclosed "never configured" gap is honest; an undisclosed silent-override case (`core.hooksPath` already set by unrelated tooling) is not named |
+| Spec-parity check traced to NF-5 with test + chunk | **CONFIRMED-RESOLVED** |
+| `calibration`/`sharpness` restructured to per-task arrays | **REGRESSION** — BC-1's exact shape: no region key added, only task; change note's "matches every sibling block" claim is false against its own JSON |
+| `climatology.per_task` region field | **CONFIRMED-RESOLVED** |
+| `region_labels` unified to one canonical shape | **REGRESSION** — the claim was never actually applied to worlds.md (still v1.2, no changelog entry); `axis`'s value set also disagrees between the two documents that define it |
+| `is_exception`/`observed` build-enforced test | **CONFIRMED-RESOLVED** |
+| Critical-path arithmetic corrected (9 chunks) | **PARTIAL** — chunk count (28, and the 9-chunk total) both independently reconfirmed; the two-named-branches claim is wrong, a 3rd tied branch was omitted, found independently by 2 panels |
+| 3rd prereg residual risk (timestamp forgery) disclosed, GitHub mitigation added | **REGRESSION** — the mitigation itself introduces an undisclosed network dependency with no fail-open/closed spec and a ~90-day silent-decay window |
+
+**3 of 15 hold cleanly. 1 resolves the literal concern but leaves the block partial. 8 are partial (closed the named case, left an adjacent one). 3 are outright regressions, one of them newly discovered as a direct interaction between two "separately successful" fixes.** Full detail in `design-review/design-review-004.html`.
+
+**Round 4's own new findings** (~12 Critical, ~13 Important) are listed in `design-review/design-review-004.html`.
 
 ---
 
 ## Build Checks
 
-**BC-1 — Schema/consumer granularity mismatch (promoted this round, shared rule 21: 3rd consecutive round).** Whenever a Verdict schema block represents a fact that varies by task, region, or horizon step, it must carry all three keys explicitly, checked against every ADR that defines how the fact is computed — not just against the chart that most recently needed it. **Trigger for future rounds:** any new schema block, or any edit to an existing one, must be checked against this rule before being marked resolved.
+**BC-1 — Schema/consumer granularity mismatch.** Recurred a 4th consecutive round, in the round assigned to close it. See Recurring Findings above.
 
-**BC-2 — Self-verified enforcement-mechanism fixes must be adversarially pressure-tested, not just read for internal consistency (promoted this round, shared rule 21: regression after resolution, twice — NF-4 and TC-MU9-01 both).** A fix to a security/purity/isolation mechanism is not "resolved" until someone has tried to independently derive it from first principles, break it, or simulate it against a real (not test-authored) input. Self-consistency review — does the new text agree with itself? — is necessary but has now proven insufficient twice in one round. **The two fixes that DID survive this round (the EOM, the chunk count) are exactly the two the review explicitly assigned an independent from-scratch check rather than a re-read — this is the model to repeat.**
+**BC-2 — Self-verified enforcement-mechanism fixes must be adversarially pressure-tested.** Recurred a 4th consecutive round; this round's two flagship pressure-tests (per BC-2's own instruction) both failed, and failed into each other. See Recurring Findings above.
 
-**Round 3 fixes applied (30 Aug 2026):** the user chose "fix everything item-by-item again" a third time. All ~12 Critical and ~12 Important Round 3 findings were patched directly into the specs (now v1.3 — worlds.md stays at v1.2, assigned no fix) in the same session, by the same agent that synthesised them — **not independently re-verified**, the identical honesty gap this file has now named after every round. Fixed: `calibration`/`sharpness` restructured to per-task arrays; `climatology.per_task` gained a region field; `region_labels` unified to one canonical shape; the `is_exception`/`observed` reconciliation gained a build-enforced property test; `fx-brittle` redesigned as a genuine post-hoc wrapper keyed to the world's own region box; the NF-4 scan extended to historical blobs with a named pre-commit-hook install path; the AST gate widened to 5 individually-tested checks (banning `importlib`/`__import__`/`exec`/`eval` outright, catching `numpy.random.*`, wider ambient-module list); `wmj.models.registry`'s auto-discovery mechanism named explicitly; TC-MU9-01 redesigned as a structural test instead of a tautological git-diff; the spec-parity check traced to NF-5 with a test and build chunk; Chart 1/2/3/4 fixes (horizon_step panelling, step-1 start, per-task calibration, explicit region-column mapping); the critical-path arithmetic corrected; a third prereg residual risk disclosed. **9 new test cases added (70→79)**, independently recounted via `grep -c`. **Recommended for whoever runs Round 4, per the two Build Checks above:** pressure-test the `fx-brittle` redesign and the registry auto-discovery/TC-MU9-01 mechanisms first — these are this round's equivalent of "a physics formula and a security mechanism," the categories where a confident self-fix has twice now proven least trustworthy.
+**BC-3 — New (promoted this round, shared rule 21: a specific instance recurring 3+ rounds within a single build-plan document).** `implementation-guide.md` has been edited in every round so far **only** for chunk-count/critical-path arithmetic, never reconciled against the rest of the growing spec/test-case set. Consequence, found only when a panel finally checked directly: its Wiring Matrix cites a mechanism (TC-MU9-01's git-diff test) that was explicitly disproven and replaced two rounds ago; 10 of 79 test cases (including the sole test for a Must requirement, unwired since Round 1) are never wired to any chunk; and its own critical-path fix is still wrong a third time. **Trigger for future rounds:** any round that edits a spec's schema, test cases, or mechanisms must also re-check `implementation-guide.md`'s Wiring Matrix and dependency table against those changes — not just the arithmetic a prior finding happened to name.
+
+**Structural recommendation (new, not a Build Check — a recommendation to the user for how to proceed, per Hard Gate 6's triage-is-user-owned principle).** Four rounds, four "Do not build" verdicts, a defect population that has not shrunk despite constantly increasing review depth, and two Build Checks that recurred through the exact rounds assigned to close them. This is not evidence the review process is failing — every citation was independently reached by 2+ reviewers with zero shared context, and this round's dual-review mechanism correctly disproved a plausible-sounding wrong finding using real evidence (see the F1 anchor example above). **What isn't working is fixing findings one at a time and re-reviewing the whole document set from scratch each round.** Recommended before a Round 5: (1) one canonical `(task, region, horizon_step)` keying convention applied to every Verdict schema block in one pass, checked against every defining ADR at once, not chart-by-chart; (2) an explicit ADR resolving the `wmj.models` ↔ `wmj.worlds` layering question, since `fx-brittle`'s design has silently assumed different answers twice; (3) replace every remaining "enumerate call shapes" AST check with the "ban the enabling name outright" pattern the project's own TC-NF6-03 already proves works; (4) one full reconciliation pass of `implementation-guide.md` against the current requirements/test-case/spec set; (5) remove or properly scope the two new dependencies (GitHub API, disclosed-but-unbuilt CI) that contradict the project's own "no external systems but git" architecture claim.
+
+**Round 3 fixes applied (30 Aug 2026):** see the Round 3 status table above for what held and what didn't. Summary: the user chose "fix everything item-by-item again" a third time; all ~12 Critical and ~12 Important Round 3 findings were patched into v1.3 in the same session, self-verified, not independently re-checked until this Round 4.
+
+**Round 4 fixes: not yet applied — pending user triage per Hard Gate 6, and pending the user's decision on the structural recommendation above**, since applying more item-by-item patches without addressing the recommendation would very likely reproduce this exact pattern a fifth time.
 
 ---
 
 ## Dual Review Metadata
 
-**Round 3 is the first dual/blind round (shared rule 16).** 7 defect-class panels × 2 (calibrated + blind) = 14 independent reviewers, zero shared context between blind panels and each other or the calibrated set.
+**Round 4, second dual/blind round.** 7 defect-class panels × 2 (calibrated + blind) = 14 independent reviewers, zero shared context between blind panels and each other or the calibrated set.
 
 | Category | Count | Examples |
 |---|---|---|
-| Confirmed by both calibrated and blind independently (strongest signal) | 8 findings | EOM correctness, chunk count, `fx-brittle` contradiction (3-way), NF-4 hook-install gap (3-way), AST dynamic-import evasion (3-way), TC-MU9-01 tautology, `climatology` region gap, Chart 2 log(0) |
-| New, calibrated-only | 6 findings | `calibration`/`sharpness` task-dimension gaps, Chart 4 region-mapping rule, `is_exception` enforcement gap, AST test-ID traceability, `chart-preview` CLI |
-| New, blind-only | 4 findings | Chart 3 "no metric" self-contradiction, Chart 1 horizon_step dimension, prereg timestamp forgery, worktree isolation |
-| Regressions (confirmed by dual review specifically) | 2 findings | TC-MU9-01, `fx-brittle` |
-| Noise (blind finding discarded on reconciliation) | 0 |
-| Rediscovered (already known, not new) | 0 — all Round 2 items tracked above were explicitly assigned to a calibrated panel for re-verification, not rediscovered incidentally |
+| Confirmed by both calibrated and blind independently (strongest signal) | 9 findings | `fx-brittle` contradiction (6-way across 4 panels), TC-MU9-01 production-directory pollution, stale Wiring Matrix row (5-way), critical-path 3rd branch, `fx-brittle` action-axis gap, AST gate `exec`/`eval`/`numpy.random` evasions |
+| New, calibrated-only | 5 findings | `all_models()` return-contract gap, `error_vs_horizon` missing task dimension, JU-8 N=200 multiplication ambiguity, JU-7 pendulum `natural_units` undefined, GitHub API 90-day decay window |
+| New, blind-only | 4 findings | baseline/unrigged-model name-pinning gap, duplicate-registration check missing, Chart 2 caption sentence-count violation, ADR-002 rule 3's cross-package overclaim |
+| Regressions (confirmed by dual review specifically) | 3 findings | `fx-brittle` (2nd regression in 2 rounds), TC-MU9-01 mechanism, `region_labels` unification claim |
+| Disproven (blind finding checked and found factually wrong) | 1 finding | F1-blind's registry-discovery-order nondeterminism claim, refuted by F1-calibrated reading actual CPython `pkgutil` source |
+| Noise (discarded on reconciliation) | 0 |
 
-**Honesty check:** this run did not confirm-and-drop-nothing (a suspect all-green pattern) — it surfaced substantial new findings across nearly every panel, and the two panels given an explicit re-derivation task (D-calibrated, D-blind) independently confirmed a prior fix rather than manufacturing a new finding to justify their dispatch. Both directions of result occurred, which is itself evidence the panels were not just pattern-matching toward "find something."
+**Honesty check:** this run again did not confirm-and-drop-nothing. It surfaced a larger Critical-finding count than Round 3 despite a narrower, more targeted scope (explicit instructions to prioritise 2 named mechanisms), and it produced one clean disproof of a plausible-but-wrong finding via direct evidence rather than argument — the strongest available demonstration that panels are evaluating claims, not just generating them.
 
 ---
 
