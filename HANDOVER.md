@@ -128,17 +128,41 @@ mandatory `limitations`, `interval_levels` single-producer, `meta.platform` comp
 for TC-MU9-03, `N_train=2000`, `model_ref`-shift disclosure). See the "Round 6 fixes applied"
 entry in `reviews/calibration.md` and `design-review-006.html`.
 
-**Round 7 (full dual/blind) is running to independently re-verify** — because BC-2 says
-self-verification, even execution-based, is not the same as an independent adversarial
-re-run. That is the whole discipline: the fix ran here; Round 7 checks whether it survives
-someone else running it.
+**Update — Round 7 complete (dual/blind, 14 reviewers, independent execution re-run).**
+The BC-2 discipline paid off *for the mechanisms actually run*: three of four determinism
+repairs and the specific Round-6 purity escape are confirmed genuinely fixed by independent
+running code (guard fires; `--batch` finds planted terms; `component_key` converges; fixture
+rebuild is bit-exact). Interface contracts converged (B: 9/8, highest any dimension has
+scored). **But three things did not clear:**
+
+1. **BC-2/BC-3 recurred on the prose-only edits** — judge §4's purity *body* still describes
+   the disproven `sys.modules` swap (only the changelog claimed the mutate-in-place fix);
+   TC-JU12-03 and TC-MU7-02 are change-note-claimed-wired but in no chunk's `[Test:]` tag;
+   architecture-overview.md + reporting.md have no v1.6 changelog row; the model_ref-shift
+   disclosure promised in Round 6's plan was never written. All mechanical, ~1 hour to finish.
+2. **BC-4 is now CONFIRMED, not a candidate** — Security scored 3/3 (both panels). The
+   mutate-in-place harness closes the *specific* escape but is defeated one layer down by
+   executed routes: `os.environ` pre-capture rebind (same bug class v1.6 fixed), `np.random.normal()`
+   (the threat model's own example), `ctypes` resident via numpy reaching raw syscalls, and
+   unseeded `Generator(PCG64())` → `getrandom()` (no Python object to mutate — architecturally
+   uninterceptable). No finite enumeration closes Python's reflection/syscall graph. **This is a
+   design decision** (narrow JU-12's claim to best-effort+empirical+disclosed, OR move purity
+   out-of-process to an OS sandbox), not a patch — reserved for the user per Hard Gate 6.
+3. **Two standing spec gaps** — the harness orchestration loop + JudgeInput per-region partitioning
+   is still unwritten as an algorithm (open since Round 5); no gate enforces `models→harness`; and
+   `check_prereg` verifies commit *order* not content-invariance (an honestly-dated second commit
+   defeats prereg — a real MU-6 gap, executed with git).
+
+Seventh "Do not build," but the first where the gap is one mechanical hour plus one honest design
+fork. See `design-review/design-review-007.html` and the "Round 7 result" entry in
+`reviews/calibration.md`. **Awaiting user triage of the findings before any further fix pass.**
 
 **Known debt:** the `specs/*.html` twins carry a deterministic staleness banner (they
 regenerate with the NF5-02 parity hash at build time, P6-C02). The older "What exists"
 table below is itself stale (says v1.3/v1.0) — Round 6 flagged it; refresh when next
 editing this file.
 
-Last updated 2026-08-31 (design-review-006 — Round 6 complete).
+Last updated 2026-08-31 (design-review-007 — Round 7 complete; awaiting user triage).
 
 ---
 
