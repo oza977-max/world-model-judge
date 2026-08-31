@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Design Review 005 — World Model Judge</title>
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+
+    body {
+      font-family: "ET Book", Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif;
+      color: #111;
+      background: #fffff8;
+      line-height: 1.6;
+      padding: 2rem 1rem 6rem;
+      max-width: 1480px;
+      margin: 0 auto;
+    }
+
+    /* ── Typography ── */
+    h1 {
+      font-size: 2.4rem;
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.4rem;
+      color: #111;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 400;
+      font-style: italic;
+      margin-top: 3rem;
+      margin-bottom: 1rem;
+      color: #111;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 0.3rem;
+    }
+
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-top: 2rem;
+      margin-bottom: 0.6rem;
+      color: #333;
+    }
+
+    p, li {
+      font-size: 1rem;
+      line-height: 1.7;
+      margin-bottom: 0.8rem;
+      max-width: 1000px;
+    }
+
+    ul, ol { padding-left: 1.4rem; margin-bottom: 1.2rem; }
+    li { margin-bottom: 0.4rem; }
+
+    .subtitle {
+      font-size: 1.1rem;
+      font-style: italic;
+      color: #555;
+      margin-bottom: 2.5rem;
+      max-width: 1000px;
+    }
+
+    .date {
+      font-size: 0.9rem;
+      color: #888;
+      margin-bottom: 0.2rem;
+    }
+
+    /* ── Floating TOC (Left Side) ── */
+    nav.toc {
+      position: fixed;
+      top: 2rem;
+      left: 2rem;
+      width: 220px;
+      max-height: calc(100vh - 4rem);
+      overflow-y: auto;
+      background: #fffff8;
+      border-right: 2px solid #ddd;
+      padding: 1rem 1rem 1rem 0;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      z-index: 100;
+    }
+
+    nav.toc .toc-title {
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #999;
+      margin-bottom: 0.6rem;
+    }
+
+    nav.toc a {
+      color: #555;
+      text-decoration: none;
+      display: block;
+      padding: 0.15rem 0;
+      transition: color 0.15s;
+    }
+
+    nav.toc a:hover { color: #111; }
+    nav.toc a.active { color: #111; font-weight: 600; }
+    nav.toc .toc-h3 { padding-left: 0.8rem; font-size: 0.78rem; color: #888; }
+    nav.toc .toc-h3:hover { color: #555; }
+
+    /* Offset main content for left TOC */
+    main {
+      margin-left: 260px;
+      max-width: 1000px;
+    }
+
+    /* ── Sidenotes (Right Margin) ── */
+    .sidenote {
+      float: right;
+      clear: right;
+      width: 220px;
+      margin-right: -260px;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      color: #666;
+      padding-left: 1rem;
+      border-left: 2px solid #e0e0e0;
+    }
+
+    /* ── Tables (Few's principles) ── */
+    table {
+      border-collapse: collapse;
+      margin: 1.5rem 0 2rem;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      width: auto;
+      min-width: 480px;
+      overflow-x: auto;
+    }
+
+    thead th {
+      text-align: left;
+      font-weight: 600;
+      padding: 0.5rem 1rem 0.5rem 0;
+      border-bottom: 2px solid #333;
+      color: #111;
+    }
+
+    tbody td {
+      padding: 0.45rem 1rem 0.45rem 0;
+      border-bottom: 1px solid #e8e8e8;
+      vertical-align: top;
+    }
+
+    tbody tr:last-child td { border-bottom: 2px solid #333; }
+    tbody tr:nth-child(even) { background: #f9f9f4; }
+
+    caption {
+      font-style: italic;
+      font-size: 0.88rem;
+      color: #666;
+      text-align: left;
+      margin-bottom: 0.4rem;
+    }
+
+    /* ── Inline Code ── */
+    code {
+      font-family: "Menlo", "Consolas", "Monaco", monospace;
+      font-size: 0.88rem;
+      background: #f0f0e8;
+      padding: 0.1rem 0.35rem;
+      border-radius: 2px;
+    }
+
+    pre {
+      font-family: "Menlo", "Consolas", "Monaco", monospace;
+      font-size: 0.85rem;
+      background: #f0f0e8;
+      padding: 1rem;
+      overflow-x: auto;
+      border-radius: 2px;
+      margin: 1rem 0;
+      max-width: 1000px;
+      line-height: 1.5;
+    }
+
+    /* ── Verdict Box (review components) ── */
+    .verdict {
+      border: 2px solid #333;
+      padding: 1.2rem 1.5rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+    }
+
+    .verdict-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+      margin-bottom: 0.3rem;
+    }
+
+    .verdict-text {
+      font-size: 1.3rem;
+      font-weight: 400;
+      color: #111;
+      margin-bottom: 0.4rem;
+    }
+
+    .verdict-basis {
+      font-size: 0.88rem;
+      color: #555;
+      max-width: 1000px;
+    }
+
+    .verdict.ready { border-color: #27ae60; background: #f0faf4; }
+    .verdict.ready .verdict-text { color: #27ae60; }
+
+    .verdict.caveats { border-color: #e67e22; background: #fef8f0; }
+    .verdict.caveats .verdict-text { color: #e67e22; }
+
+    .verdict.not-ready { border-color: #c0392b; background: #fdf0ef; }
+    .verdict.not-ready .verdict-text { color: #c0392b; }
+
+    /* ── Score Card ── */
+    .score-card {
+      background: #f7f7f0;
+      border: 2px solid #333;
+      padding: 1.5rem 2rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+    }
+
+    .score-card-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+      margin-bottom: 1.2rem;
+    }
+
+    .dimension-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin: 0.8rem 0;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid #e8e8e8;
+    }
+
+    .dimension-row:last-child {
+      border-bottom: none;
+    }
+
+    .dimension-name {
+      font-weight: 600;
+      color: #333;
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .dimension-scores {
+      font-size: 0.92rem;
+      color: #555;
+      min-width: 160px;
+      text-align: right;
+    }
+
+    .dimension-scores strong {
+      font-weight: 600;
+    }
+
+    /* ── Honesty Check Section ── */
+    .honesty-check {
+      background: #f0faf4;
+      border: 2px solid #27ae60;
+      border-left: 6px solid #27ae60;
+      padding: 1.5rem 1.5rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+    }
+
+    .honesty-check-header {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #27ae60;
+      margin-bottom: 0.6rem;
+    }
+
+    .honesty-check h3 {
+      margin-top: 0;
+      color: #27ae60;
+    }
+
+    .honesty-check ul {
+      margin-left: 1rem;
+    }
+
+    .honesty-check li {
+      margin-bottom: 0.6rem;
+    }
+
+    /* ── Review Components (issues) ── */
+    .issue {
+      border-left: 3px solid;
+      padding: 0.8rem 1rem;
+      margin: 0.8rem 0;
+      max-width: 1000px;
+    }
+
+    .issue.critical {
+      border-left-color: #c0392b;
+      background: #fdf0ef;
+    }
+
+    .issue.important {
+      border-left-color: #e67e22;
+      background: #fef8f0;
+    }
+
+    .issue-title {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 0.3rem;
+    }
+
+    .issue-detail {
+      font-size: 0.92rem;
+      color: #555;
+      margin-bottom: 0.3rem;
+    }
+
+    .issue-location {
+      font-size: 0.78rem;
+      color: #999;
+      font-style: italic;
+    }
+
+    /* ── Important Findings List ── */
+    .important-list {
+      max-width: 1000px;
+    }
+
+    .important-item {
+      margin: 0.8rem 0;
+      padding: 0.5rem 0 0.5rem 1rem;
+      border-left: 3px solid #e67e22;
+      background: #fef8f0;
+    }
+
+    .important-item-title {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 0.2rem;
+    }
+
+    .important-item-text {
+      font-size: 0.92rem;
+      color: #555;
+    }
+
+    /* ── Meta-Finding Callout ── */
+    .meta-finding {
+      border: 2px solid #c0392b;
+      border-left: 6px solid #c0392b;
+      padding: 1.5rem 1.5rem;
+      margin: 2.5rem 0;
+      max-width: 1000px;
+      background: #fff5f3;
+    }
+
+    .meta-finding-header {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #c0392b;
+      margin-bottom: 0.6rem;
+    }
+
+    .meta-finding h3 {
+      margin-top: 0;
+      color: #c0392b;
+    }
+
+    .meta-finding ol {
+      margin: 1.2rem 0;
+    }
+
+    .meta-finding li {
+      margin-bottom: 0.8rem;
+    }
+
+    /* ── GVM Attribution ── */
+    .gvm-attribution {
+      font-size: 0.75rem;
+      color: #999;
+      font-style: italic;
+      text-align: center;
+      margin-top: 3rem;
+      margin-bottom: 0;
+      max-width: none;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 1200px) {
+      nav.toc {
+        position: static;
+        width: 100%;
+        max-height: none;
+        border-right: none;
+        border-bottom: 1px solid #ddd;
+        padding: 1rem 0;
+        margin-bottom: 2rem;
+      }
+      main { margin-left: 0; }
+      .sidenote {
+        float: none;
+        width: 100%;
+        margin: 0.8rem 0;
+        padding: 0.6rem 0 0.6rem 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="toc" id="toc">
+    <div class="toc-title">Contents</div>
+  </nav>
+
+  <main>
+    <p class="date">Round 5 (Dual/Blind) · Post-structural-repair review · 7 panels × 2 = 14 independent reviewers · 31 August 2026</p>
+    <h1>World Model Judge — Design Review 005</h1>
+    <p class="subtitle">Deterministic harness for evaluating learned simulators — dual/blind review following structural repair, focusing on deeper architectural questions revealed by executable adversarial testing.</p>
+
+    <h2 id="verdict">Verdict</h2>
+    <div class="verdict not-ready">
+      <div class="verdict-label">Verdict</div>
+      <div class="verdict-text">Do not build</div>
+      <p class="verdict-basis">Fifth consecutive "Do not build" verdict. The structural repair cleared surface defects, allowing this round's executable adversarial review to reach a deeper layer. New findings are not patches to prior findings but fundamental architectural questions about judge purity, model provisioning, and determinism guarantees.</p>
+    </div>
+
+    <h2 id="score-card">Dimension Scores</h2>
+    <div class="score-card">
+      <div class="score-card-title">Calibrated vs. Blind Independent Review</div>
+      <div class="dimension-row">
+        <div class="dimension-name">Requirements Coverage</div>
+        <div class="dimension-scores"><strong>6</strong> (cal) / <strong>7</strong> (blind)</div>
+      </div>
+      <div class="dimension-row">
+        <div class="dimension-name">Interface Contracts</div>
+        <div class="dimension-scores"><strong>3</strong> (cal) / <strong>6</strong> (blind)</div>
+      </div>
+      <div class="dimension-row">
+        <div class="dimension-name">Structural Soundness</div>
+        <div class="dimension-scores"><strong>3</strong> (cal) / <strong>5</strong> (blind)</div>
+      </div>
+      <div class="dimension-row">
+        <div class="dimension-name">Implementability</div>
+        <div class="dimension-scores"><strong>4</strong> (cal) / <strong>4</strong> (blind)</div>
+      </div>
+      <div class="dimension-row">
+        <div class="dimension-name">Security</div>
+        <div class="dimension-scores"><strong>2</strong> (cal) / <strong>3</strong> (blind)</div>
+      </div>
+      <div class="dimension-row">
+        <div class="dimension-name">Reproducibility</div>
+        <div class="dimension-scores"><strong>5</strong> (cal) / <strong>5</strong> (blind)</div>
+      </div>
+      <div class="dimension-row">
+        <div class="dimension-name">Separability</div>
+        <div class="dimension-scores"><strong>3</strong> (cal) / <strong>3</strong> (blind)</div>
+      </div>
+    </div>
+
+    <h2 id="honesty-check">What the Repair Genuinely Fixed</h2>
+    <div class="honesty-check">
+      <div class="honesty-check-header">Verified Clean — The Honesty Check</div>
+      <p>These were independently re-derived or executed, not taken on trust:</p>
+      <ul>
+        <li><strong>Critical path and chunk count are correct for the first time in the document's history.</strong> Both D-calibrated and D-blind re-derived the longest path from the dependency table alone: 9 chunks, three tied branches (P3-C02, P3-C05, P4-C06), and 28 chunks total. Three prior rounds each found this arithmetic wrong; this round it holds.</li>
+        <li><strong>BC-3's reconciliation held.</strong> A-calibrated, A-blind, and both D panels independently re-extracted the 79/78 test-case IDs, the ten-orphan wiring, and the tombstone-wired-nowhere property — all correct. (This does <em>not</em> mean the wiring is correct — see C13 — but the count-and-trace reconciliation the repair claimed is real.)</li>
+        <li><strong>The Round-4 flagship mutual-exclusion is dissolved.</strong> C-calibrated and F2-blind both confirmed WorldContext removes the <code>models→worlds</code> import and the <code>fx-brittle</code> special-casing with no cycle introduced. The single worst Round-4 finding is genuinely gone.</li>
+        <li><strong><code>pkgutil</code> discovery order is deterministic</strong> (F1 both, verified against CPython source), <strong>PNG/byte-identity scoping is honest and consistent</strong> (F1 both), <strong>JU-1 blindness holds under v1.4</strong> — WorldContext never reaches the judge (F2 both), and <strong>adding an ordinary 8th model touches only its own file</strong> (F2-calibrated verified this against the pinned-seven names and refuted its own calibration hypothesis — the pinned list is used by inclusion, never as a closed-set check).</li>
+        <li><strong>The canonical block×axis table matches its own JSON example in every row</strong> except the calibration/sharpness horizon-step row (B-calibrated).</li>
+        <li><strong>Denylist→allowlist was the right move</strong>: it genuinely closed the whole "module nobody thought to list" evasion class (E-calibrated credits this explicitly). The failure is that it does not reach a deeper class — see C1.</li>
+      </ul>
+      <p>The dual-review mechanism worked as designed: F2-calibrated disproved its own steer, and every Critical below was reached by executed evidence or by independent convergence of a calibrated and a blind panel.</p>
+    </div>
+
+    <h2 id="critical-findings">Critical Findings</h2>
+
+    <div class="issue critical">
+      <div class="issue-title">C1 — The judge-purity AST gate is defeated by Python reflection; its named runtime backstop is structurally blind to it.</div>
+      <p class="issue-detail"><em>Convergence: E-blind, E-calibrated (three evasions <strong>executed</strong> against live Python 3.11 / numpy 2.4.6), F2-blind (executed).</em></p>
+      <p class="issue-detail">The allowlist + banned-identifier + <code>numpy.random</code> checks are all evaded, with no import and no banned identifier, by:</p>
+      <pre><code>().__class__.__base__.__subclasses__()
+np.get_include.__globals__['os'].system(...)
+getattr(np, "__builtins__")["eval"]</code></pre>
+      <p class="issue-detail">The spec's own stated closure ("realistic indirection routes close") considered only <code>getattr(builtins,...)</code>/<code>getattr(__builtins__,...)</code> written as code — not <code>__globals__</code> reads or <code>__subclasses__()</code> walks, and its own canonical Given/When/Then (test-cases.md) never mentions an import hook at all. TC-JU12-01, named as "final runtime authority," intervenes only on <em>new imports</em> and <em>builtin-name poisoning</em> — neither touches <code>__globals__</code> reads or <code>__subclasses__()</code> walks. <strong>This is the deepest finding of the round.</strong> It is not a fifth instance of the enumerate-evade-patch cycle — it is the demonstration that no finite identifier list closes attribute-graph reflection in Python. <strong>Category: NEW class.</strong></p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C2 — The import allowlist checks the module name, not the capability surface.</div>
+      <p class="issue-detail"><em>E-blind, executed.</em></p>
+      <p class="issue-detail"><code>np.fromfile("/etc/hostname")</code> and <code>np.datetime64('now')</code> reach the filesystem and clock through the <em>allowlisted</em> numpy module; the AST check inspects only the top-level module name. ADR-002 rule 3 claims the judge gets <em>structural</em> (not merely empirical) ambient-input enforcement and contrasts this with worlds/models' empirical-only enforcement — this exhibit shows the judge has exactly the same empirical-only weakness. <strong>Category: NEW.</strong></p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C3 — The determinism claim has no pinned seed-derivation mechanism.</div>
+      <p class="issue-detail"><em>Convergence: F1-calibrated and F1-blind, both executed.</em></p>
+      <p class="issue-detail">ADR-002 rule 2 says "component seeds are derived from one run-level seed via <code>PCG64</code> jumped/spawned streams so adding a component never shifts another component's stream" — but "jumped" and "spawned" are two different, non-interchangeable NumPy APIs (verified: different outputs from the same seed), no document says what a "component" is or in what order it is seeded, and the implementation most consistent with the project's own sorted-name/<code>model_ref</code> conventions (positional <code>spawn</code> over <code>all_models()</code>) was shown with running code to reassign <em>every</em> model's stream — hence weights, hence verdicts — when one alphabetically-earlier model is added. That silently defeats MU-9's headline "adding a model touches nothing else" at the trained-artefact level (true only at the source-diff level TC-MU9-01 checks), and no test in the 79-case suite would catch it. <strong>Category: NEW.</strong></p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C4 — Two mandatory Verdict fields (the JU-10 <code>limitations</code> disclosures and the <code>not_tested</code> list) never reach the human-facing surface.</div>
+      <p class="issue-detail"><em>Convergence: B-blind and C-blind.</em></p>
+      <p class="issue-detail">reporting.md's own Expert Panel assigns Mitchell the mandate "the not-tested list rendered as a first-class output, not a footnote," and architecture-overview.md says Dev reads <code>results.html</code>; yet neither <code>limitations</code> nor <code>not_tested</code> appears anywhere in reporting.md's four charts, caption templates, or <code>results.html</code> assembly. The project's core honesty requirement (CLAUDE.md: "every verdict states the judge's own limits") exists only inside a JSON file Dev is never told to open. <strong>Category: NEW.</strong></p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C5 — WorldContext does not carry the scale vector <code>direct</code>/<code>ensemble</code> need, so 2 of the 7 models (plus the 3 fixtures wrapping Model A) are unbuildable through the "one sanctioned channel."</div>
+      <p class="issue-detail"><em>C-calibrated.</em></p>
+      <p class="issue-detail">ADR-M3 says the MLP normalises <code>(state, action)</code> "by the world's scale vector"; that vector is not one of WorldContext's five fields, and §6 states WorldContext is <em>the</em> sanctioned channel with no exceptions. The only legal alternatives are to import <code>wmj.worlds</code> (the exact violation the repair closed) or leave the models unbuildable. Because <code>fx-brittle</code> must compare <em>raw</em> state/action against <code>ctx.training_state_box</code>, inputs to <code>predict()</code> are raw, so the normalisation genuinely needs a scale WorldContext lacks. <strong>Category: NEW, on the flagship repair group.</strong></p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C6 — There is no training/fit entry point anywhere in the pinned model interface.</div>
+      <p class="issue-detail"><em>C-calibrated.</em></p>
+      <p class="issue-detail">ADR-M1 ("the interface, complete") lists only <code>name</code>, <code>is_fixture</code>, <code>reset()</code>, <code>predict()</code>; <code>factory(ctx, rng)</code> receives no training data; ADR-M2/M3 require a fit step over the training dataset before <code>predict()</code> is meaningful. No module owns weight persistence, no format/path is specified, and the only textual gesture is a five-word field comment ("for weights-file keying"). Six of seven models cannot reach a ready-to-predict state through the described interface. <strong>Category: NEW, larger in scope than the fixture-only problem the repair solved.</strong></p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C7 — TC-MU9-01 mechanism v3 corrupts the shared in-process production registry.</div>
+      <p class="issue-detail"><em>Convergence: F2-blind and F2-calibrated, both executed, two failure modes.</em></p>
+      <p class="issue-detail">Restoring <code>wmj.models.__path__</code> does not clear <code>sys.modules['wmj.models.&lt;stub&gt;']</code>, so a second same-named stub is served the first's cached module and its <code>register()</code> never runs; and the "registry snapshot-and-restore" the spec names, if it actually clears the stub, wipes the real <code>persistence</code> registration permanently when TC-MU9-01 is the first <code>all_models()</code> call in the process (the seven real models register lazily, so the setup snapshot is <code>{}</code>). This is quieter than Round 4's phantom-file bug — no artefact on disk, just a short roster in whatever test runs next. <strong>Category: REGRESSION-class (BC-2): the repair fixed the disk-write leak and left/introduced an in-process one.</strong></p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C8 — The "models never import world internals" rule — which drove the entire WorldContext ADR — has no enforcing gate.</div>
+      <p class="issue-detail"><em>Convergence: A-calibrated, C-blind.</em></p>
+      <p class="issue-detail">Every AST gate points the other way: TC-NF6 walks only <code>wmj.judge</code>; TC-MU9-01(c) checks that others don't import <code>wmj.models</code>. Nothing checks that <code>wmj.models</code> doesn't import <code>wmj.worlds</code>. A developer could write <code>from wmj.worlds.lv import SCALE</code> in <code>fixtures.py</code> and no test would fail — the project's own "enforced by test, never by convention" doctrine unapplied to the one claim a repair was built around. <strong>Category: NEW.</strong></p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C9 — BC-1 recurs inside the BC-1 repair: calibration/sharpness's horizon-step axis is unverifiable against its own defining ADR.</div>
+      <p class="issue-detail"><em>B-calibrated.</em></p>
+      <p class="issue-detail">The block×axis table asserts calibration does <em>not</em> vary over <code>horizon_step</code> (marked "—"), while its own "Why" cell says "at the task's declared steps" (plural) and ADR-J2 says "each task evaluates it at its own declared horizon steps." ADR-J3 (sharpness) never says which step the 90%-width is averaged over. A builder cannot tell which slice of the <code>[n_trials, H, d]</code> array to compute over — the exact ambiguity the canonical keying rule was written to end, in the one row not cross-checked. <strong>Category: REGRESSION (BC-1, 5th round).</strong></p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C10 — Every <code>specs/*.html</code> twin is three rounds stale, showing disproven contracts to any reader who opens them.</div>
+      <p class="issue-detail"><em>Convergence: B-calibrated, C-calibrated, D-calibrated.</em></p>
+      <p class="issue-detail">The <code>.md</code> sources are v1.4/v1.3; the committed <code>.html</code> are all v1.1, carrying <code>register(factory)</code> (the superseded single-arg signature) and "eight registered contestants" (the disproven roster). None carries the <code>generated-from</code> parity comment the mechanism (unbuilt) would need. architecture-overview.md itself says "if you read only one spec, read this one" — legitimising the HTML reading path. <strong>Category: NEW (a live instance of the drift the unbuilt parity check was designed to prevent).</strong></p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C11 — Chart 2's world-time axis has no data source, and Chart 4 ranks on raw CRPS with the skill fields having no consumer.</div>
+      <p class="issue-detail"><em>B-blind.</em></p>
+      <p class="issue-detail"><code>error_vs_horizon.per_region</code> carries only a step index — no <code>dt</code>, which is world-owned and which reporting has no import path to; yet ADR-R2 mandates a "world time" second axis. Separately, ADR-J1 says "no absolute error is ever emitted without its skill counterpart," but Chart 4 (RP-4, "the headline result") ranks by one-step CRPS and <code>vs_persistence</code>/<code>vs_linear</code> appear on no chart anywhere. <strong>Category: NEW (same schema/consumer class as design-review-002's Chart 2/3 fixes, not caught for these two spots).</strong></p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C12 — TC-WD3-01 still asserts a property the architecture declared impossible.</div>
+      <p class="issue-detail"><em>A-blind.</em></p>
+      <p class="issue-detail">The case requires a check that a model "used the identical integrator class"; worlds.md's own v1.1 fix (four rounds ago) states no model under test calls an integrator, and rewrote the WD-3 gate to model dt-alignment. The test was never updated, despite test-cases.md being revised in this same repair session. <strong>Category: NEW (stale test).</strong></p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C13 — Implementation-guide wiring: three of the ten newly-wired cases are defectively placed, plus the MVP-1 second slice overclaims.</div>
+      <p class="issue-detail"><em>Convergence: A-calibrated, D-blind, D-calibrated.</em></p>
+      <p class="issue-detail">TC-JU9-03 is wired to P4-C01, which has no exceptions/trials computation to exercise the invariant (belongs at P4-C04/C06); TC-MU1-03 (the reset-leak regression test) is wired to Model A, which structurally has no rollout-local state to leak — a vacuous pass; TC-NF5-02 tests the spec-parity gate against the repo's actual HTML, which was never regenerated, so it fails permanently; P2-C05's acceptance test requires the verbatim ADR-R3 caption, which narrates a switch-step feature sourced from <code>climatology.per_task</code> — a field first computed twelve chunks later — so the MVP-1 second slice ships a caption that overclaims relative to the image (in the project whose NF-5 forbids exactly that). D-blind additionally found <code>baselines.py</code> has contradictory owners (P1-C02 vs P2-C05), the training-data count N and epoch count are unreachable from the chunks that need them, and P2-C05/P5-C01/C03 share reporting files with no ordering edge. <strong>Category: BC-3 partial recurrence ("reconciled ≠ correct").</strong></p>
+    </div>
+
+    <h2 id="important-findings">Important Findings</h2>
+    <div class="important-list">
+      <div class="important-item">
+        <div class="important-item-title">I1 — <code>RegionSpec</code> has no field-level schema</div>
+        <div class="important-item-text"><em>A-cal, A-blind, C-blind, D-cal, B-cal.</em> The producer type WorldContext is built from is never given field names — the one construction site must be invented.</div>
+      </div>
+
+      <div class="important-item">
+        <div class="important-item-title">I2 — Trial-set reuse across models is undecided</div>
+        <div class="important-item-text"><em>C both, F1, D.</em> "N=200 per (model, world, region)" reads as either per-model-independent or one shared paired set; MU-5's headline direct-vs-ensemble margin is much noisier unpaired, and the harness loop owning trial generation is specified nowhere.</div>
+      </div>
+
+      <div class="important-item">
+        <div class="important-item-title">I3 — ADR-J6's runtime arithmetic omits the per-region 2× multiplier</div>
+        <div class="important-item-text"><em>A-blind, C-cal.</em> Third instance of the "never-recounted-number" class; harmless to feasibility, but the number doesn't verify what it claims.</div>
+      </div>
+
+      <div class="important-item">
+        <div class="important-item-title">I4 — TC-MU9-01(c) can't distinguish <code>from wmj.models import direct</code></div>
+        <div class="important-item-text"><em>E-cal, F2-cal, F2-blind, verified.</em> Identical <code>node.module</code> for forbidden and permitted forms; the rule isn't pinned to join module+name; TC-MU9-02's own injection shape likely misses it too.</div>
+      </div>
+
+      <div class="important-item">
+        <div class="important-item-title">I5 — TC-MU9-01(b) proves harness.trials delegates, not that the CLI calls harness.trials</div>
+        <div class="important-item-text"><em>F2-cal.</em> The "second list that happens to agree" problem recurs one layer up.</div>
+      </div>
+
+      <div class="important-item">
+        <div class="important-item-title">I6 — MU-9's "one file" claim is false for a new <em>unrigged</em> model</div>
+        <div class="important-item-text"><em>F2-blind.</em> No <code>is_unrigged</code> field; <code>check_prereg</code>'s trigger and MU-5's pairwise margin can't extend generically — a modifiability-vs-prereg-integrity tradeoff never acknowledged. (F2-cal cleared the pinned-seven angle; this is the surviving one.)</div>
+      </div>
+
+      <div class="important-item">
+        <div class="important-item-title">I7 — Fixtures' "copy of Model A" has no construction channel</div>
+        <div class="important-item-text"><em>C-blind.</em> Under uniform <code>factory(ctx,rng)</code> the only buildable option retrains a fresh net, making each fixture differ by two variables, contradicting ADR-M4's "isolated" claim.</div>
+      </div>
+
+      <div class="important-item">
+        <div class="important-item-title">I8 — NF-4 residual gaps</div>
+        <div class="important-item-text"><em>E-blind, E-cal.</em> The commit-message pass still uses the <code>--all --reflog</code> traversal the changelog itself called insufficient; a web-UI edit or a libgit2 GUI bypasses both local layers with no lapse; "gc-pruned = never publishable" is false for the commit→push→amend→gc ordering; no pre-push hook exists.</div>
+      </div>
+
+      <div class="important-item">
+        <div class="important-item-title">I9 — The single-thread guarantee names no real NumPy API</div>
+        <div class="important-item-text"><em>F1-blind, verified.</em> "the test suite asserts NumPy reports single-threaded configuration" — NumPy exposes no such runtime introspection; the real tool (<code>threadpoolctl</code>) isn't in the dependency budget.</div>
+      </div>
+
+      <div class="important-item">
+        <div class="important-item-title">I10 — Two test cases still assert the banned schema/behaviour</div>
+        <div class="important-item-text"><em>B-cal.</em> TC-JU4-01 ("separately in-region and out-of-region") reintroduces the suffix shape the v1.4 keying rule banned; TC-MU3-03 never exercises the both-axes <code>fx-brittle</code> scenario the Round-4 fix exists for.</div>
+      </div>
+
+      <div class="important-item">
+        <div class="important-item-title">I11 — Three <code>&lt;spec-value&gt;</code> placeholders are unfilled</div>
+        <div class="important-item-text"><em>A-blind.</em> Though the tech spec settled N=200, 600 s, and the <code>{numpy, matplotlib}</code> list.</div>
+      </div>
+
+      <div class="important-item">
+        <div class="important-item-title">I12 — P3-C01 and P5-C01 carry no <code>[Test:]</code> tag</div>
+        <div class="important-item-text"><em>A-blind.</em> Violating the guide's own "no write-tests-only chunks / no exemptions" rule.</div>
+      </div>
+
+      <div class="important-item">
+        <div class="important-item-title">I13 — Registry auto-discovery runs arbitrary code on import with no stated threat model</div>
+        <div class="important-item-text"><em>E-blind.</em> Structurally more powerful than everything the AST-gate hardening prevents (a hostile file in <code>wmj/models/</code> needs no evasion), yet ADR-M5-style disclosure is absent for it.</div>
+      </div>
+
+      <div class="important-item">
+        <div class="important-item-title">I14 — Architecture-overview's envelope diagram uses <code>name</code></div>
+        <div class="important-item-text"><em>B-blind.</em> Where every other document and the schema it cites use <code>model_name</code> — a KeyError on the one field every chart labels with.</div>
+      </div>
+
+      <div class="important-item">
+        <div class="important-item-title">I15 — No anti-drift check for WorldContext's constructed values against WD-5's declared constants</div>
+        <div class="important-item-text"><em>C-cal.</em> "One construction site" prevents disagreement, not incorrectness.</div>
+      </div>
+    </div>
+
+    <h2 id="dual-review-metadata">Dual-Review Metadata</h2>
+    <table>
+      <caption>Table 1 — Finding sources and verification status</caption>
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th>Count</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Confirmed by calibrated <strong>and</strong> blind independently</td>
+          <td>6 clusters</td>
+          <td>AST reflection escape (E-blind, E-cal, F2-blind — executed); seed-derivation (F1-cal, F1-blind — executed); registry in-process corruption (F2-blind, F2-cal — executed); JU-10/not_tested unrendered (B-blind, C-blind); models→worlds import unenforced (A-cal, C-blind); RegionSpec unspecified (5 panels)</td>
+        </tr>
+        <tr>
+          <td>New, calibrated-only</td>
+          <td>~7</td>
+          <td>scale-vector gap (C5), no fit entry point (C6), block×axis horizon-step (C9), TC-JU9-03 misplacement, TC-NF5-02, ADR-J6 multiplier, MU9-01(c) shape</td>
+        </tr>
+        <tr>
+          <td>New, blind-only</td>
+          <td>~7</td>
+          <td>capability-surface allowlist (C2), Chart 2 dt / Chart 4 CRPS (C11), TC-WD3-01 stale (C12), single-thread API (I9), unrigged-model MU-9 (I6), envelope <code>name</code> (I14), registry-import threat model (I13)</td>
+        </tr>
+        <tr>
+          <td>Regression / recurrence</td>
+          <td>3</td>
+          <td>BC-1 (C9), BC-2 (C7 registry leak), BC-3 (C13 wiring) — each in the exact round meant to close it</td>
+        </tr>
+        <tr>
+          <td>Disproven / cleared by review</td>
+          <td>8</td>
+          <td>critical path, chunk count, BC-3 counts, fx-brittle mutual-exclusion, pkgutil order, 8th-model modifiability, JU-1 blindness, PNG scoping — see honesty check</td>
+        </tr>
+        <tr>
+          <td>Noise (discarded)</td>
+          <td>0</td>
+          <td>—</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="meta-finding">The Meta-Finding, for Triage</h2>
+    <div class="meta-finding">
+      <div class="meta-finding-header">Architectural Questions Revealed by Executable Adversarial Review</div>
+      <p>Four rounds found finding-sized surface defects and patched them; the structural repair finally cleared that surface. What Round 5 then reached, with executable adversarial review, is a different and deeper layer:</p>
+      <ol>
+        <li><strong>The judge-purity gate (C1/C2) may be structurally unable to deliver what it promises.</strong> A static AST allowlist cannot bound Python's reflection graph; the named runtime backstop is the wrong shape. This is an architecture decision, not a patch: either the judge is restricted to a genuinely non-reflective style enforced some other way, or TC-JU12-01 becomes the sole real control and must be specified to intercept attribute/dict access, not just imports and builtins — or the purity property is downgraded from "structural" to "empirical + disclosed," matching what the gate can actually deliver.</li>
+        <li><strong>The model-provisioning interface (C5/C6) is underspecified in a way no chart-or-schema fix reaches</strong> — there is no training channel, and the "one sanctioned channel" doesn't carry a fact two models need. This is the models spec's core interface, not its edges.</li>
+        <li><strong>The determinism guarantee (C3) has no pinned mechanism</strong> for the one thing NF-1 exists to protect.</li>
+      </ol>
+      <p>These three are not "fix the finding" items; they are "decide the design" items. The recurrence pattern (BC-1/2/3 each re-appearing in the round assigned to close them) continues, but now alongside genuinely-cleared prior defects — which is the first evidence that the repair changed the <em>kind</em> of finding, even though it did not change the verdict.</p>
+    </div>
+
+    <p class="gvm-attribution">Developed using the Grounded Vibe Methodology</p>
+  </main>
+
+  <script>
+    (function () {
+      const toc = document.getElementById('toc');
+      const headings = document.querySelectorAll('h2[id], h3[id]');
+      const links = [];
+
+      headings.forEach(function (h) {
+        const a = document.createElement('a');
+        a.href = '#' + h.id;
+        a.textContent = h.textContent;
+        if (h.tagName === 'H3') a.classList.add('toc-h3');
+        toc.appendChild(a);
+        links.push({ el: a, target: h });
+      });
+
+      function onScroll() {
+        let current = links[0];
+        for (let i = 0; i < links.length; i++) {
+          if (links[i].target.getBoundingClientRect().top <= 80) current = links[i];
+        }
+        links.forEach(function (l) { l.el.classList.remove('active'); });
+        if (current) {
+          current.el.classList.add('active');
+          const tocEl = document.getElementById('toc');
+          const elTop = current.el.offsetTop - tocEl.offsetTop;
+          const elBot = elTop + current.el.offsetHeight;
+          if (elTop < tocEl.scrollTop || elBot > tocEl.scrollTop + tocEl.clientHeight) {
+            tocEl.scrollTop = elTop - tocEl.clientHeight / 2;
+          }
+        }
+      }
+
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    })();
+  </script>
+</body>
+</html>
