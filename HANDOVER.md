@@ -89,13 +89,40 @@ stream. Everything else (13 Critical + 15 Important) was fixed at rule-size; see
 re-derived to **10 chunks** (the new file-ownership/prereg-count edges lengthen the
 reporting branch — a real graph change, not a recount error).
 
-**Known debt:** the `specs/*.html` twins are stale and now carry a deterministic
-staleness banner pointing to the authoritative `.md`; they regenerate with the
-NF5-02 parity hash at build time (P6-C02). The v1.5 fixes are **self-verified only**
-— a Round 6 dual/blind review would pressure-test the enforcement-mechanism
-changes (the runtime purity harness especially), per BC-2, if wanted.
+**Update — Round 6 complete (dual/blind, 14 reviewers, ran the BC-2 pressure-test).**
+Sixth "Do not build", but the failure shape **inverted** and this is the closest
+to buildable. The design/contract/coverage surface **converged and verified clean**
+(panels that scored 2–4 for five rounds scored 6–9), and **three v1.5 design
+decisions were confirmed working by execution**: content-addressed seeding (no-shift,
+3 panels), the TC-MU9-01 teardown (both R5 leaks reproduced as regressions), and the
+import-join. Critical path (10 chunks) and count (28) correct on three independent
+re-derivations. The remaining Criticals are concentrated in two mechanism-precision
+clusters with known small fixes:
+1. **Purity/scan mechanisms:** the runtime purity harness is executed-broken by 4
+   panels — `sys.modules['os'] = guard` doesn't reach numpy's pre-bound `os`; the fix
+   is **mutate-the-shared-object-in-place** (`setattr(os,'system',…)`), demonstrated
+   by the panels; also guard numpy's C-level clock. And the NF-4 scan command is inert
+   — `git cat-file … --batch-check` emits no content; needs **`--batch`**.
+2. **Determinism precision:** pin `component_key`'s hash (it's an "e.g."), add a
+   purpose discriminator to the seed key (train/eval/benchmark starts collide),
+   disclose the `model_ref` roster-shift, spec the ensemble K=5 split, name the
+   `meta.platform` source.
+Plus prose/wiring fixes (the skill-step regression, the Verdict dp-control-in-lv
+example, the fixture-seed channel, the baseline-classification contradiction, TC-MU9-03,
+three misplaced wirings). **v1.5's own fix-all planted 5 of the 10 Criticals** (fast +
+self-verified — the BC-2 pattern). See `design-review/design-review-006.html` and the
+"Round 6 result" entry in `reviews/calibration.md`.
 
-Last updated 2026-08-31 (design-review-005 repair — "fix all" applied).
+**Path to green:** fix the two mechanism clusters — **this time verified by execution,
+not prose** — and Round 7 could plausibly clear to "Build with caveats". Fixes not yet
+applied; pending user triage.
+
+**Known debt:** the `specs/*.html` twins carry a deterministic staleness banner (they
+regenerate with the NF5-02 parity hash at build time, P6-C02). The older "What exists"
+table below is itself stale (says v1.3/v1.0) — Round 6 flagged it; refresh when next
+editing this file.
+
+Last updated 2026-08-31 (design-review-006 — Round 6 complete).
 
 ---
 

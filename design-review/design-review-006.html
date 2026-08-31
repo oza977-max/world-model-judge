@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Design Review 006 — World Model Judge</title>
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+
+    body {
+      font-family: "ET Book", Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif;
+      color: #111;
+      background: #fffff8;
+      line-height: 1.6;
+      padding: 2rem 1rem 6rem;
+      max-width: 1480px;
+      margin: 0 auto;
+    }
+
+    /* ── Typography ── */
+    h1 {
+      font-size: 2.4rem;
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.4rem;
+      color: #111;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 400;
+      font-style: italic;
+      margin-top: 3rem;
+      margin-bottom: 1rem;
+      color: #111;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 0.3rem;
+    }
+
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-top: 2rem;
+      margin-bottom: 0.6rem;
+      color: #333;
+    }
+
+    p, li {
+      font-size: 1rem;
+      line-height: 1.7;
+      margin-bottom: 0.8rem;
+      max-width: 1000px;
+    }
+
+    ul, ol { padding-left: 1.4rem; margin-bottom: 1.2rem; }
+    li { margin-bottom: 0.4rem; }
+
+    .subtitle {
+      font-size: 1.1rem;
+      font-style: italic;
+      color: #555;
+      margin-bottom: 2.5rem;
+      max-width: 1000px;
+    }
+
+    .date {
+      font-size: 0.9rem;
+      color: #888;
+      margin-bottom: 0.2rem;
+    }
+
+    /* ── Floating TOC (Left Side) ── */
+    nav.toc {
+      position: fixed;
+      top: 2rem;
+      left: 2rem;
+      width: 220px;
+      max-height: calc(100vh - 4rem);
+      overflow-y: auto;
+      background: #fffff8;
+      border-right: 2px solid #ddd;
+      padding: 1rem 1rem 1rem 0;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      z-index: 100;
+    }
+
+    nav.toc .toc-title {
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #999;
+      margin-bottom: 0.6rem;
+    }
+
+    nav.toc a {
+      color: #555;
+      text-decoration: none;
+      display: block;
+      padding: 0.15rem 0;
+      transition: color 0.15s;
+    }
+
+    nav.toc a:hover { color: #111; }
+    nav.toc a.active { color: #111; font-weight: 600; }
+    nav.toc .toc-h3 { padding-left: 0.8rem; font-size: 0.78rem; color: #888; }
+    nav.toc .toc-h3:hover { color: #555; }
+
+    /* Offset main content for left TOC */
+    main {
+      margin-left: 260px;
+      max-width: 1000px;
+    }
+
+    /* ── Sidenotes (Right Margin) ── */
+    .sidenote {
+      float: right;
+      clear: right;
+      width: 220px;
+      margin-right: -260px;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      color: #666;
+      padding-left: 1rem;
+      border-left: 2px solid #e0e0e0;
+    }
+
+    /* ── Tables (Few's principles) ── */
+    table {
+      border-collapse: collapse;
+      margin: 1.5rem 0 2rem;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      width: auto;
+      min-width: 480px;
+      overflow-x: auto;
+    }
+
+    thead th {
+      text-align: left;
+      font-weight: 600;
+      padding: 0.5rem 1rem 0.5rem 0;
+      border-bottom: 2px solid #333;
+      color: #111;
+    }
+
+    tbody td {
+      padding: 0.45rem 1rem 0.45rem 0;
+      border-bottom: 1px solid #e8e8e8;
+      vertical-align: top;
+    }
+
+    tbody tr:last-child td { border-bottom: 2px solid #333; }
+    tbody tr:nth-child(even) { background: #f9f9f4; }
+
+    caption {
+      font-style: italic;
+      font-size: 0.88rem;
+      color: #666;
+      text-align: left;
+      margin-bottom: 0.4rem;
+    }
+
+    /* ── Inline Code ── */
+    code {
+      font-family: "Menlo", "Consolas", "Monaco", monospace;
+      font-size: 0.88rem;
+      background: #f0f0e8;
+      padding: 0.1rem 0.35rem;
+      border-radius: 2px;
+    }
+
+    pre {
+      font-family: "Menlo", "Consolas", "Monaco", monospace;
+      font-size: 0.85rem;
+      background: #f0f0e8;
+      padding: 1rem;
+      overflow-x: auto;
+      border-radius: 2px;
+      margin: 1rem 0;
+      max-width: 1000px;
+      line-height: 1.5;
+    }
+
+    /* ── Verdict Box (review components) ── */
+    .verdict {
+      border: 2px solid #333;
+      padding: 1.2rem 1.5rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+    }
+
+    .verdict-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+      margin-bottom: 0.3rem;
+    }
+
+    .verdict-text {
+      font-size: 1.3rem;
+      font-weight: 400;
+      color: #111;
+      margin-bottom: 0.4rem;
+    }
+
+    .verdict-basis {
+      font-size: 0.88rem;
+      color: #555;
+      max-width: 1000px;
+    }
+
+    .verdict.ready { border-color: #27ae60; background: #f0faf4; }
+    .verdict.ready .verdict-text { color: #27ae60; }
+
+    .verdict.caveats { border-color: #e67e22; background: #fef8f0; }
+    .verdict.caveats .verdict-text { color: #e67e22; }
+
+    .verdict.not-ready { border-color: #c0392b; background: #fdf0ef; }
+    .verdict.not-ready .verdict-text { color: #c0392b; }
+
+    /* ── Score Card ── */
+    .score-card {
+      background: #f7f7f0;
+      border: 2px solid #333;
+      padding: 1.5rem 2rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+    }
+
+    .score-card-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+      margin-bottom: 1.2rem;
+    }
+
+    .dimension-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin: 0.8rem 0;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid #e8e8e8;
+    }
+
+    .dimension-row:last-child {
+      border-bottom: none;
+    }
+
+    .dimension-name {
+      font-weight: 600;
+      color: #333;
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .dimension-scores {
+      font-size: 0.92rem;
+      color: #555;
+      min-width: 160px;
+      text-align: right;
+    }
+
+    .dimension-scores strong {
+      font-weight: 600;
+    }
+
+    /* ── Honesty Check Section ── */
+    .honesty-check {
+      background: #f0faf4;
+      border: 2px solid #27ae60;
+      border-left: 6px solid #27ae60;
+      padding: 1.5rem 1.5rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+    }
+
+    .honesty-check-header {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #27ae60;
+      margin-bottom: 0.6rem;
+    }
+
+    .honesty-check h3 {
+      margin-top: 0;
+      color: #27ae60;
+    }
+
+    .honesty-check ul {
+      margin-left: 1rem;
+    }
+
+    .honesty-check li {
+      margin-bottom: 0.6rem;
+    }
+
+    /* ── Review Components (issues) ── */
+    .issue {
+      border-left: 3px solid;
+      padding: 0.8rem 1rem;
+      margin: 0.8rem 0;
+      max-width: 1000px;
+    }
+
+    .issue.critical {
+      border-left-color: #c0392b;
+      background: #fdf0ef;
+    }
+
+    .issue.important {
+      border-left-color: #e67e22;
+      background: #fef8f0;
+    }
+
+    .issue-title {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 0.3rem;
+    }
+
+    .issue-detail {
+      font-size: 0.92rem;
+      color: #555;
+      margin-bottom: 0.3rem;
+    }
+
+    .issue-location {
+      font-size: 0.78rem;
+      color: #999;
+      font-style: italic;
+    }
+
+    /* ── Important Findings List ── */
+    .important-list {
+      max-width: 1000px;
+    }
+
+    .important-item {
+      margin: 0.8rem 0;
+      padding: 0.5rem 0 0.5rem 1rem;
+      border-left: 3px solid #e67e22;
+      background: #fef8f0;
+    }
+
+    .important-item-title {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 0.2rem;
+    }
+
+    .important-item-text {
+      font-size: 0.92rem;
+      color: #555;
+    }
+
+    /* ── Meta-Finding Callout ── */
+    .meta-finding {
+      border: 2px solid #c0392b;
+      border-left: 6px solid #c0392b;
+      padding: 1.5rem 1.5rem;
+      margin: 2.5rem 0;
+      max-width: 1000px;
+      background: #fff5f3;
+    }
+
+    .meta-finding-header {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #c0392b;
+      margin-bottom: 0.6rem;
+    }
+
+    .meta-finding h3 {
+      margin-top: 0;
+      color: #c0392b;
+    }
+
+    .meta-finding ol {
+      margin: 1.2rem 0;
+    }
+
+    .meta-finding li {
+      margin-bottom: 0.8rem;
+    }
+
+    /* ── GVM Attribution ── */
+    .gvm-attribution {
+      font-size: 0.75rem;
+      color: #999;
+      font-style: italic;
+      text-align: center;
+      margin-top: 3rem;
+      margin-bottom: 0;
+      max-width: none;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 1200px) {
+      nav.toc {
+        position: static;
+        width: 100%;
+        max-height: none;
+        border-right: none;
+        border-bottom: 1px solid #ddd;
+        padding: 1rem 0;
+        margin-bottom: 2rem;
+      }
+      main { margin-left: 0; }
+      .sidenote {
+        float: none;
+        width: 100%;
+        margin: 0.8rem 0;
+        padding: 0.6rem 0 0.6rem 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="toc" id="toc">
+    <div class="toc-title">Contents</div>
+  </nav>
+
+  <main>
+    <p class="date">Round 6 (Dual/Blind) · Post-v1.5-fix-all review · 7 panels × 2 = 14 independent reviewers · 31 August 2026</p>
+    <h1>World Model Judge — Design Review 006</h1>
+    <p class="subtitle">Deterministic harness for evaluating learned simulators — dual/blind review following comprehensive v1.5 repair pass, focusing on mechanism-specification precision and embedded regressions.</p>
+
+    <h2 id="verdict">Verdict</h2>
+    <div class="verdict not-ready">
+      <div class="verdict-label">Verdict</div>
+      <div class="verdict-text">Do not build</div>
+      <p class="verdict-basis">Sixth consecutive "Do not build" verdict. Multiple Critical findings; Security (2/5 calibrated, 5/10 blind) below the 5 floor. But this is the closest to buildable the project has been: the design surface converged and verified clean, and the remaining Criticals are concentrated in two known mechanism clusters with demonstrated small fixes — several planted by v1.5's own fix-all pass.</p>
+    </div>
+
+    <h2 id="score-card">Dimension Scores</h2>
+    <div class="score-card">
+      <div class="score-card-title">Calibrated vs. Blind Independent Review</div>
+      <div class="dimension-row">
+        <div class="dimension-name">Requirements Coverage</div>
+        <div class="dimension-scores"><strong>9</strong> (cal) / <strong>8</strong> (blind)</div>
+      </div>
+      <div class="dimension-row">
+        <div class="dimension-name">Interface Contracts</div>
+        <div class="dimension-scores"><strong>6</strong> (cal) / <strong>8</strong> (blind)</div>
+      </div>
+      <div class="dimension-row">
+        <div class="dimension-name">Structural Soundness</div>
+        <div class="dimension-scores"><strong>5</strong> (cal) / <strong>7</strong> (blind)</div>
+      </div>
+      <div class="dimension-row">
+        <div class="dimension-name">Implementability</div>
+        <div class="dimension-scores"><strong>6</strong> (cal) / <strong>6</strong> (blind)</div>
+      </div>
+      <div class="dimension-row">
+        <div class="dimension-name">Security</div>
+        <div class="dimension-scores"><strong>2</strong> (cal) / <strong>5</strong> (blind)</div>
+      </div>
+      <div class="dimension-row">
+        <div class="dimension-name">Reproducibility</div>
+        <div class="dimension-scores"><strong>6</strong> (cal) / <strong>4</strong> (blind)</div>
+      </div>
+      <div class="dimension-row">
+        <div class="dimension-name">Separability</div>
+        <div class="dimension-scores"><strong>6</strong> (cal) / <strong>4</strong> (blind)</div>
+      </div>
+    </div>
+
+    <h2 id="honesty-check">What v1.5 Got Right (Verified Clean)</h2>
+    <div class="honesty-check">
+      <div class="honesty-check-header">The Honesty Check — Independently Re-Derived or Executed</div>
+      <p>These items were independently re-derived or executed with running code, not taken on trust:</p>
+      <ul>
+        <li><strong>Critical path (10 chunks) and chunk count (28): correct.</strong> Three independent from-scratch re-derivations agree (D-blind, A-cal, D-cal). The arithmetic this document got wrong for four rounds is now right, and no dependency cycle exists.</li>
+        <li><strong>Content-addressed seeding (design decision C3) genuinely works.</strong> Confirmed by three executed checks (F1-cal, F1-blind, F2-blind): adding an alphabetically-early model leaves every pre-existing seed byte-identical; blake2b is cross-process stable; the rejected positional-spawn reproduces the Round-5 break.</li>
+        <li><strong>The TC-MU9-01 registry teardown (fix C7) works.</strong> F2-cal and F2-blind both reproduced both Round-5 leaks as regressions and confirmed the v1.5 order (force-register, snapshot, graft, restore path/registry/pop sys.modules) closes them.</li>
+        <li><strong>The module+name import-join (TC-NF6-07, TC-MU9-01(c)) works.</strong> F2-cal verified 16 ast.parse cases; every forbidden shape caught, every allowed shape clean.</li>
+        <li><strong>Judge blindness (JU-1) holds under v1.5.</strong> WorldContext (incl. scale) and TrainingData never reach the judge (F2 both, B both).</li>
+        <li><strong>~20 interface boundaries field-exact</strong> (B-blind), including the WorldContext/scale, TrainingData, region-label, and envelope fixes; single-thread honesty, serializer float repr, pkgutil ordering all sound (F1 both); auto-discovery threat model, prereg-forgery, and NF-4 gc-pruned disclosures all accurate (E-blind).</li>
+      </ul>
+    </div>
+
+    <h2 id="critical-findings">Critical Findings</h2>
+
+    <div class="issue critical">
+      <div class="issue-title">C1 — The runtime purity harness (the v1.5 load-bearing control) does not work as specified. CONFIRMED BY FOUR PANELS, THREE WITH RUNNING CODE.</div>
+      <p class="issue-detail"><em>E-cal (executed), E-blind (executed, quantified: 8 numpy submodules already hold a pre-bound os reference before any test runs), D-cal (by inspection), F2-blind (executed).</em></p>
+      <p class="issue-detail">v1.5 demoted the static AST gate to lint and made TC-JU12-01 the load-bearing purity control, specified as "replace the os module in sys.modules with a raising guard." But swapping the sys.modules entry only changes what a <em>future</em> import os resolves to — numpy bound its own os reference at numpy's import time. The old Round-5 escape survives verbatim:</p>
+      <pre><code>np.get_include.__globals__['os']</code></pre>
+      <p class="issue-detail">This still returns the <strong>real, unguarded</strong> module. Consequently TC-JU12-02 (the phantom-gate) would fail its own assertion — the fix doesn't satisfy its own new test. Right now, with the static gate correctly disclaimed as lint, <strong>JU-12 purity has no working enforcement control.</strong> The fix is known and demonstrated by three panels: <strong>mutate the shared object's attributes in place</strong> instead of reassigning sys.modules:</p>
+      <pre><code>setattr(os, 'system', raising_proxy)
+setattr(os, 'environ', raising_proxy)</code></pre>
+      <p class="issue-detail">The spec conflates the two techniques as if interchangeable ("patched in sys.modules / the real builtins"); only mutate-in-place works. E-blind's defense-in-depth note: the static lint and the runtime harness fail for the <em>same</em> reason (pre-existing module state), so the "two layers" are one point of failure for this class. <strong>Category: REGRESSION (v1.5's own fix).</strong></p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C2 — The NF-4 confidentiality scan command searches nothing.</div>
+      <p class="issue-detail"><em>E-cal, executed.</em></p>
+      <p class="issue-detail">The committed command:</p>
+      <pre><code>git cat-file --batch-all-objects --batch-check</code></pre>
+      <p class="issue-detail">This emits only <code>&lt;sha&gt; &lt;type&gt; &lt;size&gt;</code> per object — <strong>never content</strong>, for blobs or commits. So TC-NF4-01 passes green regardless of what forbidden terms sit in history, on the requirement CLAUDE.md calls "absolute." The fix is simple:</p>
+      <pre><code>git cat-file --batch-all-objects --batch</code></pre>
+      <p class="issue-detail">E-cal demonstrated the working form. <strong>Category: REGRESSION (v1.5's own NF-4 edit).</strong></p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C3 — component_key's hash is an example ("e.g."), not a pinned algorithm.</div>
+      <p class="issue-detail"><em>F1-cal + F1-blind (both executed diverging readings) + D-cal.</em></p>
+      <p class="issue-detail">The spec says "a fixed, documented hash, <strong>e.g.</strong> blake2b(":".join(parts), digest_size=8)"; F1-blind executed four textually-conforming readings that produce different Generator streams from the first draw. Two spec-conforming builds are byte-different — impossible to independently verify a published seed from the document, in a project whose mission <em>is</em> independent verification. Fix: replace "e.g." with the mandated construction; pin digest→int mapping and how index folds in. <strong>Category: NEW (the v1.5 seeding fix pinned the outer SeedSequence ordering but left the inner hash illustrative).</strong></p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C4 — The seed key has no "purpose" discriminator; training/eval/benchmark start-sets can collide.</div>
+      <p class="issue-detail"><em>F1-blind.</em></p>
+      <p class="issue-detail">The content-addressed key enumerates only {model, world, region, trial-index}. Three independent random draws — MU-7 training-trajectory starts, JU-8's 200 evaluation starts, WD-4's 64 benchmark starts — are all "per (world, region)"; for the training region they key to the <em>same</em> seed. Naive-but-conforming build makes eval starts coincide with training starts, defeating MU-7 disjointness and JU-8's independence-of-trials (the entire N=200 binomial-band derivation rests on it). Fix: add a purpose/consumer field to the key. <strong>Category: NEW.</strong></p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C5 — The Verdict schema's worked example self-contradicts the one-Verdict-per-(model,world) contract.</div>
+      <p class="issue-detail"><em>C-blind.</em></p>
+      <p class="issue-detail">The example fixes "world": "lv" but its trust_horizons.per_task lists a dp-control (double-pendulum) entry. Five rounds rewrote this exact block and never caught it. A builder can't tell whether a Verdict carries cross-world data or the example is wrong. <strong>Category: NEW (latent since v1.1).</strong></p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C6 — The v1.5 h_task pin reworded skill.per_task_region's step, contradicting "one-step" (h=1) used by MU-5's matching margin and three test cases.</div>
+      <p class="issue-detail"><em>B-cal.</em></p>
+      <p class="issue-detail">The same block×axis pass that correctly pinned calibration/sharpness to h_task glossed the skill row as "the step is fixed by the task" — which reads as h_task, not h=1. But MU-5's matching margin (TC-MU5-01), TC-MU2-02, and TC-JU2-01 all need a literal one-step (h=1) skill score, and the project's headline "ordinary error ranks them equal, the judge does not" claim rests on that margin. Fixing two blocks while breaking a third adjacent one, same table, same pass. <strong>Category: REGRESSION (v1.5's own fix).</strong></p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C7 — The fixtures' "bit-identical direct core via the same content-addressed seed" is unbuildable through the sanctioned channel.</div>
+      <p class="issue-detail"><em>C-cal.</em></p>
+      <p class="issue-detail">The seed derivation lives in wmj/harness/seeds.py; the fixture factory receives only its own (ctx, rng, training) and has no authorized, gated channel to obtain "direct"'s seed (models→harness is neither sanctioned nor covered by TC-NF6-07). The only builds are an ungated models→harness import or duplicating the hash in fixtures.py — both defeating the fix's own intent. TC-MU4-02's weight-identity claim is unbuildable as worded. <strong>Category: NEW (a second unbuildable-model problem behind the C6 fix v1.5 claimed closed).</strong></p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C8 — TC-MU9-03 (the CLI-path test v1.5 added) is unbuildable-as-worded or a lookalike.</div>
+      <p class="issue-detail"><em>F2-blind + F2-cal.</em></p>
+      <p class="issue-detail">The stub graft is an in-process wmj.models.__path__ monkeypatch; a genuine python -m wmj run subprocess starts a fresh interpreter that can't see it, so the test fails whether the CLI is wired right or not; the in-process reading is a weaker lookalike. It also collides with the full-pipeline cost, the ModelContractError fail-loud path, and (per C9) check_prereg. No roster-dump/--dry-run seam is specified. <strong>Category: NEW (v1.5's own addition — the test meant to close Round-5's "CLI holds its own list" gap).</strong></p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C9 — ADR-M5's "adding a baseline remains one-file" is contradicted by its own classification rule.</div>
+      <p class="issue-detail"><em>F2-cal.</em></p>
+      <p class="issue-detail">v1.5's honest-scope fix classifies a model as unrigged iff it is neither a pinned-baseline <em>name</em> nor is_fixture. But there's no structural "baseline" marker — only a hardcoded name pair. A genuine new baseline would be misclassified as unrigged, routed through check_prereg, and blocked, forcing a second-file edit the same paragraph says is unnecessary. <strong>Category: NEW (v1.5's own fix).</strong></p>
+    </div>
+
+    <div class="issue critical">
+      <div class="issue-title">C10 — Three test cases wired to chunks that structurally cannot satisfy them.</div>
+      <p class="issue-detail"><em>D-blind (satisfiability check, deeper than the A panels' presence check).</em></p>
+      <p class="issue-detail">TC-WD3-01 → P1-C03 (its ground-truth generators, benchmarks/training-data, don't exist until P2/P3); TC-NF3-01 is a true orphan (only "groundwork," never a real [Test:] tag, though P6-C02 builds its gate); TC-MU2-01 → P3-C02 (no judge verdict logic there). <strong>Category: BC-3 recurrence (my v1.5 reconciliation left these; note I rewrote TC-WD3-01's <em>content</em> but left its <em>placement</em>).</strong></p>
+    </div>
+
+    <h2 id="important-findings">Important Findings</h2>
+    <div class="important-list">
+      <div class="important-item">
+        <div class="important-item-title">I1 — numpy's C-level clock/mmap unguarded even after the correct mutate-in-place fix</div>
+        <div class="important-item-text"><em>E-cal, executed.</em> np.datetime64('now') reads the wall clock; the guard list omits it.</div>
+      </div>
+
+      <div class="important-item">
+        <div class="important-item-title">I2 — Ensemble K=5 member seed-splitting unspecified</div>
+        <div class="important-item-text"><em>C-cal, F1-cal, F1-blind.</em> One Generator in, no rule for the 5 members; two builds diverge in Model B's weights.</div>
+      </div>
+
+      <div class="important-item">
+        <div class="important-item-title">I3 — The harness orchestration loop is still unspecified</div>
+        <div class="important-item-text"><em>C-cal, C-blind.</em> Who iterates worlds×models×regions×tasks×trials, owns trial reuse — Round-5 gap persists.</div>
+      </div>
+
+      <div class="important-item">
+        <div class="important-item-title">I4 — JudgeInput's region-combining undesigned</div>
+        <div class="important-item-text"><em>C-blind.</em> Nothing states n_trials=400 (both regions concatenated) or how the judge groups a flat array by region; one-call-vs-two-call ambiguous.</div>
+      </div>
+
+      <div class="important-item">
+        <div class="important-item-title">I5 — limitations vs "eight mandatory groups" miscount</div>
+        <div class="important-item-text"><em>B-blind, B-cal.</em> judge.md's own enumeration of eight excludes limitations, but reporting.md calls it one of the eight; either the refuse-on-missing gate is missing limitations (a JU-10 honesty gap) or reporting miscounted.</div>
+      </div>
+
+      <div class="important-item">
+        <div class="important-item-title">I6 — interval_levels has two producers</div>
+        <div class="important-item-text"><em>B-blind.</em> §4 says it arrives in JudgeInput.thresholds; ADR-J2 says it's hardcoded in _normal.py.</div>
+      </div>
+
+      <div class="important-item">
+        <div class="important-item-title">I7 — model_ref shifts on roster change, undisclosed</div>
+        <div class="important-item-text"><em>F1-cal.</em> Same bug class as C3, one layer up: model_ref is a sorted-position index, so an early-sorting new model silently repoints every archived verdict's model_ref.</div>
+      </div>
+
+      <div class="important-item">
+        <div class="important-item-title">I8 — meta.platform source API unnamed</div>
+        <div class="important-item-text"><em>F1-blind.</em> The natural platform.platform() embeds kernel/glibc version, breaking NF-1's own "same platform" byte-identity.</div>
+      </div>
+
+      <div class="important-item">
+        <div class="important-item-title">I9 — Training count N has no value/formula/parse-format</div>
+        <div class="important-item-text"><em>D-cal.</em> Unlike eval N=200; "pinned in prereg/recipe.md" with no schema.</div>
+      </div>
+
+      <div class="important-item">
+        <div class="important-item-title">I10 — check_prereg is roster-agnostic</div>
+        <div class="important-item-text"><em>F2-blind.</em> A new unrigged model passes "pre-registered" without any prereg text about it actually existing.</div>
+      </div>
+
+      <div class="important-item">
+        <div class="important-item-title">I11 — "nine chunks later" in P2-C05's note is a miscount</div>
+        <div class="important-item-text"><em>D-cal.</em> Actual phase-list gap is 12; a fresh uncounted-number instance v1.5 introduced.</div>
+      </div>
+
+      <div class="important-item">
+        <div class="important-item-title">I12 — Same-session self-inconsistencies</div>
+        <div class="important-item-text"><em>A-cal, A-blind.</em> Cross-cutting ADR-002's [Test:] tag omits TC-NF1-03 which its own prose names; P1-C01's thread-guard test is untracked. MU-9's Must text wasn't updated for the disclosed carve-out; MU-1 cites JU-11 where the mechanism is MU-6; HANDOVER.md's "What exists" table is stale at v1.3/v1.0.</div>
+      </div>
+    </div>
+
+    <h2 id="dual-review-metadata">Dual-Review Metadata</h2>
+    <table>
+      <caption>Table 1 — Finding sources and verification status</caption>
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th>Count</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Confirmed by calibrated <strong>and</strong> blind independently</td>
+          <td>5 clusters</td>
+          <td>Purity harness broken (E-cal + E-blind + F2-blind executed, + D-cal inspection — 4-way); component_key not pinned (F1-cal + F1-blind, executed); TC-MU9-03 unbuildable (F2-cal + F2-blind); limitations miscount (B-cal + B-blind); critical path/count correct (D-blind + A-cal + D-cal, 3-way clean)</td>
+        </tr>
+        <tr>
+          <td>Executed-clean confirmations</td>
+          <td>3</td>
+          <td>Content-addressed seeding no-shift (3 panels); MU-9 teardown (2 panels, both leaks reproduced); import-join (2 panels)</td>
+        </tr>
+        <tr>
+          <td>New, calibrated-only</td>
+          <td>~5</td>
+          <td>fixture-seed channel (C7), skill-step regression (C6), baseline-classification (C9), NF-4 --batch-check (C2), "nine chunks" miscount</td>
+        </tr>
+        <tr>
+          <td>New, blind-only</td>
+          <td>~5</td>
+          <td>Verdict dp-control example (C5), seed purpose-key collision (C4), platform-string source, interval_levels producers, check_prereg completeness</td>
+        </tr>
+        <tr>
+          <td>Regressions introduced by v1.5's own fix-all</td>
+          <td>5</td>
+          <td>C1 (purity harness), C2 (NF-4 command), C6 (skill step), C8 (TC-MU9-03), C9 (baseline classification)</td>
+        </tr>
+        <tr>
+          <td>Noise / disproven</td>
+          <td>0</td>
+          <td>—</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="meta-finding">The Meta-Finding, for Triage</h2>
+    <div class="meta-finding">
+      <div class="meta-finding-header">The Design Converged; Failures Are in Mechanism Precision</div>
+      <p>Six rounds, six "Do not build" — but the trajectory finally turned.</p>
+      <ol>
+        <li><strong>The design converged.</strong> The schema, the interface contracts, the coverage, the critical-path arithmetic, and three of the v1.5 design decisions (content-addressed seeding, the registry teardown, the import-join) are all verified clean or working by execution. Panels that scored 2–3 for five rounds scored 6–9 here. That is real.</li>
+        <li><strong>The failures are now in mechanism-specification precision, not architecture — two clusters, both with known small fixes:</strong>
+          <ul style="margin-top: 0.6rem;">
+            <li><strong>The purity/scan mechanisms</strong> (C1, C2): mutate-the-shared-object-in-place instead of swapping sys.modules; guard numpy's clock; --batch not --batch-check. These are ~5-line corrections to text, demonstrated by the panels.</li>
+            <li><strong>The determinism/precision layer</strong> (C3, C4, ensemble K=5, model_ref, platform): pin component_key's hash, add a purpose key, spec the ensemble split, disclose the model_ref shift, name the platform string.</li>
+            <li>Plus a handful of prose/wiring fixes (C5–C10) — several of which v1.5 <em>introduced</em>.</li>
+          </ul>
+        </li>
+        <li><strong>The v1.5 "fix all" pass planted five of this round's ten Criticals</strong> (C1, C2, C6, C8, C9) — done at speed and self-verified, exactly the BC-2 failure mode. But this round also proves the underlying <em>decisions</em> were sound; the defects are in how the mechanisms were written down, caught precisely because this round pressure-tested them with running code instead of prose.</li>
+      </ol>
+      <p style="margin-top: 1.2rem;"><strong>If the two mechanism clusters are fixed — this time with independent execution-based verification rather than self-verification — Round 7 could plausibly clear.</strong> This is the first round where "Do not build" comes with a short, concrete, mostly-mechanical path to "Build with caveats," not another structural rethink.</p>
+    </div>
+
+    <p class="gvm-attribution">Developed using the Grounded Vibe Methodology</p>
+  </main>
+
+  <script>
+    (function () {
+      const toc = document.getElementById('toc');
+      const headings = document.querySelectorAll('h2[id], h3[id]');
+      const links = [];
+
+      headings.forEach(function (h) {
+        const a = document.createElement('a');
+        a.href = '#' + h.id;
+        a.textContent = h.textContent;
+        if (h.tagName === 'H3') a.classList.add('toc-h3');
+        toc.appendChild(a);
+        links.push({ el: a, target: h });
+      });
+
+      function onScroll() {
+        let current = links[0];
+        for (let i = 0; i < links.length; i++) {
+          if (links[i].target.getBoundingClientRect().top <= 80) current = links[i];
+        }
+        links.forEach(function (l) { l.el.classList.remove('active'); });
+        if (current) {
+          current.el.classList.add('active');
+          const tocEl = document.getElementById('toc');
+          const elTop = current.el.offsetTop - tocEl.offsetTop;
+          const elBot = elTop + current.el.offsetHeight;
+          if (elTop < tocEl.scrollTop || elBot > tocEl.scrollTop + tocEl.clientHeight) {
+            tocEl.scrollTop = elTop - tocEl.clientHeight / 2;
+          }
+        }
+      }
+
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    })();
+  </script>
+</body>
+</html>
