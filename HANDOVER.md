@@ -155,14 +155,20 @@ scored). **But three things did not clear:**
 
 Seventh "Do not build," but the first where the gap is one mechanical hour plus one honest design
 fork. See `design-review/design-review-007.html` and the "Round 7 result" entry in
-`reviews/calibration.md`. **Awaiting user triage of the findings before any further fix pass.**
+`reviews/calibration.md`.
+
+**Update — Round 7 fixes applied (31 Aug, specs → v1.7, test-cases → v1.4, commit `db4a15e`).** The user chose "fix all with execution-verification" and delegated the C1 design decision to Claude. Every enforcement mechanism was run as a python3 script before the spec was written.
+- **The C1/BC-4 decision (reversible in the spec text):** JU-12's completeness claim is **dropped**. The purity harness is now a best-effort tripwire over the known ambient surface; the **ten-run byte-identity gate TC-NF1-01 is the load-bearing backstop**; the `ctypes`/`getrandom` residual is disclosed (TC-JU12-04). Out-of-process seccomp was rejected (Linux-only, would break NF-1 cross-machine byte-identity). Accidental routes hardened: `os.environ` in-place `_Environ` mutation, all 63 `numpy.random` module names.
+- **Mechanical cluster (all executed):** judge §4 body rewritten to mutate-in-place; TC-JU12-03/TC-MU7-02 wired; models→harness gate (TC-NF6-08); colon-rejection (TC-NF1-07); TC-MU9-03 pinned to `cli.main([...])`; prereg content-hash (TC-MU6-04); is_baseline scope + model_ref disclosure; orchestration loop pinned as cross-cutting ADR-004 (TC-NF1-05/06); SVG hashsalt+metadata (TC-RP7-02); run-manifest source; the two missing v1.6 changelog rows. Eight new cases (97 IDs, 96 live); all banners v1.7.
+
+**Next: a Round 8 (dual/blind) is owed by BC-2** — self-verification, even execution-based, is not an independent re-run, and no external panel has yet seen the reframed purity claim or ADR-004. The user owns whether/when to run it. If Round 8 clears to "Build with caveats" or "Build from this," `/gvm-build` can start at P1-C01.
 
 **Known debt:** the `specs/*.html` twins carry a deterministic staleness banner (they
 regenerate with the NF5-02 parity hash at build time, P6-C02). The older "What exists"
 table below is itself stale (says v1.3/v1.0) — Round 6 flagged it; refresh when next
 editing this file.
 
-Last updated 2026-08-31 (design-review-007 — Round 7 complete; awaiting user triage).
+Last updated 2026-08-31 (Round 7 fixes applied, specs v1.7 / test-cases v1.4, commit db4a15e; Round 8 owed by BC-2).
 
 ---
 
