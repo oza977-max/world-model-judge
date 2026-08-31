@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Design Review 007 — World Model Judge</title>
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+
+    body {
+      font-family: "ET Book", Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif;
+      color: #111;
+      background: #fffff8;
+      line-height: 1.6;
+      padding: 2rem 1rem 6rem;
+      max-width: 1480px;
+      margin: 0 auto;
+    }
+
+    /* ── Typography ── */
+    h1 {
+      font-size: 2.4rem;
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.4rem;
+      color: #111;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 400;
+      font-style: italic;
+      margin-top: 3rem;
+      margin-bottom: 1rem;
+      color: #111;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 0.3rem;
+    }
+
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-top: 2rem;
+      margin-bottom: 0.6rem;
+      color: #333;
+    }
+
+    p, li {
+      font-size: 1rem;
+      line-height: 1.7;
+      margin-bottom: 0.8rem;
+      max-width: 1000px;
+    }
+
+    ul, ol { padding-left: 1.4rem; margin-bottom: 1.2rem; }
+    li { margin-bottom: 0.4rem; }
+
+    .subtitle {
+      font-size: 1.1rem;
+      font-style: italic;
+      color: #555;
+      margin-bottom: 2.5rem;
+      max-width: 1000px;
+    }
+
+    .date {
+      font-size: 0.9rem;
+      color: #888;
+      margin-bottom: 0.2rem;
+    }
+
+    /* ── Floating TOC (Left Side) ── */
+    nav.toc {
+      position: fixed;
+      top: 2rem;
+      left: 2rem;
+      width: 220px;
+      max-height: calc(100vh - 4rem);
+      overflow-y: auto;
+      background: #fffff8;
+      border-right: 2px solid #ddd;
+      padding: 1rem 1rem 1rem 0;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      z-index: 100;
+    }
+
+    nav.toc .toc-title {
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #999;
+      margin-bottom: 0.6rem;
+    }
+
+    nav.toc a {
+      color: #555;
+      text-decoration: none;
+      display: block;
+      padding: 0.15rem 0;
+      transition: color 0.15s;
+    }
+
+    nav.toc a:hover { color: #111; }
+    nav.toc a.active { color: #111; font-weight: 600; }
+    nav.toc .toc-h3 { padding-left: 0.8rem; font-size: 0.78rem; color: #888; }
+    nav.toc .toc-h3:hover { color: #555; }
+
+    /* Offset main content for left TOC */
+    main {
+      margin-left: 260px;
+      max-width: 1000px;
+    }
+
+    /* ── Sidenotes (Right Margin) ── */
+    .sidenote {
+      float: right;
+      clear: right;
+      width: 220px;
+      margin-right: -260px;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      color: #666;
+      padding-left: 1rem;
+      border-left: 2px solid #e0e0e0;
+    }
+
+    /* ── Tables (Few's principles) ── */
+    table {
+      border-collapse: collapse;
+      margin: 1.5rem 0 2rem;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      width: auto;
+      min-width: 480px;
+      overflow-x: auto;
+    }
+
+    thead th {
+      text-align: left;
+      font-weight: 600;
+      padding: 0.5rem 1rem 0.5rem 0;
+      border-bottom: 2px solid #333;
+      color: #111;
+    }
+
+    tbody td {
+      padding: 0.45rem 1rem 0.45rem 0;
+      border-bottom: 1px solid #e8e8e8;
+      vertical-align: top;
+    }
+
+    tbody tr:last-child td { border-bottom: 2px solid #333; }
+    tbody tr:nth-child(even) { background: #f9f9f4; }
+
+    caption {
+      font-style: italic;
+      font-size: 0.88rem;
+      color: #666;
+      text-align: left;
+      margin-bottom: 0.4rem;
+    }
+
+    /* ── Inline Code ── */
+    code {
+      font-family: "Menlo", "Consolas", "Monaco", monospace;
+      font-size: 0.88rem;
+      background: #f0f0e8;
+      padding: 0.1rem 0.35rem;
+      border-radius: 2px;
+    }
+
+    pre {
+      font-family: "Menlo", "Consolas", "Monaco", monospace;
+      font-size: 0.85rem;
+      background: #f0f0e8;
+      padding: 1rem;
+      overflow-x: auto;
+      border-radius: 2px;
+      margin: 1rem 0;
+      max-width: 1000px;
+      line-height: 1.5;
+    }
+
+    /* ── Verdict Box (review components) ── */
+    .verdict {
+      border: 2px solid #333;
+      padding: 1.2rem 1.5rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+    }
+
+    .verdict-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+      margin-bottom: 0.3rem;
+    }
+
+    .verdict-text {
+      font-size: 1.3rem;
+      font-weight: 400;
+      color: #111;
+      margin-bottom: 0.4rem;
+    }
+
+    .verdict-basis {
+      font-size: 0.88rem;
+      color: #555;
+      max-width: 1000px;
+    }
+
+    .verdict.ready { border-color: #27ae60; background: #f0faf4; }
+    .verdict.ready .verdict-text { color: #27ae60; }
+
+    .verdict.caveats { border-color: #e67e22; background: #fef8f0; }
+    .verdict.caveats .verdict-text { color: #e67e22; }
+
+    .verdict.not-ready { border-color: #c0392b; background: #fdf0ef; }
+    .verdict.not-ready .verdict-text { color: #c0392b; }
+
+    /* ── Score Card ── */
+    .score-card {
+      background: #f7f7f0;
+      border: 2px solid #333;
+      padding: 1.5rem 2rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+    }
+
+    .score-card-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+      margin-bottom: 1.2rem;
+    }
+
+    .dimension-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin: 0.8rem 0;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid #e8e8e8;
+    }
+
+    .dimension-row:last-child {
+      border-bottom: none;
+    }
+
+    .dimension-name {
+      font-weight: 600;
+      color: #333;
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .dimension-scores {
+      font-size: 0.92rem;
+      color: #555;
+      min-width: 160px;
+      text-align: right;
+    }
+
+    .dimension-scores strong {
+      font-weight: 600;
+    }
+
+    /* ── Honesty Check Section ── */
+    .honesty-check {
+      background: #f0faf4;
+      border: 2px solid #27ae60;
+      border-left: 6px solid #27ae60;
+      padding: 1.5rem 1.5rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+    }
+
+    .honesty-check-header {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #27ae60;
+      margin-bottom: 0.6rem;
+    }
+
+    .honesty-check h3 {
+      margin-top: 0;
+      color: #27ae60;
+    }
+
+    .honesty-check ul {
+      margin-left: 1rem;
+    }
+
+    .honesty-check li {
+      margin-bottom: 0.6rem;
+    }
+
+    /* ── Review Components (issues) ── */
+    .issue {
+      border-left: 3px solid;
+      padding: 0.8rem 1rem;
+      margin: 0.8rem 0;
+      max-width: 1000px;
+    }
+
+    .issue.critical {
+      border-left-color: #c0392b;
+      background: #fdf0ef;
+    }
+
+    .issue.important {
+      border-left-color: #e67e22;
+      background: #fef8f0;
+    }
+
+    .issue-title {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 0.3rem;
+    }
+
+    .issue-detail {
+      font-size: 0.92rem;
+      color: #555;
+      margin-bottom: 0.3rem;
+    }
+
+    .issue-location {
+      font-size: 0.78rem;
+      color: #999;
+      font-style: italic;
+    }
+
+    /* ── Important Findings List ── */
+    .important-list {
+      max-width: 1000px;
+    }
+
+    .important-item {
+      margin: 0.8rem 0;
+      padding: 0.5rem 0 0.5rem 1rem;
+      border-left: 3px solid #e67e22;
+      background: #fef8f0;
+    }
+
+    .important-item-title {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 0.2rem;
+    }
+
+    .important-item-text {
+      font-size: 0.92rem;
+      color: #555;
+    }
+
+    /* ── Meta-Finding Callout ── */
+    .meta-finding {
+      border: 2px solid #c0392b;
+      border-left: 6px solid #c0392b;
+      padding: 1.5rem 1.5rem;
+      margin: 2.5rem 0;
+      max-width: 1000px;
+      background: #fff5f3;
+    }
+
+    .meta-finding-header {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #c0392b;
+      margin-bottom: 0.6rem;
+    }
+
+    .meta-finding h3 {
+      margin-top: 0;
+      color: #c0392b;
+    }
+
+    .meta-finding ol {
+      margin: 1.2rem 0;
+    }
+
+    .meta-finding li {
+      margin-bottom: 0.8rem;
+    }
+
+    /* ── GVM Attribution ── */
+    .gvm-attribution {
+      font-size: 0.75rem;
+      color: #999;
+      font-style: italic;
+      text-align: center;
+      margin-top: 3rem;
+      margin-bottom: 0;
+      max-width: none;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 1200px) {
+      nav.toc {
+        position: static;
+        width: 100%;
+        max-height: none;
+        border-right: none;
+        border-bottom: 1px solid #ddd;
+        padding: 1rem 0;
+        margin-bottom: 2rem;
+      }
+      main { margin-left: 0; }
+      .sidenote {
+        float: none;
+        width: 100%;
+        margin: 0.8rem 0;
+        padding: 0.6rem 0 0.6rem 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="toc" id="toc">
+    <div class="toc-title">Contents</div>
+  </nav>
+
+  <main>
+    <p class="date">Round 7 (Dual/Blind) · Post-v1.6 execution-verified fix-all review · 7 panels × 2 = 14 independent reviewers · 31 August 2026</p>
+    <h1>World Model Judge — Design Review 007</h1>
+    <p class="subtitle">Independent adversarial re-verification of Round 6's execution-verified fixes. The execution discipline held under blind re-checking — three of four determinism repairs and the specific purity escape are confirmed genuinely fixed by running code. But the load-bearing purity control is defeated again one layer down, and several v1.6 change notes claimed more than the edits delivered.</p>
+
+    <h2 id="verdict">Verdict</h2>
+    <div class="verdict not-ready">
+      <div class="verdict-label">Verdict</div>
+      <div class="verdict-text">Do not build</div>
+      <p class="verdict-basis">Seventh consecutive "Do not build." Security is the floor at <strong>3/10 calibrated, 3/10 blind</strong> — the two panels reached the same conclusion from independent directions, and it is not a mechanism-precision miss this time: the runtime purity harness, the control this project elevated to "load-bearing" and "complete where the static lint cannot be," is defeated by six independently <em>executed</em> accidental-impurity routes, one of which (<code>np.random.normal()</code>) is the threat model's own textbook example, and two of which (<code>ctypes</code> already resident via numpy; unseeded <code>Generator(PCG64())</code> reaching <code>getrandom()</code>) are architecturally uninterceptable by <em>any</em> variant of the in-process object-mutation mechanism. This is BC-4 crystallising from a candidate into a confirmed finding: no finite enumeration of capability objects closes Python's reflection/syscall graph, exactly as no finite identifier list closed it for the static gate four rounds ago. Separately, the review confirmed the BC-2 pattern one more time — four v1.6 change notes (judge §4 purity body, TC-JU12-03/TC-MU7-02 wiring, two changelog rows, the model_ref disclosure) claimed fixes the edits never delivered. The good news is real and independently verified: the interface surface converged (B: 9/8, the highest any dimension has scored), and the core seeding, fixture-rebuild, and NF-4 mechanisms are executed-sound. The gap splits cleanly into a one-hour mechanical cluster and a single genuine design fork.</p>
+    </div>
+
+    <h2 id="score-card">Dimension Scores</h2>
+    <div class="score-card">
+      <div class="score-card-title">Calibrated vs. Blind Independent Review</div>
+      <div class="dimension-row">
+        <div class="dimension-name">Requirements Coverage</div>
+        <div class="dimension-scores"><strong>4</strong> (cal) / <strong>7</strong> (blind)</div>
+      </div>
+      <div class="dimension-row">
+        <div class="dimension-name">Interface Contracts</div>
+        <div class="dimension-scores"><strong>9</strong> (cal) / <strong>8</strong> (blind)</div>
+      </div>
+      <div class="dimension-row">
+        <div class="dimension-name">Structural Soundness</div>
+        <div class="dimension-scores"><strong>4</strong> (cal) / <strong>6</strong> (blind)</div>
+      </div>
+      <div class="dimension-row">
+        <div class="dimension-name">Implementability</div>
+        <div class="dimension-scores"><strong>5</strong> (cal) / <strong>6</strong> (blind)</div>
+      </div>
+      <div class="dimension-row">
+        <div class="dimension-name">Security</div>
+        <div class="dimension-scores"><strong>3</strong> (cal) / <strong>3</strong> (blind)</div>
+      </div>
+      <div class="dimension-row">
+        <div class="dimension-name">Reproducibility</div>
+        <div class="dimension-scores"><strong>6</strong> (cal) / <strong>7</strong> (blind)</div>
+      </div>
+      <div class="dimension-row">
+        <div class="dimension-name">Separability</div>
+        <div class="dimension-scores"><strong>5</strong> (cal) / <strong>7</strong> (blind)</div>
+      </div>
+    </div>
+
+    <h2 id="pattern">The pattern this round</h2>
+    <p>Round 7 separates into three distinct piles, and keeping them apart is the whole point of the verdict:</p>
+    <ol>
+      <li><strong>Converged and independently verified.</strong> Interface contracts (canonical keying, single-producer rules, content-addressed seeding, region-label ownership) checked field-exact by both B panels. Chunk count (28), critical path (10), MVP-1 tracer-bullet sequencing all re-derived from scratch and correct. The seeding mechanism (<code>component_key</code> two-implementation convergence, <code>purpose</code>-key stream separation, ensemble K=5, fixture rebuild of <code>direct</code> bit-for-bit) executed sound. The NF-4 <code>--batch</code> scan executed sound. The <em>specific</em> Round-6 purity escape (the <code>sys.modules</code> swap) is genuinely closed by mutate-in-place — the guard now fires. This is the execution-verification discipline paying off.</li>
+      <li><strong>v1.6 change notes overstated the edits (BC-2 / BC-3, again).</strong> Mechanical, fixable in an hour, and exactly the failure mode the Build Checks exist to name.</li>
+      <li><strong>One genuine design fork (BC-4 confirmed) plus two standing spec gaps.</strong> Not patchable by another enumeration pass. The user's decision.</li>
+    </ol>
+
+    <h2 id="critical">Critical Findings</h2>
+
+    <h3>C1 — The load-bearing purity control is defeated one layer down; BC-4 is now confirmed, not a candidate</h3>
+    <p class="issue-detail"><em>Panels: E-calibrated (3/10), E-blind (3/10) — convergent, both with executed exploits.</em></p>
+    <p class="issue-detail"><em>Files: <code>specs/cross-cutting.md</code> ADR-002 rule 3; <code>specs/judge.md</code> §4; <code>test-cases/test-cases.md</code> TC-JU12-01.</em></p>
+    <p>The v1.6 mutate-in-place fix closes the <em>specific</em> escape Round 6 found (confirmed by execution — the guard fires on <code>np.get_include.__globals__['os'].getcwd()</code> and on <code>np.datetime64('now')</code>). But both panels then exhibited <em>new</em> accidental-impurity routes that escape the exact pinned harness, with running code:</p>
+    <ul>
+      <li><strong><code>os.environ</code> is rebound, not mutated in place</strong> (E-cal F1). The pinned text says <code>os.environ → a raising proxy</code> — a reassignment. Any name bound to the real <code>_Environ</code> before the guard installs (<code>ENV = os.environ</code> at module load — an everyday idiom) sails past. This is the <em>identical</em> rebind-vs-mutate bug class v1.6 was commissioned to fix, one level down. Executed: <code>_CAPTURED_ENVIRON.get('HOME') → '/root'</code>, ESCAPE. The correct fix (mutate the real <code>_Environ</code> instance's bound methods) was proven to close it.</li>
+      <li><strong><code>numpy.random</code> legacy globals are the threat model's own example, and escape</strong> (E-cal F3, E-blind). "Legacy globals" is a category label, not the <code>mtrand._rand</code> singleton. <code>np.random.normal()</code> and <code>np.random.uniform()</code> — ~40 free functions routing through the hidden singleton — run uncaught. The threat model names "a numpy.random call that varies between runs" as precisely what it protects against.</li>
+      <li><strong>Unenumerated <code>os</code> attribute surface via reflection</strong> (E-cal F2). <code>os.getpid()</code>, <code>os.urandom()</code>, <code>os.listdir()</code>, <code>os.sys.modules['random'].random()</code> all escape — reachable through the same <code>__globals__</code> route, one hop past the very object the guard patches. "Trips however the code reached it" is true only for the four named attributes.</li>
+      <li><strong><code>ctypes</code> is already resident via numpy — no import for any check to see</strong> (E-blind, CRITICAL). <code>'ctypes' in sys.modules</code> is <code>True</code> the moment numpy imports. A <code>ctypes.CDLL(None)</code> call performed a real wall-clock read and a real <code>/etc/hostname</code> read, bypassing every guarded Python object.</li>
+      <li><strong>Unseeded <code>Generator(PCG64())</code> reaches <code>getrandom()</code> with no Python object in the path</strong> (E-cal F4). Traced with <code>strace</code>: <code>getrandom(...) = 16</code>. <code>Generator.__init__</code> is a C immutable type and cannot be monkeypatched at all (<code>TypeError</code>). The "mutate the shared object in place" strategy is <strong>architecturally inapplicable</strong> here — and ADR-002 rule 2 names this exact constructor as the <em>sanctioned</em> seeding pattern, so an author who forgets the <code>seed</code> argument produces silent nondeterminism this control cannot detect by any variant of its own mechanism.</li>
+    </ul>
+    <p><strong>Why this is the fork and not a patch:</strong> the universe of ambient-capability objects reachable from a CPython process is exactly as unbounded as the universe of import statements was when the static gate was demoted. Enumerating more targets chases the disease. The honest options are (a) <strong>narrow what JU-12 claims</strong> — the runtime harness catches the common accidental routes, byte-identity across runs (NF-1) is the actual backstop, and the "complete" / "load-bearing" language is dropped in favour of "best-effort + empirically backstopped + disclosed"; or (b) <strong>move purity enforcement out of process</strong> — run the judge in a subprocess under an OS sandbox (seccomp/namespaces) that actually intercepts <code>getrandom</code> and <code>ctypes</code> syscalls, a substantial architectural change. This is the user's call, not the review's.</p>
+
+    <h3>C2 — judge.md §4's purity-mechanism body still describes the broken sys.modules-swap; only the changelog claims the fix</h3>
+    <p class="issue-detail"><em>Panels: C-calibrated (4/10) F1, D-calibrated (5/10), A-calibrated, A-blind context — convergent.</em></p>
+    <p class="issue-detail"><em>Files: <code>specs/judge.md</code> §4 lines ~172–175.</em></p>
+    <p>judge.md's v1.6 change note lists five fixes, none touching the §4 purity body. The body still reads "the whole module object in <code>sys.modules</code>" and "patched in <code>sys.modules</code>" — the mechanism Round 6's own execution disproved and cross-cutting.md v1.6 explicitly replaced with mutate-in-place. §4 also never mentions the <code>numpy.datetime64</code> guard that cross-cutting.md and TC-JU12-03 both rely on. A builder at P4-C06 is pointed by the guide at judge §4 as the mechanism source for the single most safety-critical control — and would build the disproven design. This was my incomplete v1.6 edit. Fixable.</p>
+
+    <h3>C3 — TC-JU12-03 and TC-MU7-02 are change-note-claimed-wired but appear in no chunk's [Test:] tag</h3>
+    <p class="issue-detail"><em>Panels: A-calibrated (4/10), A-blind (7/10) Findings 1–2, D-calibrated, D-blind — convergent (4 panels).</em></p>
+    <p class="issue-detail"><em>Files: <code>specs/implementation-guide.md</code>; <code>test-cases/test-cases.md</code>.</em></p>
+    <p>The v1.6 change note says all four new Round-6 cases were wired. <code>grep</code> finds TC-JU12-03 (numpy C-clock guard) and TC-MU7-02 (seed-purpose independence) nowhere in the guide — not a <code>[Test:]</code> tag, not prose, not the changelog. P4-C06's tag lacks <code>-03</code>; P1-C01/P3-C06 lack TC-MU7-02. The guide's phantom-gate enumeration still says "all eight" (should be nine). Both cases silently drop out of the 88-live total the header claims full coverage of. My incomplete edit. Fixable (wire TC-JU12-03 → P4-C06, TC-MU7-02 → P1-C01/P3-C06, fix "eight"→"nine").</p>
+
+    <h3>C4 — The "models never import harness" invariant is enforced by no gate, in the one direction that matters</h3>
+    <p class="issue-detail"><em>Panels: C-calibrated (4/10) F4, C-blind (6/10), F2-calibrated (5/10) F1 CRITICAL — convergent.</em></p>
+    <p class="issue-detail"><em>Files: <code>specs/cross-cutting.md</code> ADR-003; <code>specs/models.md</code> ADR-M1 §4.</em></p>
+    <p>The whole <code>SeedSource</code>-in-<code>models.base</code> redesign is justified by "so fixtures can derive <code>direct</code>'s stream without importing the harness." But TC-NF6-07 only checks <code>models→worlds</code>, and TC-MU9-01(c) checks <code>judge/worlds/reporting/harness → models</code> — <strong>nothing checks what <code>wmj/models/*</code> imports outward toward <code>wmj.harness</code>.</strong> A future model file reaching for a harness convenience reintroduces the exact coupling the redesign exists to prevent, uncaught. Stated as settled fact with no disclosure — a break in the project's own honesty discipline. Compounded (C-blind): <code>wmj.models.base</code> now hosts a general seed utility consumed by the harness for non-model purposes, so the package's declared responsibility and its contents no longer match. Fixable (add the symmetric AST gate; consider whether SeedSource belongs in a neutral module).</p>
+
+    <h3>C5 — The harness orchestration loop and the judge's per-region trial partitioning have no design anywhere</h3>
+    <p class="issue-detail"><em>Panels: C-calibrated (4/10) F2+F3, C-blind (6/10) CRITICAL — convergent, open since Round 5.</em></p>
+    <p class="issue-detail"><em>Files: none — that is the finding.</em></p>
+    <p>The top-level loop (worlds × models × regions × tasks × trials) is never written as an algorithm, and <code>JudgeInput</code>'s multi-region combining (how the N=200 trials are grouped/partitioned per region, the n_trials arithmetic) is unspecified. This is the one recurring <em>substantive</em> design gap, not a wiring miss — it has survived three rounds because every round's fixes landed on the pieces, never the assembly. Needs spec work (a <code>harness/trials.py</code> orchestration ADR + a JudgeInput per-region partitioning rule).</p>
+
+    <h3>C6 — TC-MU9-03 passes even when the real CLI dispatch string is broken</h3>
+    <p class="issue-detail"><em>Panels: F2-calibrated (5/10) F2 CRITICAL, F2-blind (7/10) F4 — convergent.</em></p>
+    <p class="issue-detail"><em>Files: <code>test-cases/test-cases.md</code> TC-MU9-03; <code>specs/implementation-guide.md</code> P6-C01.</em></p>
+    <p>The case built in Round 6 to close "the CLI holds its own roster that happens to agree" closes the roster half but reopens the dispatch half one layer down. Executed: a CLI with <code>list_models</code> registered instead of <code>list-models</code> (a realistic typo) — TC-MU9-03 as worded ("invoke the entry function for list-models in-process") PASSES by calling the handler directly, while <code>python -m wmj list-models</code> is broken (<code>SystemExit 2</code>). No spec names argparse or any dispatch table. Fixable (pin the test to <code>wmj.harness.cli.main(["list-models"])</code>, the argv-routed path).</p>
+
+    <h2 id="important">Important Findings</h2>
+
+    <h3>I1 — architecture-overview.md and reporting.md are stamped v1.6 with no v1.6 changelog table row</h3>
+    <p class="issue-detail">A-calibrated, C-blind. Both carry a v1.6 banner and lead change-note but their Changelog tables stop at 1.5, while the other four specs correctly carry a 1.6 row. My incomplete edit. Trivially fixable.</p>
+
+    <h3>I2 — TC-MU2-02 never receives full-scope wiring</h3>
+    <p class="issue-detail">A-blind Finding 3, D-blind. The case ("both baselines score below any competent model, both worlds") only has a "seed"-scoped mention at P1-C02, where no competent model or second world exists yet. Needs a full-scope chunk (a late phase where both worlds and the MLP models exist). Fixable.</p>
+
+    <h3>I3 — The model_ref-shift disclosure promised in Round 6's own remediation plan was never written</h3>
+    <p class="issue-detail">F1-calibrated (6/10) F5. Round 6 finding I7 ("model_ref shifts on roster change, undisclosed") appears in the remediation plan; v1.6 wrote only the positive "reproducible across machines" claim, true only within one fixed roster, with no caveat and no changelog entry and no test. A promise the process caught and then dropped silently — worse than a missed bug. Fixable (add the disclosure).</p>
+
+    <h3>I4 — component_key's colon-join is not injective; "provably never shifts" overclaims</h3>
+    <p class="issue-detail">F1-calibrated F2, F1-blind MAJOR — convergent, both executed. <code>":".join(...)</code> has no delimiter escaping: <code>component_key('a:b','c') == component_key('a','b:c')</code>, identical RNG streams. Dormant today (no current part contains <code>:</code>) but the "provably never shifts any other component's stream" language is stronger than the function proves — it holds by luck of the current vocabulary, not by construction. Fixable (reject <code>:</code> in any part at construction with a loud error, or length-prefix each part; or state the reserved-character restriction as part of the pinning).</p>
+
+    <h3>I5 — is_baseline's "adding a baseline is one file" overstates what the flag delivers, and has zero test coverage</h3>
+    <p class="issue-detail">F2-calibrated F4, F2-blind F1, A-calibrated. The flag's only consumer is prereg-exemption (<code>not is_baseline and not is_fixture</code>). A new <code>is_baseline=True</code> model trains and is judged like any contestant but can never become a reference others are compared against — the Verdict schema hardcodes exactly <code>vs_persistence</code>/<code>vs_linear</code>, and the blind judge cannot extend it. "Exactly as a fixture does with is_fixture" invites the wrong expectation. Also: no test registers an <code>is_baseline=True</code> model and asserts <code>check_prereg</code> skips it — the specific Round-6 bug the flag was invented to fix has no regression test. Fixable (one honest sentence scoping the flag; add the coverage test).</p>
+
+    <h3>I6 — SVG chart output is not byte-reproducible by default, undisclosed</h3>
+    <p class="issue-detail">F1-blind MAJOR, executed. ADR-R1 markets SVG as <em>the</em> byte-diffable reproducibility artifact for a sceptic. matplotlib embeds a real-time <code>&lt;dc:date&gt;</code> and random element IDs (<code>uuid4()</code> salt) per render — two runs differ. Fix verified: pin <code>matplotlib.rcParams['svg.hashsalt']</code> and <code>metadata={'Date': None}</code>. As specified, every <code>wmj verify</code> SVG diff a sceptic tries fails, contradicting the one sentence written to reassure them. Fixable.</p>
+
+    <h3>I7 — run-manifest.json's "package versions" field has no named source and two passages contradict</h3>
+    <p class="issue-detail">F1-calibrated F6. reporting.md's file-layout comment lists "package versions" in run-manifest.json; the Integration Points passage drops it, and <code>envelope.meta</code>'s schema (<code>seed, platform, prereg_commit, thresholds_file</code>) has no such field. The one field most needing a deterministic capture mechanism for <code>wmj verify</code>'s byte-comparison (RP-7) has no stated producer. Fixable (name <code>importlib.metadata</code>, reconcile the two passages).</p>
+
+    <h3>I8 — check_prereg verifies commit <em>order</em>, not content-invariance; an ordinary second commit defeats pre-registration</h3>
+    <p class="issue-detail">E-blind HIGH, executed with real git. <code>check_prereg</code> asserts the prereg file's <em>first-added</em> commit precedes the run. Exhibited: a day-1 placeholder commit, then a day-243 commit writing <code>matching_margin: 0.049 # tuned after seeing results</code> — clean working tree, honest dates, no rewrite, no <code>--amend</code>. Both assertions pass; the content in force at judging time was written 8 months after the file first existed. This is exactly MU-6's stated enemy ("thresholds moved after seeing results are not thresholds"), it is not covered by ADR-M5's three named residual risks, and it is easier than any of them. Needs decision (disclose as a fourth residual risk honestly, or strengthen the check to a content-hash pinned at first commit).</p>
+
+    <h3>I9 — TC-MU9-01(c)'s join-check is ambiguous on the import shape the harness needs, with no clean-pass guard</h3>
+    <p class="issue-detail">F2-calibrated F3, executed. A literal exact-match implementation of the pinned join rule false-positives on the legitimate <code>from wmj.models.registry import all_models</code> that <code>harness/trials.py</code> genuinely needs — a build-blocking false positive on day-one production code, with no clean-pass guard (unlike the judge's own gate, which has TC-NF6-06 precisely because "a gate that cries wolf gets disabled"). Fixable (add a clean-pass case pinning the allowed shapes).</p>
+
+    <h3>I10 — MU-9 "one file" extensibility vs NF-2 runtime budget is an unacknowledged tradeoff</h3>
+    <p class="issue-detail">F2-blind F3. Every model added under the "one file" promise grows the 16M-call estimate the 600s TC-NF2-01 gate is budgeted against. Headroom is ~2 orders of magnitude so materiality is low, but the tradeoff is never stated. Minor-Important. Fixable (one sentence in ADR-J6).</p>
+
+    <h2 id="minor">Minor Findings</h2>
+    <ul>
+      <li>Climatology artefact emits literal <code>-Infinity</code>/<code>Infinity</code> (F1-blind) — valid for Python's json round-trip but not RFC 8259; <code>jq</code> silently coerces to a wrong finite value. A sceptic's tool disagrees. Disclose or encode as null-with-flag.</li>
+      <li>Container diagram omits a real reporting→judge import edge stated in reporting.md's own component design (C-blind).</li>
+      <li><code>wmj list-models</code> output format is unspecified (D-calibrated) — satisfiable at P6-C01 but the builder invents the format.</li>
+      <li><code>model_ref</code> typed inconsistently (int vs string) across judge.md examples (B-blind).</li>
+    </ul>
+
+    <h2 id="verified">Disproven / Verified-clean</h2>
+    <p>Honesty record — the review confirmed as well as flagged:</p>
+    <ul>
+      <li><strong>Judge blindness holds</strong> under inspection of every v1.6 data shape (WorldContext, TrainingData, SeedSource, region_labels) — none reach JudgeInput; the envelope wraps after the judge returns (F2-blind Pass 3, F2-calibrated Task 4). No leak.</li>
+      <li><strong>The mutate-in-place fix genuinely beats the sys.modules swap</strong> for the module-object reflection route — reproduced by three panels (E-cal, E-blind, F1-blind): swap fails, mutate-in-place fires.</li>
+      <li><strong>NF-4 <code>--batch</code> vs <code>--batch-check</code></strong> confirmed accurate by three panels with planted-term git repos including dangling/unreachable objects.</li>
+      <li><strong><code>pkgutil.iter_modules</code> sorts filenames</strong> (stdlib-guaranteed, CPython source read) — the model_ref sort-order chain does not depend on filesystem luck (F1-blind, E-blind).</li>
+      <li><strong>component_key / SeedSource determinism</strong> (reproducible across subprocess restarts; <code>blake2b</code> stable where <code>hash()</code> is not) executed-confirmed by F1-blind, F2-calibrated, D-calibrated — TC-NF1-04's convergence claim is real (modulo the colon caveat, I4).</li>
+      <li><strong>Chunk count 28, critical path 10, MVP-1 sequencing</strong> re-derived from scratch and correct by A-calibrated, D-calibrated, D-blind — arithmetic is solid for the second round running.</li>
+      <li><strong>ADR-J6 arithmetic</strong> (200 × 2 × 5700 × 7 ≈ 16M) recomputed correct (F1-calibrated).</li>
+    </ul>
+
+    <h2 id="build-checks">Build Check status after Round 7</h2>
+    <ul>
+      <li><strong>BC-1</strong> (canonical keying): did NOT recur — the block×axis table matched its JSON in every row this round. First clean pass.</li>
+      <li><strong>BC-2</strong> (self-verified fixes fail next round): RECURRED — four v1.6 change notes (C2, C3, I1, I3) claimed fixes the edits never delivered. The execution-verification discipline held for the <em>mechanisms that were actually run</em>, but the prose-only edits around them drifted from the delivered changes again.</li>
+      <li><strong>BC-3</strong> (implementation-guide never fully reconciled): RECURRED — two of four new cases unwired (C3), "eight"→"nine" enumeration stale, TC-MU2-02 unwired (I2).</li>
+      <li><strong>BC-4</strong> (judge purity cannot be secured by finite enumeration in Python): <strong>CONFIRMED, no longer a candidate</strong> — the runtime harness reproduces the static gate's disease one layer down; two routes are architecturally uninterceptable by the mechanism class. This is now a design decision the project must make, not a patch it can apply.</li>
+    </ul>
+
+    <h2 id="disposition">Recommended disposition</h2>
+    <p>Review's recommendation — user owns the decision:</p>
+    <p>Two clusters, and they should be handled differently:</p>
+    <p><strong>Cluster 1 — mechanical, ~1 hour, execution-verified as before (recommend fix):</strong> C2, C3, C4 (add the gate), C6, I1, I2, I3, I4, I5, I6, I7, I9, I10, and the minors. Every one is a bounded edit with a demonstrated fix; several are just finishing v1.6 edits that overstated themselves.</p>
+    <p><strong>Cluster 2 — the design fork, the user's call (recommend decide, do not patch):</strong></p>
+    <ul>
+      <li><strong>C1 / BC-4:</strong> narrow JU-12's claim to "best-effort + empirically backstopped + disclosed," OR move purity enforcement to an out-of-process OS sandbox. The review recommends (a) for a toy-world harness whose own thesis is about honest disclosure of limits — dropping the "complete" claim and disclosing the residual is <em>more</em> in the spirit of JU-10 than an unwinnable enumeration arms race — but this is exactly the architecturally-significant decision Hard Gate 6 reserves for the user.</li>
+      <li><strong>C5:</strong> write the orchestration-loop + JudgeInput-partitioning ADR (spec work, not a fork, but substantive).</li>
+      <li><strong>I8:</strong> decide whether MU-6's prereg guarantee is order-only (disclose the content-drift gap as a fourth honest residual) or content-pinned (strengthen the check).</li>
+    </ul>
+    <p>The review does not decide any of these. It records that the surface has converged, the mechanical cluster is finishable, and the one honest hard question left is what the judge's purity control can truthfully promise.</p>
+
+    <p class="gvm-attribution">Developed using the Grounded Vibe Methodology · Round 7 dual/blind · 14 independent reviewers, zero shared context between blind panels</p>
+  </main>
+
+  <script>
+    (function () {
+      const toc = document.getElementById('toc');
+      const headings = document.querySelectorAll('h2[id], h3[id]');
+      const links = [];
+
+      headings.forEach(function (h) {
+        const a = document.createElement('a');
+        a.href = '#' + h.id;
+        a.textContent = h.textContent;
+        if (h.tagName === 'H3') a.classList.add('toc-h3');
+        toc.appendChild(a);
+        links.push({ el: a, target: h });
+      });
+
+      function onScroll() {
+        let current = links[0];
+        for (let i = 0; i < links.length; i++) {
+          if (links[i].target.getBoundingClientRect().top <= 80) current = links[i];
+        }
+        links.forEach(function (l) { l.el.classList.remove('active'); });
+        if (current) {
+          current.el.classList.add('active');
+          const tocEl = document.getElementById('toc');
+          const elTop = current.el.offsetTop - tocEl.offsetTop;
+          const elBot = elTop + current.el.offsetHeight;
+          if (elTop < tocEl.scrollTop || elBot > tocEl.scrollTop + tocEl.clientHeight) {
+            tocEl.scrollTop = elTop - tocEl.clientHeight / 2;
+          }
+        }
+      }
+
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    })();
+  </script>
+</body>
+</html>
