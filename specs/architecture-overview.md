@@ -1,6 +1,8 @@
 # World Model Judge — Architecture Overview
 
-Version 1.6 · 31 August 2026 · Synthesises: cross-cutting v1.6, worlds v1.4, models v1.6, judge v1.6, reporting v1.6
+Version 1.7 · 31 August 2026 · Synthesises: cross-cutting v1.7, worlds v1.4, models v1.7, judge v1.7, reporting v1.7
+
+> **Change note (v1.7 — design-review-007 repair, execution-verified).** Version references updated to the v1.7 suite. The §2 judge-isolation note is corrected to match cross-cutting v1.7's honest reframe of the purity harness: it is a **best-effort tripwire over the known ambient-capability surface, with the ten-run byte-identity gate (TC-NF1-01) as the load-bearing reproducibility backstop** — not a completeness guarantee. Round 7 executed escapes the in-process harness cannot catch (`ctypes` resident via numpy → raw syscalls; unseeded `Generator(PCG64())` → `getrandom()`), confirming BC-4: no finite enumeration closes Python's reflection/syscall graph, so JU-12 is delivered by tripwire + byte-identity together with the residual disclosed. No conceptual-integrity claim in §6 changed. See design-review-007.html.
 
 > **Change note (v1.6 — design-review-006 repair, execution-verified).** Version references updated to the v1.6 suite. The §2 judge-isolation note is unchanged in substance but the runtime purity harness it names is now specified as *mutate-the-shared-object-in-place* (cross-cutting v1.6 ADR-002 rule 3) after Round 6 executed the v1.5 `sys.modules`-swap wording and proved it did not reach numpy's pre-bound `os`. No conceptual-integrity claim changed. See design-review-006.html.
 
@@ -54,7 +56,7 @@ One deployable unit; the containers are the five packages plus two artefact stor
                                             └────────────▶[reporting]───▶[out/]
 ```
 
-(design-review fix: the judge returns only a pure `Verdict`; the harness — never the judge — attaches identity and run metadata, per judge spec v1.6 §5, and writes the resulting envelope through the same canonical serializer as every other byte-compared artefact, cross-cutting v1.6 ADR-002 rule 4.)
+(design-review fix: the judge returns only a pure `Verdict`; the harness — never the judge — attaches identity and run metadata, per judge spec v1.7 §5, and writes the resulting envelope through the same canonical serializer as every other byte-compared artefact, cross-cutting v1.7 ADR-002 rule 4.)
 
 - **`wmj.worlds`** — LV + pendulum, shared RK4 integrator, divergence benchmark, regions, tasks. Pure functions of (state, action).
 - **`wmj.models`** — baselines, fixtures, the direct/ensemble pair; registry-only discovery. Sees `(state, action)` arrays, never world internals.
@@ -63,7 +65,7 @@ One deployable unit; the containers are the five packages plus two artefact stor
 - **`wmj.harness`** — the only package that imports everything: seeding, orchestration, gates, prereg checks, CLI.
 - **`prereg/`** (committed) and **`out/`** (generated) — the ledger and the product.
 
-The judge's isolation is the load-bearing wall: everything else may know about the judge; the judge knows about nothing (cross-cutting ADR-003). Its purity is enforced at runtime by TC-JU12-01's effect-guarding harness — the load-bearing control — with the static AST import gate as fast lint on top (cross-cutting v1.5 reframed these roles after Round 5 showed a static gate cannot bound Python reflection; the runtime harness guards effects by mutating the shared `os`/`builtins` objects in place, so a reflection route to `os` still trips — Round 6 executed this).
+The judge's isolation is the load-bearing wall: everything else may know about the judge; the judge knows about nothing (cross-cutting ADR-003). Its purity is enforced by two controls with divided roles: TC-JU12-01's runtime effect-guarding harness is the **primary tripwire** (it mutates the shared `os`/`builtins`/`numpy.random` objects in place, so an impure call through a documented API trips however it was reached — Round 6/7 executed this), and the **ten-run byte-identity gate (TC-NF1-01) is the load-bearing reproducibility backstop** that catches any impure read varying between runs, including routes the tripwire's finite enumeration cannot name. Cross-cutting v1.7 dropped the harness's earlier "complete" claim after Round 7 executed uncatchable in-process escapes (`ctypes`, `getrandom`) — BC-4 — so JU-12 is delivered by the two together with the residual disclosed, not by the harness alone. The static AST import gate remains fast lint on top.
 
 ## 3. Key Decisions (the ADRs that shape everything)
 
@@ -128,6 +130,8 @@ Verdict: the system reads as one mind's design. The single idea it expresses eve
 | 1.3 | 2026-08-30 | Design-review-003 (Round 3, dual/blind): version references updated to the v1.3 spec suite; no new conceptual-integrity finding. |
 | 1.4 | 2026-08-31 | Design-review-004 repair session: version references updated to the v1.4 spec suite (worlds v1.3); §4's NF-4 line rewritten — the "CI" enforcement layer was a phantom contradicted by this document's own System Context and is deleted from the design, leaving the two real local layers. |
 | 1.5 | 2026-08-31 | Design-review-005 repair: version references → v1.5 suite (worlds v1.4); envelope diagram field `name`→`model_name`; §2 judge-isolation note updated to the runtime-harness-is-load-bearing / static-gate-is-lint reframe; §4 NF-4 line notes the newly-disclosed web-UI/no-pre-push bypasses. |
+| 1.6 | 2026-08-31 | Design-review-006 repair: version references → v1.6 suite; §2 purity-harness note updated to mutate-in-place (Round 6 executed the `sys.modules`-swap failing). (Changelog row added in v1.7 — design-review-007 found v1.6 stamped the banner and change note but never added this table row.) |
+| 1.7 | 2026-08-31 | Design-review-007 repair (execution-verified): version references → v1.7 suite; §2 judge-isolation note corrected to tripwire-plus-byte-identity-backstop (BC-4 — Round 7 executed `ctypes`/`getrandom` escapes the in-process harness cannot catch, so the "complete" claim is dropped); the missing v1.6 changelog row added (I1). |
 
 ---
 
