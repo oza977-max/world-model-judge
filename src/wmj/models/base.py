@@ -44,12 +44,12 @@ def component_key(*parts: str) -> tuple[int]:
             raise SeedKeyError(
                 f"seed key part {part!r} is not a str "
                 f"(type {type(part).__name__}); the caller "
-                f"must pass its own str() form explicitly"
+                f"must pass its own str() form explicitly (TC-NF1-08)"
             )
         if ":" in part:
             raise SeedKeyError(
                 f"seed key part {part!r} contains ':' (reserved delimiter); "
-                f"model/world/region/purpose names must not contain ':'"
+                f"model/world/region/purpose names must not contain ':' (TC-NF1-07)"
             )
     joined = ":".join(parts).encode("utf-8")
     digest = hashlib.blake2b(joined, digest_size=8).digest()
@@ -73,7 +73,8 @@ class SeedSource:
         if self.my_name is None:
             raise SeedKeyError(
                 "SeedSource.rng() requires my_name to be set; "
-                "use rng_for(*parts) to derive another component's stream"
+                "use rng_for(*parts) to derive another component's stream "
+                "(cross-cutting ADR-002 rule 2)"
             )
         return self.rng_for(self.my_name, *purpose)
 

@@ -19,7 +19,7 @@ import pytest
 from wmj.models.base import SeedKeyError, SeedSource, component_key
 
 
-def test_component_key_no_shift_on_roster_change():
+def test_tc_nf1_03_component_key_no_shift_on_roster_change():
     """TC-NF1-03: adding a new component never shifts an existing one's key."""
     roster = ["direct", "ensemble", "fx-brittle", "linear", "persistence"]
     before = {name: component_key(name, "lv", "weights") for name in roster}
@@ -33,7 +33,7 @@ def test_component_key_no_shift_on_roster_change():
         assert before[name] == after[name]
 
 
-def test_component_key_two_implementations_converge():
+def test_tc_nf1_04_component_key_two_implementations_converge():
     """TC-NF1-04: an independent implementation of the pinned text matches."""
 
     def reference_component_key(*parts: str) -> tuple[int]:
@@ -50,7 +50,7 @@ def test_component_key_two_implementations_converge():
         assert component_key(*parts) == reference_component_key(*parts)
 
 
-def test_component_key_rejects_colon_in_a_part():
+def test_tc_nf1_07_component_key_rejects_colon_in_a_part():
     """TC-NF1-07: a ':' inside any part is rejected — the join is not
     injective across a part boundary otherwise."""
     with pytest.raises(SeedKeyError):
@@ -66,7 +66,7 @@ def test_component_key_colon_collision_is_real_without_the_guard():
     assert ":".join(["a:b", "c"]) == ":".join(["a", "b:c"])
 
 
-def test_component_key_rejects_non_str_part():
+def test_tc_nf1_08_component_key_rejects_non_str_part():
     """TC-NF1-08: a non-str part is rejected — the old str(p) coercion
     collapsed component_key(1, "a") and component_key("1", "a") to the
     same joined text and therefore the same seed stream."""
@@ -95,7 +95,7 @@ def test_seed_source_rng_uses_own_name():
     ).random()
 
 
-def test_seed_source_rng_for_purpose_streams_are_independent():
+def test_tc_mu7_02_seed_source_rng_for_purpose_streams_are_independent():
     """TC-MU7-02: train/eval/benchmark starts for the same (world, region)
     are distinct streams, not accidental collisions."""
     seeds = SeedSource(run_seed=20260825, my_name=None)

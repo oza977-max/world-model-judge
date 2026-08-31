@@ -20,7 +20,7 @@ from wmj.harness.thread_guard import (
 )
 
 
-def test_ensure_single_threaded_sets_all_three_vars(monkeypatch):
+def test_adr002_rule1_ensure_single_threaded_sets_all_three_vars(monkeypatch):
     for name in THREAD_ENV_VARS:
         monkeypatch.delenv(name, raising=False)
 
@@ -30,14 +30,14 @@ def test_ensure_single_threaded_sets_all_three_vars(monkeypatch):
         assert os.environ[name] == "1"
 
 
-def test_assert_single_threaded_passes_when_all_set(monkeypatch):
+def test_adr002_rule1_assert_single_threaded_passes_when_all_set(monkeypatch):
     for name in THREAD_ENV_VARS:
         monkeypatch.setenv(name, "1")
     assert_single_threaded()  # must not raise
 
 
 @pytest.mark.parametrize("missing_var", THREAD_ENV_VARS)
-def test_assert_single_threaded_raises_when_one_var_wrong(monkeypatch, missing_var):
+def test_adr002_rule1_assert_single_threaded_raises_when_one_var_wrong(monkeypatch, missing_var):
     for name in THREAD_ENV_VARS:
         monkeypatch.setenv(name, "1")
     monkeypatch.setenv(missing_var, "4")
@@ -46,7 +46,7 @@ def test_assert_single_threaded_raises_when_one_var_wrong(monkeypatch, missing_v
         assert_single_threaded()
 
 
-def test_assert_single_threaded_raises_when_var_unset(monkeypatch):
+def test_adr002_rule1_assert_single_threaded_raises_when_var_unset(monkeypatch):
     for name in THREAD_ENV_VARS:
         monkeypatch.setenv(name, "1")
     monkeypatch.delenv(THREAD_ENV_VARS[0], raising=False)

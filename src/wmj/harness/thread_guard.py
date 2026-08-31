@@ -45,5 +45,6 @@ def assert_single_threaded() -> None:
         if value != "1":
             raise ThreadGuardError(
                 f"{name} is {value!r}, expected '1' — call "
-                f"ensure_single_threaded() before importing numpy"
+                f"ensure_single_threaded() before importing numpy "
+                f"(cross-cutting ADR-002 rule 1)"
             )

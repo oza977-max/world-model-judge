@@ -32,7 +32,8 @@ def canonical_serialize(obj: Any) -> bytes:
         text = json.dumps(native, sort_keys=True, indent=2, allow_nan=False)
     except ValueError as exc:
         raise NonFiniteValueError(
-            f"canonical_serialize refuses a non-finite value (NaN/Infinity): {exc}"
+            f"canonical_serialize refuses a non-finite value (NaN/Infinity): {exc} "
+            f"(cross-cutting ADR-002 rule 4)"
         ) from exc
     return text.encode("utf-8")
 
