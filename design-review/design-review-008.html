@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Design Review 008 — World Model Judge</title>
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+
+    body {
+      font-family: "ET Book", Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif;
+      color: #111;
+      background: #fffff8;
+      line-height: 1.6;
+      padding: 2rem 1rem 6rem;
+      max-width: 1480px;
+      margin: 0 auto;
+    }
+
+    /* ── Typography ── */
+    h1 {
+      font-size: 2.4rem;
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.4rem;
+      color: #111;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 400;
+      font-style: italic;
+      margin-top: 3rem;
+      margin-bottom: 1rem;
+      color: #111;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 0.3rem;
+    }
+
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-top: 2rem;
+      margin-bottom: 0.6rem;
+      color: #333;
+    }
+
+    p, li {
+      font-size: 1rem;
+      line-height: 1.7;
+      margin-bottom: 0.8rem;
+      max-width: 1000px;
+    }
+
+    ul, ol { padding-left: 1.4rem; margin-bottom: 1.2rem; }
+    li { margin-bottom: 0.4rem; }
+
+    .subtitle {
+      font-size: 1.1rem;
+      font-style: italic;
+      color: #555;
+      margin-bottom: 2.5rem;
+      max-width: 1000px;
+    }
+
+    .date {
+      font-size: 0.9rem;
+      color: #888;
+      margin-bottom: 0.2rem;
+    }
+
+    /* ── Floating TOC (Left Side) ── */
+    nav.toc {
+      position: fixed;
+      top: 2rem;
+      left: 2rem;
+      width: 220px;
+      max-height: calc(100vh - 4rem);
+      overflow-y: auto;
+      background: #fffff8;
+      border-right: 2px solid #ddd;
+      padding: 1rem 1rem 1rem 0;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      z-index: 100;
+    }
+
+    nav.toc .toc-title {
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #999;
+      margin-bottom: 0.6rem;
+    }
+
+    nav.toc a {
+      color: #555;
+      text-decoration: none;
+      display: block;
+      padding: 0.15rem 0;
+      transition: color 0.15s;
+    }
+
+    nav.toc a:hover { color: #111; }
+    nav.toc a.active { color: #111; font-weight: 600; }
+    nav.toc .toc-h3 { padding-left: 0.8rem; font-size: 0.78rem; color: #888; }
+    nav.toc .toc-h3:hover { color: #555; }
+
+    /* Offset main content for left TOC */
+    main {
+      margin-left: 260px;
+      max-width: 1000px;
+    }
+
+    /* ── Sidenotes (Right Margin) ── */
+    .sidenote {
+      float: right;
+      clear: right;
+      width: 220px;
+      margin-right: -260px;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      color: #666;
+      padding-left: 1rem;
+      border-left: 2px solid #e0e0e0;
+    }
+
+    /* ── Tables (Few's principles) ── */
+    table {
+      border-collapse: collapse;
+      margin: 1.5rem 0 2rem;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      width: auto;
+      min-width: 480px;
+      overflow-x: auto;
+    }
+
+    thead th {
+      text-align: left;
+      font-weight: 600;
+      padding: 0.5rem 1rem 0.5rem 0;
+      border-bottom: 2px solid #333;
+      color: #111;
+    }
+
+    tbody td {
+      padding: 0.45rem 1rem 0.45rem 0;
+      border-bottom: 1px solid #e8e8e8;
+      vertical-align: top;
+    }
+
+    tbody tr:last-child td { border-bottom: 2px solid #333; }
+    tbody tr:nth-child(even) { background: #f9f9f4; }
+
+    caption {
+      font-style: italic;
+      font-size: 0.88rem;
+      color: #666;
+      text-align: left;
+      margin-bottom: 0.4rem;
+    }
+
+    /* ── Inline Code ── */
+    code {
+      font-family: "Menlo", "Consolas", "Monaco", monospace;
+      font-size: 0.88rem;
+      background: #f0f0e8;
+      padding: 0.1rem 0.35rem;
+      border-radius: 2px;
+    }
+
+    pre {
+      font-family: "Menlo", "Consolas", "Monaco", monospace;
+      font-size: 0.85rem;
+      background: #f0f0e8;
+      padding: 1rem;
+      overflow-x: auto;
+      border-radius: 2px;
+      margin: 1rem 0;
+      max-width: 1000px;
+      line-height: 1.5;
+    }
+
+    /* ── Verdict Box (review components) ── */
+    .verdict {
+      border: 2px solid #333;
+      padding: 1.2rem 1.5rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+    }
+
+    .verdict-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+      margin-bottom: 0.3rem;
+    }
+
+    .verdict-text {
+      font-size: 1.3rem;
+      font-weight: 400;
+      color: #111;
+      margin-bottom: 0.4rem;
+    }
+
+    .verdict-basis {
+      font-size: 0.88rem;
+      color: #555;
+      max-width: 1000px;
+    }
+
+    .verdict.ready { border-color: #27ae60; background: #f0faf4; }
+    .verdict.ready .verdict-text { color: #27ae60; }
+
+    .verdict.caveats { border-color: #e67e22; background: #fef8f0; }
+    .verdict.caveats .verdict-text { color: #e67e22; }
+
+    .verdict.not-ready { border-color: #c0392b; background: #fdf0ef; }
+    .verdict.not-ready .verdict-text { color: #c0392b; }
+
+    /* ── Score Card ── */
+    .score-card {
+      background: #f7f7f0;
+      border: 2px solid #333;
+      padding: 1.5rem 2rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+    }
+
+    .score-card-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+      margin-bottom: 1.2rem;
+    }
+
+    .dimension-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin: 0.8rem 0;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid #e8e8e8;
+    }
+
+    .dimension-row:last-child {
+      border-bottom: none;
+    }
+
+    .dimension-name {
+      font-weight: 600;
+      color: #333;
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .dimension-scores {
+      font-size: 0.92rem;
+      color: #555;
+      min-width: 160px;
+      text-align: right;
+    }
+
+    .dimension-scores strong {
+      font-weight: 600;
+    }
+
+    /* ── Honesty Check Section ── */
+    .honesty-check {
+      background: #f0faf4;
+      border: 2px solid #27ae60;
+      border-left: 6px solid #27ae60;
+      padding: 1.5rem 1.5rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+    }
+
+    .honesty-check-header {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #27ae60;
+      margin-bottom: 0.6rem;
+    }
+
+    .honesty-check h3 {
+      margin-top: 0;
+      color: #27ae60;
+    }
+
+    .honesty-check ul {
+      margin-left: 1rem;
+    }
+
+    .honesty-check li {
+      margin-bottom: 0.6rem;
+    }
+
+    /* ── Review Components (issues) ── */
+    .issue {
+      border-left: 3px solid;
+      padding: 0.8rem 1rem;
+      margin: 0.8rem 0;
+      max-width: 1000px;
+    }
+
+    .issue.critical {
+      border-left-color: #c0392b;
+      background: #fdf0ef;
+    }
+
+    .issue.important {
+      border-left-color: #e67e22;
+      background: #fef8f0;
+    }
+
+    .issue-title {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 0.3rem;
+    }
+
+    .issue-detail {
+      font-size: 0.92rem;
+      color: #555;
+      margin-bottom: 0.3rem;
+    }
+
+    .issue-location {
+      font-size: 0.78rem;
+      color: #999;
+      font-style: italic;
+    }
+
+    /* ── Important Findings List ── */
+    .important-list {
+      max-width: 1000px;
+    }
+
+    .important-item {
+      margin: 0.8rem 0;
+      padding: 0.5rem 0 0.5rem 1rem;
+      border-left: 3px solid #e67e22;
+      background: #fef8f0;
+    }
+
+    .important-item-title {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 0.2rem;
+    }
+
+    .important-item-text {
+      font-size: 0.92rem;
+      color: #555;
+    }
+
+    /* ── Meta-Finding Callout ── */
+    .meta-finding {
+      border: 2px solid #c0392b;
+      border-left: 6px solid #c0392b;
+      padding: 1.5rem 1.5rem;
+      margin: 2.5rem 0;
+      max-width: 1000px;
+      background: #fff5f3;
+    }
+
+    .meta-finding-header {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #c0392b;
+      margin-bottom: 0.6rem;
+    }
+
+    .meta-finding h3 {
+      margin-top: 0;
+      color: #c0392b;
+    }
+
+    .meta-finding ol {
+      margin: 1.2rem 0;
+    }
+
+    .meta-finding li {
+      margin-bottom: 0.8rem;
+    }
+
+    /* ── New badge for BC-5 ── */
+    .new-badge {
+      display: inline-block;
+      background: #c0392b;
+      color: #fff;
+      font-size: 0.65rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.25rem 0.5rem;
+      margin-left: 0.5rem;
+      border-radius: 2px;
+    }
+
+    /* ── Cluster sections ── */
+    .cluster {
+      border-left: 4px solid #333;
+      padding-left: 1.2rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+    }
+
+    .cluster h3 {
+      margin-top: 0;
+    }
+
+    /* ── GVM Attribution ── */
+    .gvm-attribution {
+      font-size: 0.75rem;
+      color: #999;
+      font-style: italic;
+      text-align: center;
+      margin-top: 3rem;
+      margin-bottom: 0;
+      max-width: none;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 1200px) {
+      nav.toc {
+        position: static;
+        width: 100%;
+        max-height: none;
+        border-right: none;
+        border-bottom: 1px solid #ddd;
+        padding: 1rem 0;
+        margin-bottom: 2rem;
+      }
+      main { margin-left: 0; }
+      .sidenote {
+        float: none;
+        width: 100%;
+        margin: 0.8rem 0;
+        padding: 0.6rem 0 0.6rem 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="toc" id="toc">
+    <div class="toc-title">Contents</div>
+  </nav>
+
+  <main>
+    <p class="date">Round 8 (Dual/Blind) · Post-v1.7 execution-verified fix-all review · 7 panels × 2 = 14 independent reviewers · 31 August 2026</p>
+    <h1>World Model Judge — Design Review 008</h1>
+    <p class="subtitle">Independent adversarial re-verification of Round 7's fixes. The macro decision to drop JU-12's completeness claim is validated as sound. But the specific hardening code has real, executed bugs — the same rebind-vs-mutate defect recurring a third time in a new object each round — and the new orchestration ADR contradicts a design element that has been stable since Round 3.</p>
+
+    <h2 id="verdict">Verdict</h2>
+    <div class="verdict not-ready">
+      <div class="verdict-label">Verdict</div>
+      <div class="verdict-text">Do not build</div>
+      <p class="verdict-basis">Eighth consecutive "Do not build." Average score ~5.6/10 (A 6/6, B 5/6, C 4/5, D 4/6, E 4/6.5, F1 6.5/7, F2 5/6). This round is different in kind from every prior one: the hard architectural call from Round 7 (dropping JU-12's completeness claim, reframing the harness as a tripwire backed by TC-NF1-01 byte-identity) is independently confirmed sound by multiple panels — that decision holds. What doesn't hold is the execution underneath it. Two E panels, working independently, each found the specific v1.7 hardening code broken by ordinary non-adversarial Python: <code>os.environ</code>'s dunder access (<code>os.environ["X"]</code>, <code>"X" in os.environ</code>, <code>dict(os.environ)</code>) bypasses the instance-level patch because Python resolves special methods against the type, not the instance; <code>numpy.datetime64</code> cannot be mutated in place at all (immutable C type), so the only implementation is a rebind that silently reopens the pre-capture escape fixed one round ago for a different object; and <code>numpy.random</code>'s own submodules (<code>numpy.random._pcg64</code>, <code>numpy.random._generator</code>) hold separate bindings the top-level patch never touches. This is the same defect — rebind masquerading as mutate-in-place — recurring for the third consecutive round, each time in a different object. Separately, five-plus panels independently converged on ADR-004 (this round's new orchestration ADR) being structurally broken: its pseudocode doesn't typecheck against the registry contract it cites (executed, raises <code>AttributeError</code>), its baseline-population order is backwards, and its central design choice — one region per <code>JudgeInput</code> — contradicts the multi-region <code>region_labels</code> shape that judge §4 and models §5 have justified since Round 3. And the mechanical wiring gap recurred a third time (four test cases with bodies but no chunk).</p>
+    </div>
+
+    <h2 id="score-card">Dimension Scores</h2>
+    <div class="score-card">
+      <div class="score-card-title">Calibrated vs. Blind Independent Review</div>
+      <div class="dimension-row">
+        <div class="dimension-name">Requirements Coverage</div>
+        <div class="dimension-scores"><strong>6</strong> (cal) / <strong>6</strong> (blind)</div>
+      </div>
+      <div class="dimension-row">
+        <div class="dimension-name">Interface Contracts</div>
+        <div class="dimension-scores"><strong>5</strong> (cal) / <strong>6</strong> (blind)</div>
+      </div>
+      <div class="dimension-row">
+        <div class="dimension-name">Structural Soundness</div>
+        <div class="dimension-scores"><strong>4</strong> (cal) / <strong>5</strong> (blind)</div>
+      </div>
+      <div class="dimension-row">
+        <div class="dimension-name">Implementability</div>
+        <div class="dimension-scores"><strong>4</strong> (cal) / <strong>6</strong> (blind)</div>
+      </div>
+      <div class="dimension-row">
+        <div class="dimension-name">Security</div>
+        <div class="dimension-scores"><strong>4</strong> (cal) / <strong>6.5</strong> (blind)</div>
+      </div>
+      <div class="dimension-row">
+        <div class="dimension-name">Reproducibility</div>
+        <div class="dimension-scores"><strong>6.5</strong> (cal) / <strong>7</strong> (blind)</div>
+      </div>
+      <div class="dimension-row">
+        <div class="dimension-name">Separability</div>
+        <div class="dimension-scores"><strong>5</strong> (cal) / <strong>6</strong> (blind)</div>
+      </div>
+    </div>
+
+    <h2 id="pattern">The pattern this round</h2>
+    <ol>
+      <li><strong>The Round 7 architectural decision holds.</strong> Every panel that checked (C-cal explicitly; E-cal and E-blind by execution) confirms the three purity documents (cross-cutting, judge §4, architecture-overview) are now internally consistent, the "complete" claim is genuinely gone, and the threat model is honestly stated. This is real and should not be re-litigated.</li>
+      <li><strong>The execution under that decision has three concrete, fixable bugs — the same disease recurring a third time.</strong> <code>os.environ</code>, <code>numpy.datetime64</code>, <code>numpy.random</code> submodules. Each is closable with the technique already proven to work elsewhere in this same document (patch the real shared object the language actually consults) — the pattern just wasn't generalized.</li>
+      <li><strong>ADR-004, this round's new material, needs to be rethought, not patched.</strong> Its central partitioning choice conflicts with a design element several rounds older and more load-bearing than itself.</li>
+      <li><strong>A possible gap in the backstop itself.</strong> TC-NF1-01 may not require separate processes, which would make it blind to exactly the class of residual (env-var/process-stable-but-machine-varying reads) the reframed claim depends on it catching.</li>
+      <li><strong>Wiring discipline lapsed again</strong>, mechanically, in the exact round whose premise was "this time actually wired."</li>
+    </ol>
+
+    <h2 id="critical">Critical Findings</h2>
+
+    <h3>C1 — <code>os.environ</code>'s dunder access bypasses the v1.7 mutate-in-place guard; Python resolves special methods against the type, not the instance</h3>
+    <p class="issue-detail"><em>Panel: E-calibrated (4/10), executed.</em></p>
+    <p class="issue-detail"><em>Files: <code>specs/cross-cutting.md</code> ADR-002 rule 3, <code>specs/judge.md</code> §4.</em></p>
+    <p>Executed: after installing the guard exactly as specified (<code>os.environ.get = raise</code>, and "the mapping dunders"), <code>os.environ.get('HOME')</code> raises correctly, but <code>os.environ['HOME']</code>, <code>'HOME' in os.environ</code>, and <code>dict(os.environ)</code> all leak the real value. Root cause: CPython resolves <code>obj[x]</code>, <code>x in obj</code>, <code>dict(obj)</code> against the <strong>type</strong> (<code>os._Environ</code>), never the instance <code>__dict__</code>, for any new-style class — a language rule, not an evasion. Setting <code>real_environ.__getitem__ = raise</code> on the instance is silently ignored. Patching <code>os._Environ</code> (the class) instead of the instance does work (confirmed). <code>os.environ["X"]</code> and <code>dict(os.environ)</code> are arguably the more idiomatic way to read env vars than <code>.get()</code>. Consequence, and why this compounds: env vars are typically stable within one developer's shell across all ten TC-NF1-01 runs, so byte-identity would not catch this either, while a different machine's <code>$HOME</code>/<code>$LANG</code>/<code>$PATH</code> would — exactly the cross-machine break NF-1 exists to prevent. Fix (verified): patch <code>os._Environ</code>'s class-level dunders, not the instance.</p>
+
+    <h3>C2 — <code>numpy.datetime64</code> cannot be mutated in place at all; the only working mechanism is a rebind, contradicting the spec's own uniformity claim and reopening a known escape class</h3>
+    <p class="issue-detail"><em>Panel: E-calibrated (4/10), executed.</em></p>
+    <p class="issue-detail"><em>Files: <code>specs/cross-cutting.md</code> ADR-002 rule 3, <code>specs/judge.md</code> §4.</em></p>
+    <p><code>setattr(numpy.datetime64, '__new__', raise)</code> → <code>TypeError: cannot set '__new__' attribute of immutable type 'numpy.datetime64'</code>. The spec's umbrella sentence ("mutates the one real shared object... in place... never a swap") is claimed to cover all five guard classes including this one, but it is physically impossible for <code>numpy.datetime64</code>. The only implementation is <code>numpy.datetime64 = wrapper</code> at the module level — a rebind. Executed: a value captured before the harness installs (<code>from numpy import datetime64 as captured</code>) bypasses the rebind cleanly and reads the real wall clock. This is exactly the pre-capture pattern already found and fixed for <code>os.environ</code> in v1.7 — reintroduced here, undisclosed, because the fix pattern was never generalized to a type that structurally can't take it. TC-JU12-03's own phantom-gate case happens to still pass under a rebind (it does a fresh module-attribute lookup), so it doesn't catch this gap — meaning the test proves less than the surrounding prose claims. Needs an honest disclosure (the residual list should name this) or an out-of-process mechanism for this one capability specifically.</p>
+
+    <h3>C3 — <code>numpy.random</code>'s private submodules hold separate bindings the module-level patch never touches; TC-JU12-04's disclosed residual is factually wrong about its own example</h3>
+    <p class="issue-detail"><em>Panel: E-blind (6.5/10), executed — the most consequential single finding of the round.</em></p>
+    <p class="issue-detail"><em>Files: <code>specs/cross-cutting.md</code> ADR-002 rule 3, <code>specs/judge.md</code> §4, <code>test-cases/test-cases.md</code> TC-JU12-04.</em></p>
+    <p>TC-JU12-04's disclosed residual gives <code>numpy.random.Generator(numpy.random.PCG64())</code> — an unseeded draw reaching <code>getrandom()</code> — as an example of an uncatchable escape, reasoning that <code>Generator.__init__</code> is an immutable C type. Executed: with the harness built exactly as specified (all 63 public <code>numpy.random</code> names patched at module level, confirmed to include <code>PCG64</code>, <code>Generator</code>, <code>SeedSequence</code>), the disclosed example <strong>is actually caught</strong> — <code>PCG64()</code> construction trips the guard on the patched name, <code>Generator.__init__</code> being unpatchable is true but irrelevant. The real, undisclosed escape is a plain import: <code>import numpy.random._pcg64 as _p; import numpy.random._generator as _g; _g.Generator(_p.PCG64())</code> — confirmed to bypass the guard entirely. Root cause: <code>PCG64.__module__ == 'numpy.random._pcg64'</code>; these submodules are already resident in <code>sys.modules</code> (numpy's own <code>__init__.py</code> imports from them), and rebinding <code>numpy.random.PCG64</code> changes only the top package's namespace entry, not the submodule's own binding of the same class object. This is not <code>ctypes</code>, not reflection, not a raw syscall — it is an ordinary import of an already-loaded module, exactly the rebind-vs-mutate-in-place defeat this document has now found and fixed twice for other capabilities (<code>os</code> in Round 6, <code>os.environ</code> in Round 7/8 — C1 above). Unlike <code>ctypes</code>/<code>getrandom</code>, this route <strong>is</strong> closable by the same in-process technique already used elsewhere (patch <code>numpy.random._pcg64.PCG64</code>, <code>numpy.random._generator.Generator</code>, <code>numpy.random.bit_generator.SeedSequence</code>, <code>numpy.random._mt19937</code>, etc. directly) — it does not belong in the "no in-process control could stop it anyway" bucket the disclosure invokes. The disclosure needs rewriting, and the harness needs the submodule-level patches added.</p>
+
+    <h3>C4 — ADR-004's pseudocode does not typecheck against the registry contract it cites; executed, raises AttributeError</h3>
+    <p class="issue-detail"><em>Panels: B-calibrated (5/10 I2), C-calibrated (4/10 finding not separately numbered but confirmed), D-calibrated (4/10 C1), D-blind (6/10 finding 1), F2-calibrated (5/10 C2) — five independent confirmations, two by direct execution.</em></p>
+    <p class="issue-detail"><em>Files: <code>specs/cross-cutting.md</code> ADR-004; <code>specs/models.md</code> ADR-M1.</em></p>
+    <p><code>all_models() -&gt; dict[str, Factory]</code> (models.md, pinned). ADR-004 writes <code>for model in all_models(): m = model.factory(ctx, seeds, train)</code>. Executed: default dict iteration yields keys (strings) → <code>AttributeError: 'str' object has no attribute 'factory'</code>; fixing to <code>.values()</code> still fails the same way because <code>Factory</code> <em>is</em> the callable, not an object with a <code>.factory</code> method → <code>AttributeError: 'function' object has no attribute 'factory'</code>. The correct line is <code>for name, factory in all_models().items(): m = factory(ctx, seeds, train)</code>. ADR-004 frames itself as "an explicit algorithm so the assembly is buildable without a builder inventing it" — execution shows invention is required on line one of the loop body.</p>
+
+    <h3>C5 — Baselines sort last in <code>all_models()</code> but <code>assemble_judge_input</code> needs them on the first iteration; no pre-pass exists</h3>
+    <p class="issue-detail"><em>Panels: C-calibrated (4/10 I-1), D-calibrated (4/10 finding not separately numbered), D-blind (6/10 C1), F2-calibrated (5/10, confirmed via independent sorted() computation) — four independent confirmations, all computing the same sorted order.</em></p>
+    <p class="issue-detail"><em>Files: <code>specs/cross-cutting.md</code> ADR-004; <code>specs/models.md</code> ADR-M1.</em></p>
+    <p><code>sorted(['persistence','linear','direct','ensemble','fx-overconfident','fx-honest-rough','fx-brittle'])</code> → <code>['direct', 'ensemble', 'fx-brittle', 'fx-honest-rough', 'fx-overconfident', 'linear', 'persistence']</code> (independently computed by four panels, identical result). <code>direct</code> is processed first; <code>linear</code>/<code>persistence</code> sort last. <code>assemble_judge_input(world, region, preds, spreads, outs, baselines[world][region])</code> is called on the very first inner iteration and needs baseline predictions that, under the single uniform pass ADR-004 describes, do not yet exist. No pre-pass is shown anywhere. As pinned, the loop crashes on <code>direct</code>'s first region for every world.</p>
+
+    <h3>C6 — ADR-004's "one region per JudgeInput" contradicts the multi-region <code>region_labels</code> design stable since Round 3</h3>
+    <p class="issue-detail"><em>Panels: C-calibrated (4/10 C-1), B-calibrated (5/10 I3, same tension flagged) — the deepest finding of the round.</em></p>
+    <p class="issue-detail"><em>Files: <code>specs/cross-cutting.md</code> ADR-004; <code>specs/judge.md</code> §4; <code>specs/models.md</code> §5.</em></p>
+    <p>ADR-004 states: <em>"A <code>JudgeInput</code> carries exactly one region's trials... The judge does not receive multiple regions in one call."</em> But judge §4 justifies <code>region_labels</code>'s per-trial <code>{region_name, axis}</code> shape (over a bare boolean) specifically because <em>"a boolean in/out flag alone can't do that once a world declares more than one out-region"</em> — i.e., because one call must be able to carry multiple, distinct regions. models §5's own worked example shows a batch mixing <code>"training"</code> and <code>"out-high-amplitude"</code> trials in one array, calling this correction out by name (design-review-003). These are two incompatible input shapes for the same type, stated in the same document set. ADR-004 was written to close the standing orchestration gap; instead it opened a new, unreconciled contradiction with a load-bearing design element several rounds older than itself. <strong>This needs an actual decision, not a patch</strong>: either ADR-004 is wrong and JudgeInput should carry all of a world's regions per model (matching the existing region_labels rationale, and requiring only that the harness assemble one multi-region call per model instead of the harness collating N single-region Verdicts afterward), or region_labels' rationale needs correcting and the multi-region example in models §5 needs to go. The former is very likely correct — it also resolves C7 below for free, since there is then only one Verdict per (model, world), matching every downstream consumer.</p>
+
+    <h3>C7 — The per-region-to-per-(model,world) Verdict collation mechanism is asserted, never specified</h3>
+    <p class="issue-detail"><em>Panels: B-calibrated (5/10 C1), C-calibrated (4/10 C-2), C-blind (5/10 C2) — three independent confirmations.</em></p>
+    <p class="issue-detail"><em>Files: <code>specs/cross-cutting.md</code> ADR-004; <code>specs/judge.md</code> §5; <code>specs/reporting.md</code> §5.</em></p>
+    <p>If C6 is not resolved in favor of one-multi-region-JudgeInput-per-model, then ADR-004 computes N independent per-region <code>Verdict</code> objects and must merge them into the single combined Verdict every consumer expects (<code>JudgedResult</code> "one per (model, world)", judge §5's block×axis table implying multi-region arrays inside one Verdict, reporting's one-file-per-(model,world) output layout). ADR-004's text says only "the harness collating the per-region Verdicts into the reporting layer" — no module, function, or mechanism is named anywhere in cross-cutting, judge, or reporting. The <code>envelopes = [JudgedResult(...) ...]</code> line that would need to perform this merge is itself elided with <code>...</code>. This is resolved automatically if C6 is fixed the recommended way.</p>
+
+    <h3>C8 — <code>run-manifest.json</code>/<code>out/verdicts/</code> ownership is contradicted across three documents, one of them contradicting itself</h3>
+    <p class="issue-detail"><em>Panel: C-blind (5/10, C1).</em></p>
+    <p class="issue-detail"><em>Files: <code>specs/cross-cutting.md</code> ADR-002 rule 4; <code>specs/judge.md</code> §5; <code>specs/reporting.md</code> §4 and §6; <code>specs/architecture-overview.md</code> §2.</em></p>
+    <p>cross-cutting + judge §5 say the harness (<code>wmj/harness/results.py</code>) writes verdicts directly to <code>out/</code>. reporting §4's own Component Design assigns the same write (verdict JSON + manifest) to <code>wmj/reporting/writer.py</code>. reporting §6, two sections later in the <em>same document</em>, says the harness writes the manifest — contradicting its own §4. architecture-overview's container diagram shows exactly one path into <code>out/</code>, <code>[reporting]───▶[out/]</code>, with no harness→out/ edge drawn anywhere. Four statements, at least two mutually exclusive answers, inside a project whose own house style (Keeling: one producer per fact) exists to prevent exactly this. This survived seven prior rounds. Needs a single clear ownership decision, written once, cited everywhere else.</p>
+
+    <h3>C9 — TC-NF1-01, the backstop the reframed purity claim depends on, may itself be a phantom gate — no separate-process requirement, unlike its own siblings</h3>
+    <p class="issue-detail"><em>Panel: F1-blind (7/10), executed.</em></p>
+    <p class="issue-detail"><em>Files: <code>test-cases/test-cases.md</code> TC-NF1-01; <code>requirements/requirements.md</code> NF-1.</em></p>
+    <p>TC-NF1-01's Given/When/Then never says "separate processes" — unlike TC-WD7-01 ("in two separate processes") and TC-RP7-02 ("two separate process invocations"), both written by the same document. NF-1 itself demands byte-identity "across runs, across processes, and across machines." Executed: a stand-in judge component with a lazily-initialized, process-global cache filled from an unseeded <code>Generator(PCG64())</code> on first use passes ten in-process "consecutive runs" every time (each process's ten calls are internally identical, since the cache fills once and is reused) while the underlying value differs freely across three fresh processes. This is exactly the accidental-impurity class C1/C2/C3 above (and Round 7's original ctypes/getrandom disclosure) are counting on this gate to catch. If TC-NF1-01 is built exactly as worded, it would not catch it. Needs the same "separate processes" language its siblings already carry.</p>
+
+    <h3>C10 — Four v1.7 test cases (TC-MU6-04, TC-MU6-05, TC-NF1-07, TC-RP7-02) have live case bodies but are wired into no build chunk — the third consecutive round this exact defect class recurs</h3>
+    <p class="issue-detail"><em>Panels: A-calibrated (6/10), A-blind (6/10), D-calibrated (4/10 C2), D-blind (6/10), F1-calibrated (6.5/10), F2-calibrated (5/10 C1) — six independent confirmations.</em></p>
+    <p class="issue-detail"><em>Files: <code>specs/implementation-guide.md</code>; <code>test-cases/test-cases.md</code>.</em></p>
+    <p>All four appear only in the v1.7 change-note preamble (<code>implementation-guide.md</code> line 5), never in a chunk's <code>[Test:]</code> tag — confirmed by grep excluding the preamble line itself. Compounding: the same change-note sentence misattributes "is_baseline scope" to <code>TC-MU5-02</code> (a pre-existing, unrelated ensemble case, already correctly wired at P3-C04) instead of the real case, <code>TC-MU6-05</code> — so the note's own claim of progress on that item is illusory. The guide's "all nine" phantom-gate enumeration also still lists only the pre-v1.7 nine, omitting the two new mutation cases (TC-NF1-07, TC-MU6-04) that test-cases.md's own Totals paragraph counts as part of "11." Natural homes: TC-MU6-04/TC-MU6-05 → P3-C07 (alongside TC-MU6-01/03); TC-NF1-07 → P1-C01 (alongside TC-NF1-03/04); TC-RP7-02 → P6-C02 (alongside TC-RP7-01).</p>
+
+    <h2 id="important">Important Findings</h2>
+
+    <h3>I1 — <code>models→judge</code> and <code>models→reporting</code> imports are completely ungated, and — unlike every other residual in this project — undisclosed</h3>
+    <p class="issue-detail"><em>Panel: F2-blind (6/10), executed.</em></p>
+    <p>The spec's own enumeration of banned models-outbound imports covers exactly two targets (<code>wmj.worlds</code>, <code>wmj.harness</code>). Executed: a fabricated <code>wmj/models/*</code> file importing <code>wmj.judge.verdict</code> or <code>wmj.reporting.charts</code> passes both existing gates with zero flagged violations. Unlike the harness/worlds gaps (both found and fixed across two rounds, each time disclosed as the finding that motivated the fix), this asymmetry is not named anywhere as a residual — a break in the project's otherwise consistent "name the gap" discipline.</p>
+
+    <h3>I2 — Worlds have no registry/discovery mechanism; adding a world is not the low-touch scenario adding a model is</h3>
+    <p class="issue-detail"><em>Panel: F2-blind (6/10).</em></p>
+    <p><code>worlds</code> in ADR-004's loop is a hardcoded literal set with no <code>all_worlds()</code>/<code>pkgutil</code> equivalent anywhere (grepped, zero hits). Not a broken promise — MU-9 is worded model-scoped only — but a real asymmetry worth naming given the project's own reason for having two worlds (CLAUDE.md: "stops the judge being secretly specialised to one world").</p>
+
+    <h3>I3 — MU-5's matching-margin mechanism is hardcoded to the two named models; ADR-M5 implies it generalizes to any newly-registered unrigged model, but no mechanism does</h3>
+    <p class="issue-detail"><em>Panel: F2-blind (6/10).</em></p>
+    <p>ADR-M3 specifies the margin check as a fixed pairwise comparison between "the two models" (<code>direct</code>, <code>ensemble</code>) by name; ADR-M5's MU-9 disclosure says naming a third unrigged model in <code>recipe.md</code> is what makes it "compared under MU-5's margin" — no such N-model generalization is specified anywhere.</p>
+
+    <h3>I4 — TC-MU9-01(c)'s joined-name import check would false-positive on the exact import its own carve-out permits</h3>
+    <p class="issue-detail"><em>Panel: F2-calibrated (5/10 I1), executed.</em></p>
+    <p>The pinned join rule's worked examples only cover <code>from wmj.models import X</code> shapes; the harness's actual, sanctioned import — <code>from wmj.models.base import SeedSource</code> — joins to <code>wmj.models.base.SeedSource</code>, not literally in the allowed set <code>{wmj.models.registry, wmj.models.base}</code>. Executed: a literal implementation blocks this legitimate import. No fixture exercises this shape. Needs an explicit rule for "module already denotes a full submodule path."</p>
+
+    <h3>I5 — <code>component_key</code> has a second, sibling non-injectivity gap the colon-fix didn't address: type-representation collision</h3>
+    <p class="issue-detail"><em>Panel: F1-calibrated (6.5/10), executed.</em></p>
+    <p><code>component_key(1, "a") == component_key("1", "a")</code> and <code>component_key("ensemble", 3) == component_key("ensemble", "3")</code> — <code>str(p)</code> collapses an int and its decimal string to the same joined text. The spec itself uses both call shapes (<code>seeds.rng("member", k, "weights")</code> with <code>k</code> an int) with no pinned rule on caller type discipline. Same disease as the colon bug (Round 7's I4), one coercion step over. Fix: reject non-<code>str</code> parts at construction, same pattern as the colon guard.</p>
+
+    <h3>I6 — <code>check_prereg</code>'s first-added-commit resolution is ambiguous under delete-then-re-add; correct only if implemented with the right git ordering, which the spec doesn't pin</h3>
+    <p class="issue-detail"><em>Panel: D-calibrated (4/10 I2), executed; partially reconciled by E-blind (6.5/10), which confirmed <code>tail -1</code>/oldest-first resolution works correctly against the same scenario.</em></p>
+    <p><code>git log --diff-filter=A</code> can return multiple add-events for one path (delete, then honestly re-add with tuned content); the spec never states whether to take the newest or oldest. Taking the newest (a natural "first line of output" reading) selects the re-add commit and silently passes the gaming scenario the case exists to catch. E-blind confirms the <em>correct</em> choice (oldest/<code>tail -1</code>) closes it. Needs the ordering pinned explicitly in the spec text, not left to an implementer's luck.</p>
+
+    <h3>I7 — The canonical serializer's "floats via Python's <code>repr</code>" rule is a stated policy, not a pinned mechanism, and breaks under NumPy ≥2.0 — the exact version this review's own environment runs</h3>
+    <p class="issue-detail"><em>Panel: F1-blind (7/10), executed.</em></p>
+    <p><code>repr(np.float64(0.031))</code> under NumPy 2.x returns <code>np.float64(0.031)</code>, not valid JSON (NEP 51). <code>json.dumps</code> stays safe only because its C encoder never calls <code>__repr__</code> on a float — an implementation fact never stated. TC-NF3-01 checks package <em>names</em> only, not the <code>&lt;2.0</code> version ceiling. A natural hand-rolled implementation of "rendered with repr" breaks outright on the environment this review ran in. Needs the mechanism pinned (<code>.tolist()</code> before serialization, <code>json.dumps</code> as the sole float path) or the version ceiling gate-enforced.</p>
+
+    <h3>I8 — <code>envelope.meta</code>'s field count is stated inconsistently: judge §5 pins four fields, reporting §6 says three, silently dropping <code>thresholds_file</code></h3>
+    <p class="issue-detail"><em>Panel: B-calibrated (5/10 I1).</em></p>
+    <p>judge §5's example carries <code>{seed, platform, prereg_commit, thresholds_file}</code> — four fields. reporting §6 states "envelope.meta's three fields plus package_versions" and reporting's own run-manifest layout comment omits <code>thresholds_file</code>. No rationale given for dropping it, unlike <code>package_versions</code>'s deliberate new sourcing.</p>
+
+    <h3>I9 — TC-JU12-04 is wired at P4-C06 but needs <code>results.html</code>, which doesn't exist until P5-C04</h3>
+    <p class="issue-detail"><em>Panel: D-calibrated (4/10 I1).</em></p>
+    <p>TC-JU12-04's three-way consistency check needs judge §4, cross-cutting ADR-002 rule 3, and the results.html methods note — the third doesn't exist five chunks earlier at P4-C06, and no scope split (unlike TC-WD3-01/TC-RP2-01/TC-JU3-01's careful partial/full scoping elsewhere in the same guide) is given.</p>
+
+    <h3>I10 — <code>os</code>'s guarded-function list is illustrative, not exhaustive; <code>os.fork</code>/<code>os.exec*</code>/<code>os.posix_spawn</code> bypass the <code>subprocess</code> guard entirely</h3>
+    <p class="issue-detail"><em>Panel: E-blind (6.5/10), executed.</em></p>
+    <p>The spec's own list ("system, getcwd, getenv, urandom, getpid, listdir, stat, …") never names process-creation primitives that reach the same class of effect <code>os.system</code> is guarded against, and <code>subprocess</code> being guarded doesn't cover them. A plain build-checklist gap, not a structural defeat, but exactly the kind of enumeration omission four prior rounds already proved this project's lists are prone to.</p>
+
+    <h2 id="minor">Minor Findings</h2>
+    <ul>
+      <li><code>numpy.random</code>/<code>os</code> reflection escapes via <code>importlib.reload(os)</code> — a full guard defeat with no <code>ctypes</code>, no <code>__globals__</code> — but requires <code>import importlib</code>, already flagged by the static allowlist lint. Recommend adding as a named evasion <em>shape</em> to the TC-NF6-04/TC-JU12-02 corpus (E-blind).</li>
+      <li><code>implementation-guide.md</code>'s Changelog table has no v1.7 row despite a v1.7 header and change note (A-calibrated, A-blind, D-calibrated — three confirmations).</li>
+      <li>The <code>specs/*.html</code> staleness banners on four of six documents still say "v1.6" while their <code>.md</code>s are v1.7 — the banner mechanism itself drifts stale every round with nothing regenerating it (F1-blind).</li>
+      <li><code>ctx = WorldContext(world)</code> in ADR-004 doesn't match <code>WorldContext</code>'s real 6-field constructor from two producers — likely shorthand, but the same imprecision class as the other ADR-004 bugs (B-calibrated, F2-calibrated).</li>
+      <li><code>sharpness_hedge_threshold</code> is pinned per-world, not per-region, quietly narrowing the "add a region touches no file" claim — not a defect, but undisclosed as a deliberate simplification (F2-blind).</li>
+      <li><code>TC-MU2-02</code>'s "seed" scope tag at P1-C02 gives no indication what a reduced-scope version of a case whose only referent (a competent model) doesn't yet exist could possibly assert (D-blind).</li>
+    </ul>
+
+    <h2 id="verified">Verified-clean / Genuinely Sound</h2>
+    <p>Honesty record — the review confirmed as well as flagged:</p>
+    <ul>
+      <li><strong>The three purity documents (cross-cutting, judge §4, architecture-overview §2) are now mutually consistent</strong> on the tripwire/backstop framing — the exact Round-7 failure (judge §4's body silently kept the old wording) does not recur (C-calibrated).</li>
+      <li><strong><code>os</code>'s module-level function patches + reflection route</strong> — <code>np.get_include.__globals__['os'].getcwd()</code> still trips the guard (E-calibrated).</li>
+      <li><strong>The specific Round-6/7 escapes stay closed</strong>: the <code>sys.modules</code> swap fails as before, mutate-in-place for plain <code>os</code> functions works, <code>numpy.datetime64</code>'s guard fires for fresh module-attribute lookups (E-calibrated, E-blind).</li>
+      <li><strong><code>numpy.random</code>'s 63-name module-level patch closes the legacy-globals escape</strong> for ordinary <code>np.random.normal()</code>/<code>.uniform()</code> calls (E-calibrated).</li>
+      <li><strong>NF-4's <code>--batch</code> vs <code>--batch-check</code> mechanism</strong>, including the harder filename-only-leak case, holds under three independent executions (E-calibrated, E-blind, and earlier confirmed).</li>
+      <li><strong>TC-MU6-04's content-hash mechanism holds against realistic non-rewrite attacks</strong> — an honest second commit, and a delete-then-honest-re-add under the same path — when implemented with the correct (oldest-first) git ordering (E-blind).</li>
+      <li><strong>TC-NF1-07's colon-rejection, TC-RP7-02's SVG double-pin, and the <code>SeedSource</code>/<code>component_key</code> no-shift property</strong> all execute exactly as the v1.7 change notes claim (F1-calibrated, F1-blind).</li>
+      <li><strong>TC-NF6-08 (models→harness gate) and TC-MU9-03's pinned CLI entry point</strong> both execute exactly as specified, including catching the exact typo'd-subcommand scenario the pin was written to close (F2-calibrated).</li>
+      <li><strong>Judge blindness holds</strong> under every v1.7 data shape — no identity field reaches JudgeInput at any point in ADR-004's loop (F2-blind).</li>
+      <li><strong>Chunk count (28) and critical path (10)</strong> re-derived independently by three separate panels via longest-path, all matching (A-calibrated, D-calibrated, D-blind).</li>
+    </ul>
+
+    <h2 id="build-checks">Build Check Status after Round 8</h2>
+    <ul>
+      <li><strong>BC-1</strong> (canonical keying): held again — no recurrence found.</li>
+      <li><strong>BC-2</strong> (self-verified fixes fail next round): <strong>recurred a third time</strong>, but in a narrower, more mechanical way than before — the <em>macro</em> claims (drop completeness, tripwire+backstop) held; the <em>micro</em> execution details (three separate rebind-vs-mutate bugs, ADR-004's pseudocode) did not.</li>
+      <li><strong>BC-3</strong> (implementation guide never fully reconciled): recurred a third consecutive round — same four-case wiring gap pattern, now on different IDs each time.</li>
+      <li><strong>BC-4</strong> (no finite in-process enumeration closes Python's reflection/syscall graph): stays confirmed; this round found the enumeration was additionally incomplete even within its own intended scope (three ordinary, non-adversarial routes missed).</li>
+      <li><strong>BC-5</strong> <span class="new-badge">NEW</span> (standing pattern candidate): every "mutate in place" fix this project writes needs to generalize to <em>every reachable binding</em> of the guarded object (module-level name, submodule-level name, class vs. instance), not just the first one found. Three rounds, three different objects, the same missed generalization. Any future purity fix should audit for this class before being called "hardened."</li>
+    </ul>
+
+    <h2 id="disposition">Recommended Disposition</h2>
+
+    <div class="cluster">
+      <h3>Cluster 1 — Mechanical, execution-verified fixes available now (recommend fix)</h3>
+      <p>C10 (wire the four cases, fix the misattribution, add the v1.7 changelog row), I4 through I10, and the minors. Each has a demonstrated correct implementation already found by the panel that flagged it.</p>
+    </div>
+
+    <div class="cluster">
+      <h3>Cluster 2 — The purity hardening needs a second, more careful pass (recommend fix, same execution discipline, generalizing the pattern this time)</h3>
+      <p>C1 (patch <code>os._Environ</code>'s class, not the instance), C2 (disclose the <code>numpy.datetime64</code> rebind honestly, or find a class-level alternative), C3 (patch the <code>numpy.random</code> submodules directly, rewrite the TC-JU12-04 disclosure to be factually accurate), I10 (extend the <code>os</code> guard list). C9 (add "separate processes" to TC-NF1-01) is cheap and should travel with this cluster since it's the backstop these fixes lean on.</p>
+    </div>
+
+    <div class="cluster">
+      <h3>Cluster 3 — ADR-004 needs to be rethought before it's patched (recommend: decide the partitioning question first, then rewrite)</h3>
+      <p>C6 is the fork — likely resolved by making <code>JudgeInput</code> carry all of a world's regions per model (matching the pre-existing <code>region_labels</code> rationale), which would also resolve C4, C5, and C7 as a side effect of the same rewrite. This is not a bigger version of last round's C1/BC-4 fork — it's a bounded, mechanical redesign once the one question (does JudgeInput span one region or all of a world's regions?) is answered — but it should be answered deliberately, not patched around.</p>
+    </div>
+
+    <div class="cluster">
+      <h3>Cluster 4 — A real documentation-ownership decision (recommend: decide, write once)</h3>
+      <p>C8, the <code>out/</code> write-ownership contradiction across three documents.</p>
+    </div>
+
+    <p>The review does not decide any of Clusters 3–4's open questions. It records that the macro architecture is sound, the execution needs a second, more disciplined pass with the lesson generalized this time, and ADR-004's partitioning choice is the one item that needs a decision before more code gets written against it.</p>
+
+    <p class="gvm-attribution">Developed using the Grounded Vibe Methodology · Round 8 dual/blind · 14 independent reviewers, zero shared context between blind panels</p>
+  </main>
+
+  <script>
+    (function () {
+      const toc = document.getElementById('toc');
+      const headings = document.querySelectorAll('h2[id], h3[id]');
+      const links = [];
+
+      headings.forEach(function (h) {
+        const a = document.createElement('a');
+        a.href = '#' + h.id;
+        a.textContent = h.textContent;
+        if (h.tagName === 'H3') a.classList.add('toc-h3');
+        toc.appendChild(a);
+        links.push({ el: a, target: h });
+      });
+
+      function onScroll() {
+        let current = links[0];
+        for (let i = 0; i < links.length; i++) {
+          if (links[i].target.getBoundingClientRect().top <= 80) current = links[i];
+        }
+        links.forEach(function (l) { l.el.classList.remove('active'); });
+        if (current) {
+          current.el.classList.add('active');
+          const tocEl = document.getElementById('toc');
+          const elTop = current.el.offsetTop - tocEl.offsetTop;
+          const elBot = elTop + current.el.offsetHeight;
+          if (elTop < tocEl.scrollTop || elBot > tocEl.scrollTop + tocEl.clientHeight) {
+            tocEl.scrollTop = elTop - tocEl.clientHeight / 2;
+          }
+        }
+      }
+
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    })();
+  </script>
+</body>
+</html>
