@@ -163,12 +163,21 @@ fork. See `design-review/design-review-007.html` and the "Round 7 result" entry 
 
 **Next: a Round 8 (dual/blind) is owed by BC-2** — self-verification, even execution-based, is not an independent re-run, and no external panel has yet seen the reframed purity claim or ADR-004. The user owns whether/when to run it. If Round 8 clears to "Build with caveats" or "Build from this," `/gvm-build` can start at P1-C01.
 
+**Update — Round 8 complete (dual/blind, 14 reviewers, independent execution re-run of the v1.7 hardening).** Eighth "Do not build," but the finding shape is new: the Round 7 architecture call (drop JU-12 completeness, tripwire + TC-NF1-01 backstop) is **independently confirmed sound**. What broke is the execution under it, plus a brand-new design element:
+
+- **Purity hardening: the SAME rebind-vs-mutate bug recurred a THIRD time, three different objects.** `os.environ`'s dunders (`os.environ["X"]`, `dict(os.environ)`) bypass the instance-level patch — Python resolves special methods against the *type*. `numpy.datetime64` **cannot** be mutated in place at all (immutable C type) — only a rebind works, silently reopening a pre-capture escape. `numpy.random`'s private submodules (`_pcg64`, `_generator`) hold separate bindings the top-level patch never reaches — an ordinary `import numpy.random._pcg64` bypasses it, and TC-JU12-04's disclosed residual is factually wrong about its own example. All three execution-confirmed (E-cal, E-blind).
+- **TC-NF1-01 (the backstop) may itself be a phantom gate** — no "separate processes" requirement unlike its siblings; executed proof that an in-process cached value passes 10 "runs" while varying across processes (F1-blind).
+- **ADR-004 needs rethinking, not patching** — 5+ panels independently found its pseudocode doesn't typecheck against the registry contract (executed `AttributeError`), baselines are consumed before they're populated (4 panels, same computed sorted order), and — the deepest finding — its "one region per JudgeInput" **contradicts** the multi-region `region_labels` design stable since Round 3 (C-cal, B-cal).
+- **The wiring gap recurred a third consecutive round** on different IDs each time (6 panels: TC-MU6-04/05, TC-NF1-07, TC-RP7-02 unwired, misattribution repeated).
+
+New standing pattern, **BC-5 (candidate)**: every "mutate in place" fix needs to generalize to *every reachable binding* of the guarded object — module-level, submodule-level, class-vs-instance — not just the first one found. See `design-review/design-review-008.html` and the "Round 8 result" entry in `reviews/calibration.md`. **Awaiting user triage before the next fix pass.**
+
 **Known debt:** the `specs/*.html` twins carry a deterministic staleness banner (they
 regenerate with the NF5-02 parity hash at build time, P6-C02). The older "What exists"
 table below is itself stale (says v1.3/v1.0) — Round 6 flagged it; refresh when next
 editing this file.
 
-Last updated 2026-08-31 (Round 7 fixes applied, specs v1.7 / test-cases v1.4, commit db4a15e; Round 8 owed by BC-2).
+Last updated 2026-08-31 (design-review-008 — Round 8 complete; awaiting user triage).
 
 ---
 
