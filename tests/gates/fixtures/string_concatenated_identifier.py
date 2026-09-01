@@ -1,19 +1,25 @@
 """Evasion fixture: a string-concatenated identifier.
 
-**Honest limit, documented (independent-review finding, P1-C03 pass
-1):** the concatenation itself (`"e" + "v" + "al"`) is invisible to an
-identifier-based scan by construction — no Name/Attribute node ever
-contains the literal string "eval". What this fixture actually proves
-is narrower but still real: Python gives no way to turn a computed
-string into a callable without going through one of the banned
-invocation identifiers (`getattr`, `globals`, `vars`, `eval`,
-`__import__`) — so a string-concatenation attack is still caught, but
-via the identifier it's forced to invoke through
-(`getattr`/`__builtins__` here), never via detecting the concatenation
-route itself. This fixture is therefore confounded with the getattr/
-reflection fixtures by the nature of the language, not by a gap in
-this file — flagging that plainly rather than presenting it as
-independent coverage of a distinct evasion class.
+**Correction (independent-review finding, P1-C03 pass 2 — this
+docstring's earlier claim was wrong, not just incomplete):** pass 1
+found this fixture was flagged only via its `getattr`/`__builtins__`
+calls, not the concatenation (`"e" + "v" + "al"`) itself, and the first
+fix round's docstring claimed this was an *inherent* limit — "Python
+gives no way to invoke a computed name without going through one of
+the banned invocation identifiers." Pass 2 proved that claim false by
+building a real counterexample, `math.__dict__["s"+"qrt"]`, which
+invokes a dynamically-computed name using ZERO of the then-banned
+identifiers (see `tests/gates/fixtures/dict_namespace_lookup_route.py`,
+and `BANNED_IDENTIFIERS`'s own comment in `test_import_graph.py`,
+which now bans `__dict__`/`__getattribute__` because of exactly this).
+
+So: the concatenation route is not undetectable by nature — it was a
+genuine, fixable list omission. This fixture, using `getattr`, remains
+a valid member of the corpus (it's still flagged, still a real
+historical evasion shape), but it does NOT independently demonstrate
+"string concatenation defeats the lint" — it demonstrates "string
+concatenation plus getattr is still caught via getattr." The distinct
+concatenation-via-`__dict__` shape now has its own dedicated fixture.
 """
 
 _NAME = "e" + "v" + "al"

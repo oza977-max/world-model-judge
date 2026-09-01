@@ -71,6 +71,23 @@ def _is_allowed_judge_import(name: str) -> bool:
 # The pinned identifier list (cross-cutting ADR-003, TC-NF6-02) —
 # deliberately over-broad; TC-NF6-06 proves it doesn't cry wolf on the
 # real judge source.
+#
+# **Extended past the literal pinned 13 (independent-review finding,
+# P1-C03 pass 2): `__dict__` and `__getattribute__` added.** Pass 2
+# proved by execution that `module.__dict__[computed_name]` reaches and
+# calls a dynamically-named attribute (e.g. `math.__dict__["sqrt"]`)
+# using zero identifiers from the originally-pinned list and only
+# allowlisted imports — a real, working bypass, not a theoretical one.
+# `__getattribute__` is the same reflection primitive in method form
+# (`obj.__getattribute__(name)` is `getattr(obj, name)` restated) and
+# is added alongside it for the same reason. Both are exactly the class
+# of *known, enumerable* reflection primitive this list already bans
+# (`vars`/`getattr`/`__globals__`/`__subclasses__` are the same kind of
+# thing) — omitting them was a gap in the pinned list, not evidence
+# that this class of route is inherently undetectable (that honest
+# residual is `ctypes` and pre-capture routes, per cross-cutting ADR-002
+# rule 3, not this). Flagged as a future design-review correction to
+# cross-cutting.md's pinned list, not silently edited there.
 BANNED_IDENTIFIERS = {
     "exec",
     "eval",
@@ -81,6 +98,8 @@ BANNED_IDENTIFIERS = {
     "vars",
     "getattr",
     "__globals__",
+    "__dict__",
+    "__getattribute__",
     "__subclasses__",
     "__bases__",
     "__mro__",
@@ -179,9 +198,10 @@ def test_tc_nf6_01_02_03_judge_package_only_uses_allowlisted_imports():
 
 def test_tc_nf6_04_every_fixture_is_flagged():
     fixtures = _fixture_files()
-    assert len(fixtures) == 14, (
-        "the evasion corpus should cover exactly the 14 named categories "
-        "(cross-cutting ADR-003 / TC-NF6-04) — a looser bound would "
+    assert len(fixtures) == 15, (
+        "the evasion corpus should cover exactly the 15 named categories "
+        "(cross-cutting ADR-003 / TC-NF6-04, plus the pass-2-added "
+        "__dict__ namespace-lookup route) — a looser bound would "
         "tolerate silently losing a fixture"
     )
     for path in fixtures:
