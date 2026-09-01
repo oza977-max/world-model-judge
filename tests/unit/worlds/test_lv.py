@@ -85,6 +85,44 @@ def test_regions_satisfy_worlds_section_7_invariants():
     assert disjoint
 
 
+def test_validate_region_spec_rejects_a_box_touching_the_floor():
+    """The RegionSpecError guard's failure path, exercised directly
+    (independent-review pass-2 finding: the guard was correct but
+    untested) — a training box whose low bound sits at the floor
+    itself is not *strictly* above it."""
+    from wmj.worlds.base import RegionSpec
+    from wmj.worlds.errors import RegionSpecError
+
+    bad_spec = RegionSpec(
+        training_state_box=np.array([[lv.STATE_FLOOR, 6.0], [1.0, 4.0]]),
+        training_action_interval=np.array([[-0.5, 0.5]]),
+        out_regions=(),
+    )
+    with pytest.raises(RegionSpecError):
+        lv._validate_region_spec(bad_spec)
+
+
+def test_validate_region_spec_rejects_an_out_region_overlapping_training():
+    """The disjointness half of the same guard's failure path."""
+    from wmj.worlds.base import OutRegion, RegionSpec
+    from wmj.worlds.errors import RegionSpecError
+
+    bad_spec = RegionSpec(
+        training_state_box=np.array([[2.0, 6.0], [1.0, 4.0]]),
+        training_action_interval=np.array([[-0.5, 0.5]]),
+        out_regions=(
+            OutRegion(
+                region_name="overlapping",
+                axis="state",
+                state_box=np.array([[3.0, 5.0], [2.0, 3.0]]),  # inside training
+                action_box=np.array([[-0.5, 0.5]]),
+            ),
+        ),
+    )
+    with pytest.raises(RegionSpecError):
+        lv._validate_region_spec(bad_spec)
+
+
 def test_conserved_quantity_is_a_scalar():
     state = np.array([4.5, 2.0])
     value = lv.conserved(state)
