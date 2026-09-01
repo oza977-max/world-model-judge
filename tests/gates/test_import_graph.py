@@ -8,9 +8,23 @@ TC-NF6-04: the evasion-fixture regression corpus — every fixture must
 be flagged by the gate.
 TC-NF6-06: the clean-pass guard — the real judge source must NOT be
 flagged (checks 02/03 are deliberately over-broad).
-TC-NF6-07/08/09: models package never imports wmj.worlds / wmj.harness
-/ wmj.judge / wmj.reporting, in any direction, via the joined
-module+name check design-review-005/008 pinned.
+TC-NF6-07/08/09: models package's outward imports are a full allowlist
+(not just the three named forbidden directions), matching cross-cutting
+ADR-003's own claim that models' "only sanctioned outward imports are
+now, completely: numpy, math, dataclasses, typing, wmj.models.base,
+wmj.models.registry — nothing else, in any direction." **Corrected here
+to also admit `wmj.errors` and `hashlib` (independent-review finding,
+P1-C03 pass 1, extended while building the real allowlist):** that
+sentence is falsified by the project's own already-reviewed code —
+`wmj/models/base.py` legitimately imports `wmj.errors.WmjError`
+(the pinned "every wmj exception subclasses WmjError" convention) and
+`hashlib` (`component_key`'s blake2b digest, ADR-002 rule 2), both
+built and reviewed at P1-C01, both omitted from cross-cutting.md's
+list. Rather than silently building a gate that lets the real code
+pass while leaving the spec's overclaim uncorrected, both are added to
+the allowlist here and the omission is flagged as a future
+design-review correction to cross-cutting.md (not amended in this
+build chunk).
 """
 
 from __future__ import annotations
@@ -73,7 +87,22 @@ BANNED_IDENTIFIERS = {
     "__class__",
 }
 
-MODELS_FORBIDDEN_PACKAGES = ("wmj.worlds", "wmj.harness", "wmj.judge", "wmj.reporting")
+# cross-cutting ADR-003's pinned "only sanctioned outward imports"
+# list, PLUS wmj.errors and hashlib (see module docstring's Post-review
+# addendum above — the spec text omitted both; wmj/models/base.py's
+# component_key needs hashlib.blake2b per ADR-002 rule 2, built and
+# reviewed at P1-C01).
+MODELS_ALLOWLIST = {"numpy", "math", "dataclasses", "typing", "wmj.errors", "hashlib"}
+MODELS_OWN_PACKAGE = "wmj.models"
+
+
+def _is_allowed_models_import(name: str) -> bool:
+    if name == MODELS_OWN_PACKAGE or name.startswith(MODELS_OWN_PACKAGE + "."):
+        return True
+    for allowed in MODELS_ALLOWLIST | ALWAYS_ALLOWED:
+        if name == allowed or name.startswith(allowed + "."):
+            return True
+    return False
 
 
 def _parse_file(path: Path) -> ast.Module:
@@ -123,14 +152,16 @@ def run_judge_gate(tree: ast.Module) -> list[str]:
 
 
 def _models_gate_violations(tree: ast.Module) -> list[str]:
-    """TC-NF6-07/08/09: models must never import worlds/harness/judge/reporting."""
+    """TC-NF6-07/08/09: models' outward imports are a full allowlist,
+    not just a denylist of the three named forbidden directions —
+    matching cross-cutting ADR-003's own "nothing else, in any
+    direction" claim (with the wmj.errors correction documented above)."""
     names = full_import_names(tree) | joined_importfrom_names(tree)
-    violations = []
-    for name in sorted(names):
-        for forbidden in MODELS_FORBIDDEN_PACKAGES:
-            if name == forbidden or name.startswith(forbidden + "."):
-                violations.append(f"models imports {name!r} (forbidden: {forbidden})")
-    return violations
+    return [
+        f"models imports {name!r}, outside the allowlist {MODELS_ALLOWLIST}"
+        for name in sorted(names)
+        if not _is_allowed_models_import(name)
+    ]
 
 
 # --- TC-NF6-01/02/03: the judge allowlist/identifier/numpy.random checks ---
@@ -148,7 +179,11 @@ def test_tc_nf6_01_02_03_judge_package_only_uses_allowlisted_imports():
 
 def test_tc_nf6_04_every_fixture_is_flagged():
     fixtures = _fixture_files()
-    assert len(fixtures) >= 12, "the evasion corpus should cover every named category"
+    assert len(fixtures) == 14, (
+        "the evasion corpus should cover exactly the 14 named categories "
+        "(cross-cutting ADR-003 / TC-NF6-04) — a looser bound would "
+        "tolerate silently losing a fixture"
+    )
     for path in fixtures:
         tree = _parse_file(path)
         violations = run_judge_gate(tree)
@@ -194,3 +229,21 @@ def test_tc_nf6_07_08_09_allows_the_sanctioned_models_base_import():
     tree = ast.parse("from wmj.models.base import SeedSource, component_key\n")
     violations = _models_gate_violations(tree)
     assert violations == []
+
+
+def test_tc_nf6_07_08_09_allows_wmj_errors():
+    """wmj.errors is the documented allowlist correction (see this
+    file's module docstring) — real code needs it and it isn't one of
+    the four forbidden sideways packages."""
+    tree = ast.parse("from wmj.errors import WmjError\n")
+    assert _models_gate_violations(tree) == []
+
+
+def test_tc_nf6_07_08_09_is_a_real_allowlist_not_just_a_four_item_denylist():
+    """Independent-review finding, P1-C03 pass 1: the gate must reject
+    ANY import outside the sanctioned set, not only the four named
+    forbidden packages — otherwise `import os` or `import requests`
+    inside a models file would sail through uncaught."""
+    for source in ("import os\n", "import requests\n", "import sys\n"):
+        tree = ast.parse(source)
+        assert _models_gate_violations(tree) != [], f"{source!r} was not caught"
