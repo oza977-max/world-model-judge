@@ -44,7 +44,8 @@ def crps_gaussian(
     """
     if np.any(spread <= 0.0):
         raise NonPositiveSpreadError(
-            f"crps_gaussian requires spread > 0 everywhere, got {spread!r}"
+            f"crps_gaussian requires spread > 0 everywhere, got {spread!r} "
+            f"(judge spec §7 sigma<=0 guard)"
         )
     z = (outcome - mean) / spread
     return spread * (

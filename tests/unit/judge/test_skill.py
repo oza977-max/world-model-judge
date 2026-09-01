@@ -48,6 +48,24 @@ def test_crps_scales_with_spread_at_fixed_standardised_distance():
     assert large[0] == pytest.approx(small[0] * 2.0, rel=1e-9)
 
 
+def test_crps_gaussian_broadcasts_over_a_multi_trial_multi_dimension_array():
+    # shape [n_trials, d] -- the real shape crps_gaussian is called with
+    # (harness/skeleton.py rolls out N_EVAL trials over d=2 dimensions)
+    mean = np.array([[0.0, 1.0], [2.0, -1.0]])
+    spread = np.array([[1.0, 0.5], [0.2, 2.0]])
+    outcome = np.array([[0.1, 1.2], [2.3, -0.5]])
+
+    result = crps_gaussian(mean, spread, outcome)
+
+    assert result.shape == (2, 2)
+    for i in range(2):
+        for j in range(2):
+            scalar = crps_gaussian(
+                mean[i : i + 1, j], spread[i : i + 1, j], outcome[i : i + 1, j]
+            )
+            assert result[i, j] == pytest.approx(scalar[0])
+
+
 def test_crps_rejects_non_positive_spread():
     with pytest.raises(NonPositiveSpreadError):
         crps_gaussian(np.array([0.0]), np.array([0.0]), np.array([0.0]))
