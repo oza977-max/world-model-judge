@@ -95,9 +95,12 @@ def test_tc_wd4_01_lv_separation_grows_sub_exponentially():
         [separation_curve(lv.transition, s, 700, lv.SCALE, 1e-6) for s in starts]
     )
     med = median_separation_curve(curves)
-    assert med[-1] / med[0] < 10.0
-    # an exponential runaway would put log-separation far above its start
-    assert np.log(med[-1]) - np.log(med[0]) < np.log(10.0)
+    # Two-sided (review pass 1): executed, the ratio sits in a 0.6-1.4
+    # band. An exponential runaway (1e-6 * exp(0.02 t) reaches ~1e6 by
+    # step 700) fails the upper bound; a broken integrator that pulls
+    # the twin trajectories together fails the lower one.
+    ratio = med[-1] / med[0]
+    assert 0.1 < ratio < 10.0, f"TC-WD4-01: LV separation ratio {ratio:.3g} outside (0.1, 10)"
 
 
 # --- TC-WD4-02: pendulum — regime-dependent ---

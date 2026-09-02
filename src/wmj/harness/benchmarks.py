@@ -119,11 +119,15 @@ def build_divergence_artefact(
     # transparency only. A start whose invariant is exactly 0.0 has no
     # such ratio; it is skipped rather than emitted as inf, which the
     # canonical serializer rightly refuses (ADR-002 rule 4).
-    rel_vs_initial = max(
+    ratios_vs_initial = [
         abs_drift / abs(initial)
         for abs_drift, initial in zip(abs_drifts, initial_values)
         if initial != 0.0
-    )
+    ]
+    # Every start with a zero invariant is a measure-zero event for the
+    # declared boxes, but an empty max() would crash the benchmark on
+    # a transparency-only figure; report NaN-free None instead.
+    rel_vs_initial = max(ratios_vs_initial) if ratios_vs_initial else None
 
     assert_drift_within_bound(rel_drift_max, drift_bound, world_name)
 
