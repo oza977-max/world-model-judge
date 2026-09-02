@@ -110,6 +110,21 @@ def _is_allowed_judge_import(name: str) -> bool:
 # execution to reach `math.sqrt` with zero previously-banned identifiers
 # touched. Same "obvious sibling omission" class as `__dict__`, not a
 # new kind of gap.
+#
+# **Traceback/frame identifiers added, pass 5 (independent-review
+# finding).** `except X as e: e.__traceback__.tb_frame` hands over a
+# live frame object with no import and no identifier from the list
+# above — frame objects expose `f_globals`/`f_locals`/`f_builtins`
+# (the SAME capability `globals`/`locals`/`__builtins__` already ban,
+# reached via a different route: exception handling, a core language
+# feature, not a named builtin call) and `f_back`/`tb_next` (walking
+# the frame/traceback chain to outer scopes). Confirmed by execution:
+# `frame.f_builtins["ev"+"al"]` reaches the entire builtins table in
+# one hop — more consequential than any prior finding, since it is not
+# scoped to one module's namespace. Not import-blocked (raising/
+# catching needs no import) and not the disclosed ctypes/pre-capture
+# residual (this is a pure syntax-level route, exactly what this lint
+# exists to catch).
 BANNED_IDENTIFIERS = {
     "exec",
     "eval",
@@ -127,6 +142,13 @@ BANNED_IDENTIFIERS = {
     "__bases__",
     "__mro__",
     "__class__",
+    "__traceback__",
+    "tb_frame",
+    "tb_next",
+    "f_globals",
+    "f_locals",
+    "f_builtins",
+    "f_back",
 }
 
 # cross-cutting ADR-003's pinned "only sanctioned outward imports"
@@ -243,6 +265,18 @@ def test_locals_fixture_is_caught_specifically_by_the_locals_identifier():
     assert run_judge_gate(tree) != []
 
 
+def test_traceback_fixture_is_caught_specifically_by_the_frame_identifiers():
+    """Isolation proof: the pass-5 fixture must be flagged because of
+    the traceback/frame identifiers, not any pre-existing banned name —
+    it legitimately uses three of the newly-added ones together
+    (__traceback__, tb_frame, f_locals), none of which existed on the
+    list before this round."""
+    tree = _parse_file(FIXTURES_DIR / "traceback_frame_capture_route.py")
+    banned_found = scan_banned_identifiers(tree, BANNED_IDENTIFIERS)
+    assert banned_found == {"__traceback__", "tb_frame", "f_locals"}
+    assert run_judge_gate(tree) != []
+
+
 # --- TC-NF6-01/02/03: the judge allowlist/identifier/numpy.random checks ---
 
 
@@ -258,12 +292,13 @@ def test_tc_nf6_01_02_03_judge_package_only_uses_allowlisted_imports():
 
 def test_tc_nf6_04_every_fixture_is_flagged():
     fixtures = _fixture_files()
-    assert len(fixtures) == 17, (
-        "the evasion corpus should cover exactly the 17 named categories "
+    assert len(fixtures) == 18, (
+        "the evasion corpus should cover exactly the 18 named categories "
         "(cross-cutting ADR-003 / TC-NF6-04, plus the pass-2-added "
         "__dict__ namespace-lookup route, the pass-3-added metaclass "
-        "namespace-capture route, and the pass-4-added locals() route) "
-        "— a looser bound would tolerate silently losing a fixture"
+        "namespace-capture route, the pass-4-added locals() route, and "
+        "the pass-5-added traceback/frame-capture route) — a looser "
+        "bound would tolerate silently losing a fixture"
     )
     for path in fixtures:
         tree = _parse_file(path)
