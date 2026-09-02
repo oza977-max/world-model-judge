@@ -38,7 +38,9 @@ class UndeclaredRegionError(WmjError):
 
     The name is the join key every downstream lookup uses; a typo here
     would silently detach the trial from its divergence curve and
-    climatology table, so it fails loudly instead (WD-5, TC-WD5-01).
+    climatology table, so it fails loudly instead (WD-5, worlds ADR-W4;
+    no numbered test case covers this path — it is a fail-loudly
+    convention, cross-cutting Error-Handling rule 1).
     """
 
 
@@ -91,8 +93,8 @@ def label_trial(
         raise UndeclaredRegionError(
             f"WD-5 label: region {region_name!r} is not one this world declares "
             f"{list(declared)} — refusing to emit a label that no divergence "
-            f"curve or climatology table could be joined to (worlds ADR-W4, "
-            f"TC-WD5-01)"
+            f"curve or climatology table could be joined to (WD-5, worlds "
+            f"ADR-W4; fail-loudly convention, cross-cutting Error-Handling rule 1)"
         )
     state_in = state_in_training_box(start_state, region_spec.training_state_box)
     actions_in = actions_in_trained_interval(actions, region_spec.training_action_interval)
