@@ -101,6 +101,15 @@ def _is_allowed_judge_import(name: str) -> bool:
 # residual is `ctypes` and pre-capture routes, per cross-cutting ADR-002
 # rule 3, not this). Flagged as a future design-review correction to
 # cross-cutting.md's pinned list, not silently edited there.
+#
+# **`locals` added, pass 4 (independent-review finding):** the third
+# member of Python's own namespace-introspection trio — `locals`/
+# `globals`/`vars` are conventionally documented together, and `globals`
+# and `vars` were already banned; omitting `locals` left the identical
+# computed-name lookup open via `locals()["s"+"qrt"]`, confirmed by
+# execution to reach `math.sqrt` with zero previously-banned identifiers
+# touched. Same "obvious sibling omission" class as `__dict__`, not a
+# new kind of gap.
 BANNED_IDENTIFIERS = {
     "exec",
     "eval",
@@ -108,6 +117,7 @@ BANNED_IDENTIFIERS = {
     "__import__",
     "__builtins__",
     "globals",
+    "locals",
     "vars",
     "getattr",
     "__globals__",
@@ -224,6 +234,15 @@ def test_metaclass_fixture_is_caught_specifically_by_the_metaclass_check():
     assert run_judge_gate(tree) != []
 
 
+def test_locals_fixture_is_caught_specifically_by_the_locals_identifier():
+    """Isolation proof: the pass-4 fixture must be flagged because
+    `locals` itself is now banned, not confounded by anything else."""
+    tree = _parse_file(FIXTURES_DIR / "locals_namespace_lookup_route.py")
+    banned_found = scan_banned_identifiers(tree, BANNED_IDENTIFIERS)
+    assert banned_found == {"locals"}
+    assert run_judge_gate(tree) != []
+
+
 # --- TC-NF6-01/02/03: the judge allowlist/identifier/numpy.random checks ---
 
 
@@ -239,12 +258,12 @@ def test_tc_nf6_01_02_03_judge_package_only_uses_allowlisted_imports():
 
 def test_tc_nf6_04_every_fixture_is_flagged():
     fixtures = _fixture_files()
-    assert len(fixtures) == 16, (
-        "the evasion corpus should cover exactly the 16 named categories "
+    assert len(fixtures) == 17, (
+        "the evasion corpus should cover exactly the 17 named categories "
         "(cross-cutting ADR-003 / TC-NF6-04, plus the pass-2-added "
-        "__dict__ namespace-lookup route and the pass-3-added metaclass "
-        "namespace-capture route) — a looser bound would tolerate "
-        "silently losing a fixture"
+        "__dict__ namespace-lookup route, the pass-3-added metaclass "
+        "namespace-capture route, and the pass-4-added locals() route) "
+        "— a looser bound would tolerate silently losing a fixture"
     )
     for path in fixtures:
         tree = _parse_file(path)
