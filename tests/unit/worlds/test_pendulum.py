@@ -74,6 +74,29 @@ def test_world_declares_dimensionality_and_scale():
     )
 
 
+def test_validate_region_spec_rejects_an_out_region_overlapping_training():
+    """The RegionSpecError guard's failure path, exercised directly
+    (independent-review finding, P2-C02 pass 1: the guard was correct
+    but untested, inconsistent with lv.py's own established pattern)."""
+    from wmj.worlds.base import OutRegion, RegionSpec
+    from wmj.worlds.errors import RegionSpecError
+
+    bad_spec = RegionSpec(
+        training_state_box=pendulum.regions().training_state_box,
+        training_action_interval=pendulum.regions().training_action_interval,
+        out_regions=(
+            OutRegion(
+                region_name="overlapping",
+                axis="state",
+                state_box=pendulum.regions().training_state_box.copy(),
+                action_box=np.array([[-1.0, 1.0]]),
+            ),
+        ),
+    )
+    with pytest.raises(RegionSpecError):
+        pendulum._validate_region_spec(bad_spec)
+
+
 def test_regions_declares_training_and_out_region():
     region_spec = pendulum.regions()
     assert region_spec.training_state_box.shape == (4, 2)
