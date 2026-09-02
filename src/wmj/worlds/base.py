@@ -43,3 +43,27 @@ class Task:
     kind: str  # "control" | "planning"
     tolerance: float
     horizon: int
+
+
+def distance(a: np.ndarray, b: np.ndarray, scale: np.ndarray) -> float:
+    """The one shared normalised-distance metric (worlds spec ADR-W3).
+
+    In plain words: to compare two states fairly when they mix
+    different units (a rabbit count, a radian), divide each dimension
+    by the world's own typical scale first, then take the RMS. This is
+    the same metric used everywhere a "how far off" number is needed —
+    the divergence curves, the judge's trajectory grading, every
+    task's tolerance.
+
+    RMS over state dimensions each divided by the world's declared
+    scale vector: distance(a, b) = sqrt(mean_d(((a_d - b_d) / scale_d)^2)).
+    """
+    normalised_diff = (a - b) / scale
+    return float(np.sqrt(np.mean(normalised_diff**2)))
+
+
+def within_tolerance(distance_value: float, tolerance: float) -> bool:
+    """Band-edge classification is closed (worlds spec §4.1): a
+    distance exactly equal to the tolerance passes, deterministically —
+    never an off-by-one ambiguity at the boundary."""
+    return distance_value <= tolerance
