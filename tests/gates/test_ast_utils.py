@@ -14,6 +14,7 @@ from tests.gates._ast_utils import (
     full_import_names,
     joined_importfrom_names,
     scan_banned_identifiers,
+    scan_metaclass_usage,
     scan_numpy_random_usage,
     top_level_import_names,
 )
@@ -107,6 +108,21 @@ def test_scan_banned_identifiers_clean_source_finds_nothing():
     tree = _parse("import numpy as np\nx = np.array([1, 2])\n")
     found = scan_banned_identifiers(tree, {"eval", "exec", "__globals__"})
     assert found == set()
+
+
+def test_scan_metaclass_usage_finds_a_metaclass_keyword():
+    tree = _parse("class Probe(metaclass=SomeMeta):\n    pass\n")
+    assert scan_metaclass_usage(tree) is True
+
+
+def test_scan_metaclass_usage_clean_source_finds_nothing():
+    tree = _parse("class Probe:\n    pass\n")
+    assert scan_metaclass_usage(tree) is False
+
+
+def test_scan_metaclass_usage_ignores_ordinary_base_classes():
+    tree = _parse("class Probe(SomeBase, OtherBase):\n    pass\n")
+    assert scan_metaclass_usage(tree) is False
 
 
 def test_scan_numpy_random_usage_finds_direct_import():

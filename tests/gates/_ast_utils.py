@@ -100,6 +100,26 @@ def scan_banned_identifiers(tree: ast.Module, banned: set[str]) -> set[str]:
     return found
 
 
+def scan_metaclass_usage(tree: ast.Module) -> bool:
+    """True if any class definition declares `metaclass=...`.
+
+    A structural check, not an identifier check (independent-review
+    finding, P1-C03 pass 3): a custom metaclass's `__new__` receives
+    the class body's namespace as a plain dict, passed as an ORDINARY
+    parameter — the same capability `__dict__`/`getattr` expose, but
+    reaching it this way touches none of the banned Name/Attribute
+    identifiers `scan_banned_identifiers` looks for. No wmj code has a
+    legitimate reason to define a custom metaclass, so this is banned
+    outright rather than chased identifier-by-identifier.
+    """
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef):
+            for keyword in node.keywords:
+                if keyword.arg == "metaclass":
+                    return True
+    return False
+
+
 def scan_numpy_random_usage(tree: ast.Module) -> bool:
     """True if tree imports numpy.random (any form) or accesses a
     `.random` attribute anywhere (TC-NF6-03's wholesale ban).

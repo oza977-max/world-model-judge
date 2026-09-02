@@ -25,6 +25,18 @@ pass while leaving the spec's overclaim uncorrected, both are added to
 the allowlist here and the omission is flagged as a future
 design-review correction to cross-cutting.md (not amended in this
 build chunk).
+
+**Metaclass ban, added pass 3 (independent-review finding):** a custom
+metaclass's `__new__` receives the class body's namespace as a plain
+dict, handed over as an ORDINARY parameter — the same capability
+`__dict__`/`getattr` expose, but reaching it this way triggers no
+banned Name/Attribute node at all, since the dict just arrives as a
+function argument. This is a structural check (`scan_metaclass_usage`),
+not one more identifier to enumerate — the reviewer's own point was
+that identifier-by-identifier patching of this class of route is
+whack-a-mole; banning `metaclass=` outright closes the whole family in
+one rule, since no wmj code has a legitimate reason to define one.
+Applied to both the judge gate and the models gate.
 """
 
 from __future__ import annotations
@@ -36,6 +48,7 @@ from tests.gates._ast_utils import (
     full_import_names,
     joined_importfrom_names,
     scan_banned_identifiers,
+    scan_metaclass_usage,
     scan_numpy_random_usage,
 )
 
@@ -167,6 +180,12 @@ def run_judge_gate(tree: ast.Module) -> list[str]:
     if scan_numpy_random_usage(tree):
         violations.append("TC-NF6-03: numpy.random usage found")
 
+    if scan_metaclass_usage(tree):
+        violations.append(
+            "metaclass usage found (structural ban, P1-C03 pass 3 — see "
+            "module docstring)"
+        )
+
     return violations
 
 
@@ -174,13 +193,35 @@ def _models_gate_violations(tree: ast.Module) -> list[str]:
     """TC-NF6-07/08/09: models' outward imports are a full allowlist,
     not just a denylist of the three named forbidden directions —
     matching cross-cutting ADR-003's own "nothing else, in any
-    direction" claim (with the wmj.errors correction documented above)."""
+    direction" claim (with the wmj.errors correction documented above).
+    Also applies the metaclass structural ban (see module docstring)."""
     names = full_import_names(tree) | joined_importfrom_names(tree)
-    return [
+    violations = [
         f"models imports {name!r}, outside the allowlist {MODELS_ALLOWLIST}"
         for name in sorted(names)
         if not _is_allowed_models_import(name)
     ]
+    if scan_metaclass_usage(tree):
+        violations.append(
+            "metaclass usage found (structural ban, P1-C03 pass 3 — see "
+            "module docstring)"
+        )
+    return violations
+
+
+# --- Metaclass structural ban (P1-C03 pass 3) ---
+
+
+def test_metaclass_fixture_is_caught_specifically_by_the_metaclass_check():
+    """Isolation proof, matching how the __dict__ fixture was verified:
+    this fixture must be flagged BECAUSE of the metaclass mechanism,
+    not confounded by some already-banned identifier also present."""
+    tree = _parse_file(
+        FIXTURES_DIR / "metaclass_namespace_capture_route.py"
+    )
+    assert scan_metaclass_usage(tree) is True
+    assert scan_banned_identifiers(tree, BANNED_IDENTIFIERS) == set()
+    assert run_judge_gate(tree) != []
 
 
 # --- TC-NF6-01/02/03: the judge allowlist/identifier/numpy.random checks ---
@@ -198,11 +239,12 @@ def test_tc_nf6_01_02_03_judge_package_only_uses_allowlisted_imports():
 
 def test_tc_nf6_04_every_fixture_is_flagged():
     fixtures = _fixture_files()
-    assert len(fixtures) == 15, (
-        "the evasion corpus should cover exactly the 15 named categories "
+    assert len(fixtures) == 16, (
+        "the evasion corpus should cover exactly the 16 named categories "
         "(cross-cutting ADR-003 / TC-NF6-04, plus the pass-2-added "
-        "__dict__ namespace-lookup route) — a looser bound would "
-        "tolerate silently losing a fixture"
+        "__dict__ namespace-lookup route and the pass-3-added metaclass "
+        "namespace-capture route) — a looser bound would tolerate "
+        "silently losing a fixture"
     )
     for path in fixtures:
         tree = _parse_file(path)
