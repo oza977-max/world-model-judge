@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Design Review 009 — World Model Judge</title>
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+
+    body {
+      font-family: "ET Book", Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif;
+      color: #111;
+      background: #fffff8;
+      line-height: 1.6;
+      padding: 2rem 1rem 6rem;
+      max-width: 1480px;
+      margin: 0 auto;
+    }
+
+    /* ── Typography ── */
+    h1 {
+      font-size: 2.4rem;
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.4rem;
+      color: #111;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 400;
+      font-style: italic;
+      margin-top: 3rem;
+      margin-bottom: 1rem;
+      color: #111;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 0.3rem;
+    }
+
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-top: 2rem;
+      margin-bottom: 0.6rem;
+      color: #333;
+    }
+
+    p, li {
+      font-size: 1rem;
+      line-height: 1.7;
+      margin-bottom: 0.8rem;
+      max-width: 1000px;
+    }
+
+    ul, ol { padding-left: 1.4rem; margin-bottom: 1.2rem; }
+    li { margin-bottom: 0.4rem; }
+
+    .subtitle {
+      font-size: 1.1rem;
+      font-style: italic;
+      color: #555;
+      margin-bottom: 2.5rem;
+      max-width: 1000px;
+    }
+
+    .date {
+      font-size: 0.9rem;
+      color: #888;
+      margin-bottom: 0.2rem;
+    }
+
+    /* ── Floating TOC (Left Side) ── */
+    nav.toc {
+      position: fixed;
+      top: 2rem;
+      left: 2rem;
+      width: 220px;
+      max-height: calc(100vh - 4rem);
+      overflow-y: auto;
+      background: #fffff8;
+      border-right: 2px solid #ddd;
+      padding: 1rem 1rem 1rem 0;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      z-index: 100;
+    }
+
+    nav.toc .toc-title {
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #999;
+      margin-bottom: 0.6rem;
+    }
+
+    nav.toc a {
+      color: #555;
+      text-decoration: none;
+      display: block;
+      padding: 0.15rem 0;
+      transition: color 0.15s;
+    }
+
+    nav.toc a:hover { color: #111; }
+    nav.toc a.active { color: #111; font-weight: 600; }
+    nav.toc .toc-h3 { padding-left: 0.8rem; font-size: 0.78rem; color: #888; }
+    nav.toc .toc-h3:hover { color: #555; }
+
+    /* Offset main content for left TOC */
+    main {
+      margin-left: 260px;
+      max-width: 1000px;
+    }
+
+    /* ── Sidenotes (Right Margin) ── */
+    .sidenote {
+      float: right;
+      clear: right;
+      width: 220px;
+      margin-right: -260px;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      color: #666;
+      padding-left: 1rem;
+      border-left: 2px solid #e0e0e0;
+    }
+
+    /* ── Tables (Few's principles) ── */
+    table {
+      border-collapse: collapse;
+      margin: 1.5rem 0 2rem;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      width: auto;
+      min-width: 480px;
+      overflow-x: auto;
+    }
+
+    thead th {
+      text-align: left;
+      font-weight: 600;
+      padding: 0.5rem 1rem 0.5rem 0;
+      border-bottom: 2px solid #333;
+      color: #111;
+    }
+
+    tbody td {
+      padding: 0.45rem 1rem 0.45rem 0;
+      border-bottom: 1px solid #e8e8e8;
+      vertical-align: top;
+    }
+
+    tbody tr:last-child td { border-bottom: 2px solid #333; }
+    tbody tr:nth-child(even) { background: #f9f9f4; }
+
+    caption {
+      font-style: italic;
+      font-size: 0.88rem;
+      color: #666;
+      text-align: left;
+      margin-bottom: 0.4rem;
+    }
+
+    /* ── Inline Code ── */
+    code {
+      font-family: "Menlo", "Consolas", "Monaco", monospace;
+      font-size: 0.88rem;
+      background: #f0f0e8;
+      padding: 0.1rem 0.35rem;
+      border-radius: 2px;
+    }
+
+    pre {
+      font-family: "Menlo", "Consolas", "Monaco", monospace;
+      font-size: 0.85rem;
+      background: #f0f0e8;
+      padding: 1rem;
+      overflow-x: auto;
+      border-radius: 2px;
+      margin: 1rem 0;
+      max-width: 1000px;
+      line-height: 1.5;
+    }
+
+    /* ── Verdict Box (review components) ── */
+    .verdict {
+      border: 2px solid #333;
+      padding: 1.2rem 1.5rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+    }
+
+    .verdict-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+      margin-bottom: 0.3rem;
+    }
+
+    .verdict-text {
+      font-size: 1.3rem;
+      font-weight: 400;
+      color: #111;
+      margin-bottom: 0.4rem;
+    }
+
+    .verdict-basis {
+      font-size: 0.88rem;
+      color: #555;
+      max-width: 1000px;
+    }
+
+    .verdict.ready { border-color: #27ae60; background: #f0faf4; }
+    .verdict.ready .verdict-text { color: #27ae60; }
+
+    .verdict.caveats { border-color: #e67e22; background: #fef8f0; }
+    .verdict.caveats .verdict-text { color: #e67e22; }
+
+    .verdict.not-ready { border-color: #c0392b; background: #fdf0ef; }
+    .verdict.not-ready .verdict-text { color: #c0392b; }
+
+    /* ── Score Card ── */
+    .score-card {
+      background: #f7f7f0;
+      border: 2px solid #333;
+      padding: 1.5rem 2rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+    }
+
+    .score-card-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+      margin-bottom: 1.2rem;
+    }
+
+    .dimension-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin: 0.8rem 0;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid #e8e8e8;
+    }
+
+    .dimension-row:last-child {
+      border-bottom: none;
+    }
+
+    .dimension-name {
+      font-weight: 600;
+      color: #333;
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .dimension-scores {
+      font-size: 0.92rem;
+      color: #555;
+      min-width: 160px;
+      text-align: right;
+    }
+
+    .dimension-scores strong {
+      font-weight: 600;
+    }
+
+    /* ── Honesty Check Section ── */
+    .honesty-check {
+      background: #f0faf4;
+      border: 2px solid #27ae60;
+      border-left: 6px solid #27ae60;
+      padding: 1.5rem 1.5rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+    }
+
+    .honesty-check-header {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #27ae60;
+      margin-bottom: 0.6rem;
+    }
+
+    .honesty-check h3 {
+      margin-top: 0;
+      color: #27ae60;
+    }
+
+    .honesty-check ul {
+      margin-left: 1rem;
+    }
+
+    .honesty-check li {
+      margin-bottom: 0.6rem;
+    }
+
+    /* ── Review Components (issues) ── */
+    .issue {
+      border-left: 3px solid;
+      padding: 0.8rem 1rem;
+      margin: 0.8rem 0;
+      max-width: 1000px;
+    }
+
+    .issue.critical {
+      border-left-color: #c0392b;
+      background: #fdf0ef;
+    }
+
+    .issue.important {
+      border-left-color: #e67e22;
+      background: #fef8f0;
+    }
+
+    .issue-title {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 0.3rem;
+    }
+
+    .issue-detail {
+      font-size: 0.92rem;
+      color: #555;
+      margin-bottom: 0.3rem;
+    }
+
+    .issue-location {
+      font-size: 0.78rem;
+      color: #999;
+      font-style: italic;
+    }
+
+    /* ── Important Findings List ── */
+    .important-list {
+      max-width: 1000px;
+    }
+
+    .important-item {
+      margin: 0.8rem 0;
+      padding: 0.5rem 0 0.5rem 1rem;
+      border-left: 3px solid #e67e22;
+      background: #fef8f0;
+    }
+
+    .important-item-title {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 0.2rem;
+    }
+
+    .important-item-text {
+      font-size: 0.92rem;
+      color: #555;
+    }
+
+    /* ── Meta-Finding Callout ── */
+    .meta-finding {
+      border: 2px solid #c0392b;
+      border-left: 6px solid #c0392b;
+      padding: 1.5rem 1.5rem;
+      margin: 2.5rem 0;
+      max-width: 1000px;
+      background: #fff5f3;
+    }
+
+    .meta-finding-header {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #c0392b;
+      margin-bottom: 0.6rem;
+    }
+
+    .meta-finding h3 {
+      margin-top: 0;
+      color: #c0392b;
+    }
+
+    .meta-finding ol {
+      margin: 1.2rem 0;
+    }
+
+    .meta-finding li {
+      margin-bottom: 0.8rem;
+    }
+
+    /* ── New badge for BC-5 ── */
+    .new-badge {
+      display: inline-block;
+      background: #c0392b;
+      color: #fff;
+      font-size: 0.65rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.25rem 0.5rem;
+      margin-left: 0.5rem;
+      border-radius: 2px;
+    }
+
+    /* ── Cluster sections ── */
+    .cluster {
+      border-left: 4px solid #333;
+      padding-left: 1.2rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+    }
+
+    .cluster h3 {
+      margin-top: 0;
+    }
+
+    /* ── GVM Attribution ── */
+    .gvm-attribution {
+      font-size: 0.75rem;
+      color: #999;
+      font-style: italic;
+      text-align: center;
+      margin-top: 3rem;
+      margin-bottom: 0;
+      max-width: none;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 1200px) {
+      nav.toc {
+        position: static;
+        width: 100%;
+        max-height: none;
+        border-right: none;
+        border-bottom: 1px solid #ddd;
+        padding: 1rem 0;
+        margin-bottom: 2rem;
+      }
+      main { margin-left: 0; }
+      .sidenote {
+        float: none;
+        width: 100%;
+        margin: 0.8rem 0;
+        padding: 0.6rem 0 0.6rem 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="toc" id="toc">
+    <div class="toc-title">Contents</div>
+  </nav>
+
+  <main>
+    <p class="date">Round 9 (Dual/Blind) · Backlog-reconciliation review of build-time spec falsifications · 9 panels (6 calibrated defect-class + 3 blind clusters) · 4 September 2026</p>
+    <h1>World Model Judge — Design Review 009</h1>
+    <p class="subtitle">The first review after real construction. Its stated focus is <code>build/spec-corrections-backlog.md</code>: nine places (A1–A9) where building through Phase 2 falsified an already-reviewed spec, plus one externally-sourced new-requirement candidate (B1). Every correction was made in code at the point of discovery and left out of the spec documents on purpose (editing a reviewed spec mid-build is the goalpost-move the project exists to police); this round is where the specs are independently checked and brought into line. The headline shift: after eight consecutive "Do not build" verdicts, the executed build has resolved the deep mechanism-precision failures that held prior rounds down. What remains is reconciliation and two genuine code refinements — not fundamental design breakage.</p>
+
+    <h2 id="verdict">Verdict</h2>
+    <div class="verdict caveats">
+      <div class="verdict-label">Verdict</div>
+      <div class="verdict-text">Build with caveats</div>
+      <p class="verdict-basis">First non-"Do not build" verdict in nine rounds. Average per-defect-class score ~6.5/10 (A 7, B 7, C 7, D 6, E 7, F 5). The design as <em>corrected by the build</em> is sound and buildable: the nine falsifications are real, each was fixed correctly in code, and the fixes are honestly disclosed. Phase 3 is not structurally blocked. The caveats are a defined, bounded list, not open design questions. One is a Critical the build itself flagged and deferred but has not closed: A8 pinned <code>ddof=1</code> for the persistence spread but left the linear spread on NumPy's <code>ddof=0</code> default, unguarded and untested, while its own docstring claims parity — four panels reproduced this, one rated it Critical. The rest are Important reconciliations: the drift normaliser (A7) is a valid fix whose shipped code pools an out-of-distribution region into the denominator (executed: 3.4e-8, not the 6.7e-9 the backlog claims) and whose <code>1e-6</code> bound was never re-derived against the new normaliser; the reporting layer has no import gate though the judge and models do, and it is the last boundary before public output (A9, four panels); the spec documents still carry the A1/A2/A6 traps the code already fixed; and two new fail-loud mechanisms (the metaclass check, <code>DegenerateSpreadError</code>) have no phantom-gate test case. B1 (the action-blind model check) is a genuine coverage gap that should enter through requirements, not a same-round code patch. None of these cause a consumer to fail today. Every finding below is presented for the user's triage; nothing is dispositioned here.</p>
+    </div>
+
+    <h2 id="score-card">Dimension Scores</h2>
+    <div class="score-card">
+      <div class="score-card-title">Calibrated defect-class panels (A–F) · blind clusters cross-checked determinism, security, requirements</div>
+      <table>
+        <thead><tr><th>Panel (defect class)</th><th>R8</th><th>R9</th><th>Trend</th><th>What moved it</th></tr></thead>
+        <tbody>
+          <tr><td>A — Requirements coverage</td><td>6</td><td>7</td><td>▲</td><td>Corrections trace cleanly; B1 correctly routed; two orphan fail-loud mechanisms lack phantom-gate cases</td></tr>
+          <tr><td>B — Interface contracts</td><td>5</td><td>7</td><td>▲</td><td>Allowlist/field corrections sound; caught that A4's own fix omits <code>__future__</code>; linear-spread contract diverges from persistence</td></tr>
+          <tr><td>C — Structural soundness</td><td>4</td><td>7</td><td>▲</td><td>Corrections read as one disciplined voice; the A9 gate asymmetry is the one unresolved consistency gap</td></tr>
+          <tr><td>D — Implementability</td><td>4</td><td>6</td><td>▲</td><td>A1/A2/A6 confirmed as real spec-text traps, fixed in code but still live in the documents</td></tr>
+          <tr><td>E — Security</td><td>4</td><td>7</td><td>▲</td><td>A3 banned-identifier growth is sound diagnostic lint; A9 is a real confidentiality-boundary gap with no live exploit</td></tr>
+          <tr><td>F — Quality attributes (determinism)</td><td>5</td><td>5</td><td>—</td><td>Persistence <code>ddof</code> pinned, but the A8 sibling (linear) is open and the A7 bound was not re-validated under its new normaliser</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 id="pattern">What this round found</h2>
+    <p>Nine independent reviewers read the specs <em>and executed the build evidence</em> each backlog row cites. The blind determinism panel re-ran the real pipeline at the production seed rather than trusting any claim. Three things stand out:</p>
+    <ul>
+      <li><strong>The corrections are real and the fixes are right.</strong> Every A-item was independently confirmed: the LV reference state is exactly the equilibrium (both derivatives zero, re-derived by hand and by execution), the pendulum reference genuinely had no recorded value, "grows roughly linearly" is falsified at the declared horizon, the invariant crosses zero inside the training box (min |V| ≈ 1.5e-6 over 100k samples), and <code>ddof</code> changes emitted bytes (differ at the 7th significant digit, not bit-identical). This is the executed-first discipline working as intended.</li>
+      <li><strong>Two fixes are only half-done.</strong> A8 fixed persistence but not linear (the same file now runs two baselines under one ADR with two different <code>ddof</code> conventions). A7 replaced a divide-by-near-zero normaliser — correctly — but its shipped code pools the training and out-of-region starts into one span, contradicting the backlog's own stated rationale and the bound's stated purpose, and no one re-derived whether <code>1e-6</code> still means what it did.</li>
+      <li><strong>Defect-class partitioning paid off.</strong> Contracts caught that A4's own correction text is incomplete. Requirements coverage caught two orphan fail-loud mechanisms with no phantom-gate case. Security reframed A9 from a layering nicety into a confidentiality-boundary gap the byte-identity backstop structurally cannot cover. None of these overlapped.</li>
+    </ul>
+
+    <h2 id="coverage">Backlog Coverage Matrix</h2>
+    <table>
+      <thead><tr><th>Item</th><th>Build's claim</th><th>Panel ruling</th><th>Severity</th></tr></thead>
+      <tbody>
+        <tr><td>A1 LV reference state</td><td>(4.0,2.5) is degenerate; use (4.5,2.0)</td><td>Confirmed by hand + execution; adopt into spec, but give the new value a second independent verification (A2 has one, A1 does not)</td><td>Important</td></tr>
+        <tr><td>A2 pendulum reference</td><td>Spec records no value; build pinned one</td><td>Confirmed; adopt, noting the two-method concordance in the spec text, not just the test docstring</td><td>Important</td></tr>
+        <tr><td>A3 banned identifiers 13→23 + metaclass</td><td>Omissions from a list the spec calls non-complete lint</td><td>Sound; accept as-is. Add one ADR sentence naming the "keeps growing ≠ converging" pattern. But the structural metaclass check is an orphan with no phantom-gate case</td><td>Minor + Important (orphan case)</td></tr>
+        <tr><td>A4 models allowlist</td><td>Add wmj.errors, hashlib</td><td>Correct but incomplete — the fix text must also disclose <code>__future__</code>, which the gate already allows</td><td>Important</td></tr>
+        <tr><td>A5 judge allowlist</td><td>Allow __future__ + same-package</td><td>Confirmed sound; adopt</td><td>Minor</td></tr>
+        <tr><td>A6 LV divergence wording</td><td>"grows linearly" falsified; flat at H=700</td><td>Confirmed; reword worlds ADR-W3 <em>and</em> TC-WD4-01 to "bounded / sub-exponential over the declared horizon"</td><td>Important</td></tr>
+        <tr><td>A7 drift normaliser</td><td>Normalise by span, not initial value</td><td>Fix direction correct, but shipped code pools in- and out-region starts (3.4e-8, not the claimed 6.7e-9); use a per-region deterministic range, and re-derive the 1e-6 bound under it</td><td>Important</td></tr>
+        <tr><td>A8 persistence spread ddof</td><td>Pin ddof=1; refuse zero spread loudly</td><td>Correct for persistence; the sibling linear spread is still ddof=0, unguarded, untested — do not close A8 until linear matches. No phantom-gate case for <code>DegenerateSpreadError</code></td><td>Critical (linear) + Important (orphan case)</td></tr>
+        <tr><td>A9 reporting import gate</td><td>Design review should decide</td><td>Four panels: add REPORTING_ALLOWLIST + test, or record a reasoned distinction; it is the last boundary before public output and byte-identity cannot catch a deterministic leak</td><td>Important</td></tr>
+        <tr><td>B1 action-blind model check</td><td>Decline mid-build; route through requirements</td><td>Two panels: accept the gap (real, INVEST-clean, not goalpost-moving), decline the build; add as an explicit 4th MU-3 bullet + TC-MU3-04</td><td>Important (accept-gap / decline-build)</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="critical">Critical Findings</h2>
+    <h3>C1 — A8 is only half-closed: the linear residual spread runs on <code>ddof=0</code>, unguarded and untested, while its own docstring claims parity with the persistence fix</h3>
+    <p>Flagged by four panels (Quality Attributes rated it Critical; Contracts, Implementability, and the blind determinism panel rated it Important). <code>src/wmj/models/baselines.py</code> pins <code>SPREAD_DDOF = 1</code> and applies it in the public, guarded <code>fit_persistence_spread</code> (which raises <code>DegenerateSpreadError</code> on a zero or non-finite fit). But <code>_fit_linear_spread</code> calls <code>np.std(residual..., axis=0)</code> with no <code>ddof</code> argument — NumPy's default <code>ddof=0</code>, the population estimator — and has no degeneracy guard and no test of its value. The module docstring states linear "uses the same Bessel correction," a parity the code does not keep. Under NF-1 this changes the emitted bytes of every downstream CRPS, skill score, and Verdict, exactly as A8 argues for persistence. The docstring discloses this as deferred to P3-C02, so it is tracked, not hidden, and nothing ships broken today — but A8 cannot be marked resolved while it is open, and no test would catch a P3-C02 implementation that "refines" linear without matching <code>ddof=1</code>. Fix: pin <code>ddof=1</code> in <code>_fit_linear_spread</code>, route it through a guarded public <code>fit_linear_spread</code> mirroring persistence, add the value + degeneracy tests, and pin <code>ddof=1</code> in ADR-M2 for both baselines with a cross-reference to ADR-M3's ensemble Bessel correction.</p>
+
+    <h2 id="important">Important Findings</h2>
+    <div class="important-list">
+      <div class="important-item"><div class="important-item-title">I1 — A7's shipped normaliser pools an out-of-distribution region into the denominator that is meant to protect the training-region climatology</div><div class="important-item-text">The blind determinism panel executed the real pipeline at the production seed. <code>build_divergence_artefact</code> accumulates <code>initial_values</code> across every declared region (training <em>and</em> <code>out-high-amplitude</code>), so the emitted <code>conserved_rel_drift_max</code> = max drift / span-over-all-starts = 3.39e-8 — not the 6.7e-9 the backlog's own rationale states for the training region alone (a 5× discrepancy between stated rationale and shipped code). Pooling an out-of-distribution region inflates the denominator and deflates the reported drift for exactly the region the bound protects — the wrong direction for a safety gate — and entangles a would-be analytic quantity with <code>n_starts</code> and RNG sampling. LV's V is separably convex with its minimum at the equilibrium interior to the training box, so the per-region range is computable in closed form with no RNG. This is a shared function that runs unmodified for the pendulum. Fix: normalise by the conserved quantity's dynamic range computed per region, separately, by a deterministic method; assert TC-WD3-03 per region and report <code>within_bound</code> per region.</div></div>
+      <div class="important-item"><div class="important-item-title">I2 — A7's normaliser swap changes what "within bound" means, and the 1e-6 constant was never re-derived under it</div><div class="important-item-text">ADR-W1's <code>1e-6</code> bound was calibrated (implicitly) against a relative-to-initial normaliser and justified as "tight enough that the conditioned climatology cannot be corrupted by integrator error." Swapping the denominator to a span orders of magnitude larger means the same physical drift now clears the bound comfortably, with no re-derivation confirming the constant still delivers its stated protective purpose — a response-measure change riding inside a bug fix. Fix: a rough re-derivation (ADR-W1's own "preliminary hand calculation" style) of what integrator-error magnitude the new normalised <code>1e-6</code> actually catches, then re-pin or explicitly justify the loosening.</div></div>
+      <div class="important-item"><div class="important-item-title">I3 — A9: reporting's stated layering has no mechanical gate, unlike the judge's and models'</div><div class="important-item-text">Four panels. The judge and models packages each have an enforced import allowlist; reporting's identical ADR-003 layering claim ("matplotlib / numpy / stdlib / judge-types / own-package only") is enforced by nothing. Security's framing is the decisive one: reporting is the sole writer of the public <code>out/</code> artefacts, so it is the last trust boundary before content becomes public (NF-4), and the byte-identity backstop cannot cover this failure mode — a deterministic leak (a home-directory path, hostname, or env var read via an accidentally-imported <code>os</code>/<code>socket</code>) is stable across all ten runs and so invisible to a gate that only flags variation. Reporting is also, by review-round count, the most drift-prone spec in the project. Fix: add a <code>REPORTING_ALLOWLIST</code> and a test mirroring the models gate (framed honestly as lint, not proof), or record a reasoned ADR distinction for why reporting is treated differently. Recommendation from three of four panels: add the gate.</div></div>
+      <div class="important-item"><div class="important-item-title">I4 — A1/A2/A6: the spec documents still carry the traps the build already fixed in code</div><div class="important-item-text"><code>specs/worlds.md</code> §8 still pins the LV reference at the degenerate equilibrium (4.0,2.5) and still says the pendulum value "must be recomputed" while recording none; ADR-W3 and TC-WD4-01 still say the LV divergence curve "grows roughly linearly." A reviewer reading the spec as the standard would flag the correct test code as non-conforming. Fix this round: update §8 to (4.5,2.0) with the degeneracy reasoning, pin the recomputed pendulum constant with its two-method concordance, and reword the divergence claims to "bounded / sub-exponential over the declared horizon." Blind panel condition: give A1's (4.5,2.0) a second independent verification before pinning, matching A2.</div></div>
+      <div class="important-item"><div class="important-item-title">I5 — A4's own correction text is incomplete: it omits <code>__future__</code></div><div class="important-item-text">A4 proposes adding <code>wmj.errors</code> and <code>hashlib</code> to the models allowlist, but the built gate allows <code>MODELS_ALLOWLIST | ALWAYS_ALLOWED</code> where <code>ALWAYS_ALLOWED = {"__future__"}</code>, and every models file uses <code>from __future__ import annotations</code>. A5 names <code>__future__</code> for the judge; A4 must name it for models too, or applying A4 verbatim leaves the corrected sentence still false — the exact drift this round exists to close.</div></div>
+      <div class="important-item"><div class="important-item-title">I6 — Two new fail-loud mechanisms are orphans with no phantom-gate case</div><div class="important-item-text">The structural <code>metaclass=</code> check (A3) and <code>DegenerateSpreadError</code> (A8) are code mechanisms with no tracing test case, and — against the project's own convention that every fail-loud gate needs a negative case proving it can fire — no phantom-gate case. TC-NF6-02's disclaimer absorbs the ten new <em>identifier</em> names, but the metaclass check is a structurally different AST shape it does not reach. Fix via <code>/gvm-test-cases</code>: add a <code>class X(metaclass=Y)</code> case tracing to NF-6 and a zero/non-finite-spread → <code>DegenerateSpreadError</code> case tracing to MU-2.</div></div>
+      <div class="important-item"><div class="important-item-title">B1 — accept the coverage gap, decline the same-round build</div><div class="important-item-text">Two panels agree the action-blind model check is a genuine gap (grep-confirmed: nothing checks a <em>model's</em> prediction changes when only the action changes; TC-WD2-01 checks the <em>world's</em> lever) and is INVEST-compliant. It is not goalpost-moving: it is an externally-sourced fixture (a fourth engineered failure mode under MU-3's explicit "at minimum" list, pre-registration-exempt), and declining to quietly patch it in is the correct behaviour. Route it through requirements → test-cases → design-review → build: add an explicit fourth MU-3 bullet + TC-MU3-04, with its pass/fail condition fixed at requirements time. The user makes the final ACCEPT/DECLINE call.</div></div>
+    </div>
+
+    <h2 id="minor">Minor Findings &amp; Observations</h2>
+    <ul>
+      <li><strong>A3 doc-tightening (Minor).</strong> Add one sentence to ADR-003 stating the banned-identifier list has grown in consecutive rounds by the same mechanism and that this growth is not evidence of convergence to completeness — so a reader skimming only the changelog does not infer false confidence.</li>
+      <li><strong>A5 (Minor).</strong> The judge-allowlist correction (allow <code>__future__</code> and same-package <code>wmj.judge.*</code>) is sound; adopt.</li>
+      <li><strong>A7 transparency field (Minor).</strong> <code>conserved_rel_drift_max_vs_initial</code> has only an implicit NF-5 trace; state it explicitly when worlds §5's JSON schema is updated (its worked example is also stale — still the 3-key <code>drift</code> block).</li>
+      <li><strong>Observation — banned-identifier growth is sound.</strong> Three panels: it is diagnostic lint, honestly framed, touches no load-bearing control, and the metaclass promotion to a structural check correctly generalises a whole family rather than whack-a-moling it.</li>
+      <li><strong>Observation — determinism of the new normaliser is clean.</strong> <code>max</code>/<code>min</code> over a seeded, fixed-order population are order-insensitive selections; the span is bit-reproducible. The A7 concern is measurement meaning (I1/I2), not reproducibility.</li>
+      <li><strong>Observation — NF-2 runtime is in budget.</strong> The <code>conserved_drift</code> recompute was dispositioned at build time; the full-scale gate runs ~103 s against the 600 s ceiling.</li>
+      <li><strong>Observation — conceptual integrity holds.</strong> The nine corrections read as one disciplined voice: executed-first, disclosed-not-hidden, residual-named — the same fingerprint as eight rounds of changelog.</li>
+      <li><strong>Forward note for P4-C05.</strong> When the climatology producer is built, reconcile its 200,000-step reference trajectory's population with the drift benchmark's, or narrow the drift bound's stated rationale to what it actually measures.</li>
+    </ul>
+
+    <h2 id="verified">Verified Clean by Execution</h2>
+    <ul>
+      <li>LV invariant crosses zero inside the training box (both signs on a grid and over 100k samples) — A7's premise is correct.</li>
+      <li><code>ddof=0</code> vs <code>ddof=1</code> are not bit-identical at LV's training scale and survive verbatim into the Verdict — A8's byte-impact premise is correct, and <code>ddof=1</code> is the statistically defensible choice (unbiased sample estimator, matching ADR-M3).</li>
+      <li>The widened judge and models allowlists (A4/A5) pass the real gate against the real source (22 tests green); persistence's <code>ddof=1</code> + <code>DegenerateSpreadError</code> is a sound fail-loud boundary.</li>
+      <li>Confidentiality scan of the entire backlog and B1: no reference to the author's professional context; all external sourcing is public (arXiv, public blog posts). NF-4 holds.</li>
+    </ul>
+
+    <h2 id="capture">Coverage Estimate</h2>
+    <p>Nine reviewers, defect-class-partitioned with three blind cross-checks on the risk-concentrated clusters. Overlap was high exactly where it should be — the A8 linear-spread gap was found independently by four panels and the A9 gate by four — and the unique findings (A4's incomplete text, the two orphan phantom-gate cases, the A7 pooling defect) each came from the one panel whose mandate covered them, with no contradiction between calibrated and blind sets. The blind determinism panel's executed re-derivation of the A7 pooling figure is the round's strongest single result and was not anticipated by the calibrated panels. Estimated residual defect population for these ten items: low — the scope is bounded and every item now has a named, verified disposition. No tenth round is needed for this backlog; the open work is applying the dispositions the user selects.</p>
+
+    <h2 id="disposition">Recommended Disposition (for user triage)</h2>
+    <p>Nothing below is decided here. Each is the panel recommendation; the user owns the fix / defer / dismiss call on every one, and the ACCEPT / DECLINE call on B1.</p>
+    <ol>
+      <li><strong>C1 (linear spread).</strong> Recommend fix before A8 is closed — pin <code>ddof=1</code>, guard, test; pin both baselines in ADR-M2.</li>
+      <li><strong>I1/I2 (A7 normaliser).</strong> Recommend fix — per-region deterministic range; re-derive the <code>1e-6</code> bound under it.</li>
+      <li><strong>I3 (A9 gate).</strong> Recommend add the <code>REPORTING_ALLOWLIST</code> gate (three of four panels), or record a reasoned distinction.</li>
+      <li><strong>I4 (A1/A2/A6 spec text).</strong> Recommend update the spec documents this round; give A1's value a second verification first.</li>
+      <li><strong>I5 (A4 text).</strong> Recommend amend to include <code>__future__</code> before adopting.</li>
+      <li><strong>I6 (orphan cases).</strong> Recommend add the two phantom-gate cases via <code>/gvm-test-cases</code>.</li>
+      <li><strong>B1.</strong> Recommend accept the gap into requirements, decline the same-round build.</li>
+      <li><strong>Minors / A5 / A7-field / A3-sentence.</strong> Recommend adopt with the spec updates above.</li>
+    </ol>
+  </main>
+
+  <script>
+    (function () {
+      var toc = document.getElementById('toc');
+      if (!toc) return;
+      var heads = document.querySelectorAll('main h2[id]');
+      heads.forEach(function (h) {
+        var a = document.createElement('a');
+        a.href = '#' + h.id;
+        a.textContent = h.textContent;
+        a.className = 'toc-link';
+        toc.appendChild(a);
+      });
+      function onScroll() {
+        var y = window.scrollY + 120, cur = null;
+        heads.forEach(function (h) { if (h.offsetTop <= y) cur = h.id; });
+        document.querySelectorAll('.toc-link').forEach(function (l) {
+          l.classList.toggle('active', l.getAttribute('href') === '#' + cur);
+        });
+      }
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    })();
+  </script>
+</body>
+</html>

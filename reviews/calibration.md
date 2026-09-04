@@ -14,6 +14,7 @@ Project-level calibration layer for GVM review skills (`/gvm-design-review`, `/g
 | 4 | 2026-08-30 | design (dual/blind) | — (see per-panel) | 4 | 3 | 3 | 5 | 4 | 5 | 2 |
 | 5 | 2026-08-31 | design (dual/blind, post-repair) | — (see per-panel) | 6 | 4 | 4 | 4 | 2 | 5 | 3 |
 | 6 | 2026-08-31 | design (dual/blind, post-v1.5-fix-all) | — (see per-panel) | 8 | 6 | 5 | 6 | 3 | 5 | 5 |
+| 9 | 2026-09-04 | design (dual/blind, backlog reconciliation) | — (see per-panel) | 7 | 7 | 7 | 6 | 7 | 5 | n/a |
 
 **Round 6 was the first round whose failure shape inverted, and the closest to buildable.** 14 reviewers; calibrated panels pressure-tested the v1.5 enforcement fixes with running code. Verdict is **Do not build** a sixth time (Security 3/10, multiple Criticals), but the design/contract/coverage surface **converged and verified clean** (A 9/8, B 6/8, C 5/7, D 6/6 — panels that scored 2–4 for five rounds scored 6–9) and **three v1.5 design decisions were confirmed working by execution**: content-addressed seeding's no-shift property (3 panels), the TC-MU9-01 registry teardown (2 panels reproduced both Round-5 leaks as regressions), and the import-join (2 panels, 16 ast.parse cases). The critical path (10 chunks) and chunk count (28) are correct on three independent re-derivations. The remaining Criticals are concentrated in two mechanism-precision clusters with known small fixes — the runtime purity harness and the determinism derivations — and **v1.5's own "fix all" pass planted 5 of the 10 Criticals** (self-verified, at speed: the BC-2 pattern). See `design-review/design-review-006.html`.
 
@@ -261,3 +262,24 @@ Genuinely verified sound: NF-4's `--batch` mechanism (three independent executio
 ---
 
 *Developed using the Grounded Vibe Methodology*
+
+---
+
+## Round 9 (2026-09-04) — first review after real construction; backlog reconciliation
+
+**Verdict: Build with caveats — the first non-"Do not build" in nine rounds.** Scope was `build/spec-corrections-backlog.md`: nine places (A1–A9) where building through Phase 2 falsified an already-reviewed spec, plus B1 (an externally-sourced new-requirement candidate). Nine reviewers: six calibrated defect-class panels (A–F) and three blind panels re-deriving the determinism, security, and requirements clusters independently. The blind determinism panel executed the real pipeline at the production seed rather than trusting any claim. Rounds 7 and 8 are recorded in `design-review/design-review-007.html`/`-008.html`; their per-panel rows were never added to the table above (a pre-existing gap), so this round appends directly after Round 6's row. Round 9's scores are per-defect-class on the backlog items, not a full 45-requirement re-score, so they are not directly comparable to the whole-spec rounds — the trend they show is that the executed build resolved the mechanism-precision failures that held Rounds 4–8 down.
+
+**Why the verdict moved.** Eight rounds of "Do not build" were driven by two clusters: the judge-purity hardening (broken by ordinary Python, round after round) and the determinism derivations (unpinned seeds/normalisers). The executed build closed both for the accidental-impurity case the threat model actually targets — content-addressed seeding, the byte-identity backstop, `ddof` pinned for persistence, the drift normaliser's divide-by-zero removed. What Round 9 found is reconciliation and two real refinements, not fundamental design gaps.
+
+**Findings carried forward (for user triage — none dispositioned here):**
+- **C1 (Critical) — A8 half-closed.** Persistence spread pinned to `ddof=1`; the sibling linear residual spread still runs on NumPy's `ddof=0` default, unguarded and untested, while its docstring claims parity. Four panels; Quality Attributes rated it Critical. Do not mark A8 resolved until linear matches.
+- **I1/I2 (Important) — A7 normaliser.** Shipped code pools training and out-of-region starts into one span (executed: 3.4e-8, not the backlog's stated 6.7e-9), deflating the drift figure for the region the bound protects; and the `1e-6` constant was never re-derived under the new normaliser. Use a per-region deterministic range; re-derive the bound.
+- **I3 (Important) — A9 reporting gate.** Four panels: reporting's ADR-003 layering is enforced by nothing, though it is the last boundary before public `out/` output and byte-identity cannot catch a deterministic leak. Add `REPORTING_ALLOWLIST` or record a reasoned distinction.
+- **I4 (Important) — A1/A2/A6 spec text stale.** The documents still carry the degenerate LV reference, the unrecorded pendulum value, and the falsified "grows linearly" wording. Update this round; give A1's new value a second independent verification (A2 has one).
+- **I5 (Important) — A4's own fix omits `__future__`.** The proposed correction text would leave the sentence still false.
+- **I6 (Important) — two orphan fail-loud mechanisms.** The metaclass structural check and `DegenerateSpreadError` have no phantom-gate case, against the project's own convention.
+- **B1 — accept the gap, decline the same-round build.** Two panels: a genuine coverage gap (no case checks a model responds to its action), INVEST-clean, not goalpost-moving; route through requirements → test-cases → design-review → build.
+
+**Resolved / confirmed-sound this round (verified by execution):** the LV equilibrium degeneracy (A1), the invariant zero-crossing (A7 premise), the `ddof` byte-impact (A8 premise), the widened judge/models allowlists (A4/A5, 22 gate tests green), the banned-identifier growth as sound diagnostic lint (A3), and a clean confidentiality scan of the whole backlog and B1 (NF-4 holds).
+
+**Recurring pattern retired.** The "rebind-vs-mutate purity defeat" that recurred Rounds 6–8 did not appear this round — the reframed tripwire-plus-byte-identity posture the build implemented is holding. The recurring finding this round is milder and of a new kind: a fix applied to one of two siblings (A8 persistence but not linear), the same shape as A7's per-region-but-shipped-pooled gap — a "half-applied correction" class worth watching as Phase 3 extends both.
