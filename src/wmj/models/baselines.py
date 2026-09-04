@@ -7,17 +7,35 @@ how wrong they usually are — their spread is fitted from the same
 training data a real model would use, not picked to look good (models
 spec ADR-M2).
 
-**Minimal spread only (this chunk's own scoped decision, build/prompts/
-P1-C02.md):** the spread fitted here is real (computed from training
-residuals, not a placeholder), but P2-C05/P3-C02 extend/refine it —
-this module is expected to grow, not to be replaced.
+**Spread fits:** persistence's fit is the public, guarded
+`fit_persistence_spread` (P2-C05): the *sample* standard deviation
+(`ddof=1`) of one-step training changes — the training set is a sample
+of the world, and the same Bessel correction is what ADR-M3's ensemble
+spread uses. ADR-M2 does not pin `ddof`; the choice is recorded as
+backlog candidate A8 because it changes bytes. A dimension that never
+changes in training would fit a spread of exactly zero, which the CRPS
+rightly refuses — so the fit refuses first, loudly (`DegenerateSpreadError`),
+rather than emitting a model that fails at judging time. Linear's fit
+is refined at P3-C02.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
+from wmj.errors import WmjError
 from wmj.models.base import Prediction, SeedSource, TrainingData, WorldContext
+
+SPREAD_DDOF = 1  # sample std — see module docstring and backlog A8
+
+
+class DegenerateSpreadError(WmjError):
+    """Raised when a spread fit would be zero, non-finite, or unsupported.
+
+    Fails loudly at fit time (models ADR-M2 / MU-1: every model states
+    a usable uncertainty) instead of producing a spread the CRPS will
+    reject on the first trial.
+    """
 
 
 class PersistenceModel:
@@ -60,10 +78,30 @@ class LinearModel:
         return Prediction(mean=mean, spread=self._spread)
 
 
-def _fit_persistence_spread(training: TrainingData) -> np.ndarray:
-    """Per-dimension std of one-step state changes over training data."""
+def fit_persistence_spread(training: TrainingData) -> np.ndarray:
+    """Per-dimension sample std (`ddof=1`) of one-step training changes.
+
+    ADR-M2: "give or take how much things usually change." Refuses a
+    fit that has fewer than two changes to estimate from, or any
+    dimension whose spread is not strictly positive and finite.
+    """
     changes = training.states[:, 1:, :] - training.states[:, :-1, :]
-    return np.std(changes.reshape(-1, changes.shape[-1]), axis=0)
+    flat = changes.reshape(-1, changes.shape[-1])
+    if flat.shape[0] < 2:
+        raise DegenerateSpreadError(
+            f"ADR-M2 persistence spread: need at least 2 one-step changes for a "
+            f"sample std (ddof={SPREAD_DDOF}), got {flat.shape[0]}"
+        )
+    spread = np.std(flat, axis=0, ddof=SPREAD_DDOF)
+    usable = np.isfinite(spread) & (spread > 0.0)
+    if not np.all(usable):
+        bad = np.flatnonzero(~usable).tolist()
+        raise DegenerateSpreadError(
+            f"ADR-M2 persistence spread: dimension(s) {bad} have a zero or non-finite "
+            f"spread {spread.tolist()} — the CRPS cannot score a zero-width forecast "
+            f"(judge ADR-J1), so the fit refuses rather than the judge"
+        )
+    return spread
 
 
 def _fit_linear_spread(training: TrainingData) -> np.ndarray:
@@ -80,7 +118,7 @@ def persistence_factory(
     ctx: WorldContext, seeds: SeedSource, training: TrainingData
 ) -> PersistenceModel:
     """factory(ctx, seeds, training) -> Model (models spec ADR-M1)."""
-    return PersistenceModel(spread=_fit_persistence_spread(training))
+    return PersistenceModel(spread=fit_persistence_spread(training))
 
 
 def linear_factory(

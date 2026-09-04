@@ -148,7 +148,7 @@ def test_fit_persistence_spread_refuses_a_zero_variance_dimension():
     from wmj.models.baselines import DegenerateSpreadError, fit_persistence_spread
 
     states = np.zeros((3, 6, 2))
-    states[:, :, 0] = np.linspace(0.0, 1.0, 6)  # constant change -> zero std
+    states[:, :, 0] = np.arange(6) * 0.25  # exactly constant change -> std exactly 0
     states[:, :, 1] = np.random.default_rng(1).normal(size=(3, 6))
     with pytest.raises(DegenerateSpreadError):
         fit_persistence_spread(TrainingData(states=states, actions=np.zeros((3, 5, 1))))

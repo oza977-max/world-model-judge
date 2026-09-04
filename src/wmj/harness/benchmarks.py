@@ -62,7 +62,7 @@ def sample_region_starts(rng: np.random.Generator, box: np.ndarray, n: int) -> n
     return rng.uniform(box[:, 0], box[:, 1], size=(n, box.shape[0]))
 
 
-def _declared_regions(world: Any) -> list[tuple[str, np.ndarray]]:
+def declared_regions(world: Any) -> list[tuple[str, np.ndarray]]:
     spec = world.regions()
     regions = [("training", spec.training_state_box)]
     regions.extend((out.region_name, out.state_box) for out in spec.out_regions)
@@ -92,7 +92,7 @@ def build_divergence_artefact(
     initial_values: list[float] = []
     steps = list(range(horizon + 1))
 
-    for region_name, box in _declared_regions(world):
+    for region_name, box in declared_regions(world):
         rng = seeds.rng_for(world_name, region_name, "benchmark-starts")
         starts = sample_region_starts(rng, box, n_starts)
 

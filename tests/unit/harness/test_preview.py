@@ -46,20 +46,19 @@ def test_step_zero_error_is_zero_and_later_errors_positive():
 
 
 def test_persistence_error_is_the_distance_from_the_held_start():
-    """Executed check of the stand-in's definition on one trial."""
+    """With one trial the median IS that trial: recompute it independently."""
+    from wmj.harness.benchmarks import sample_region_starts
     from wmj.worlds.base import distance
 
-    start = np.array([4.5, 2.0])
-    state = start
-    expected = [0.0]
+    start = sample_region_starts(
+        _seeds().rng_for("lv", "training", "eval-starts"), lv.regions().training_state_box, 1
+    )[0]
+    state, expected = start, [0.0]
     for _ in range(10):
         state = lv.transition(state, np.zeros(1))
         expected.append(distance(state, start, lv.SCALE))
     block = build_lv_persistence_error_vs_horizon(_seeds(), n_starts=4, n_trials=1, horizon=10)
-    # with one trial the median is that trial; its start is seeded, so
-    # only the shape of the relation is checked here: monotone-ish rise
-    med = block["per_region"][0]["median_error"]
-    assert med[1] > 0.0 and len(med) == len(expected)
+    assert block["per_region"][0]["median_error"] == expected
 
 
 def test_block_is_canonically_serializable_and_seed_deterministic():
