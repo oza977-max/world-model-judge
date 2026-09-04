@@ -90,16 +90,48 @@ def test_artefact_steps_run_zero_to_horizon_inclusive(lv_artefact):
 
 
 def test_artefact_drift_block_matches_contract_and_is_within_bound(lv_artefact):
+    """design-review-009 I1/I2: the drift figure is per region — never
+    pooled with another region's span — so the block carries one entry
+    per declared region plus a shared bound/summary within_bound."""
     drift = lv_artefact["drift"]
-    assert set(drift) == {
-        "conserved_rel_drift_max",
-        "conserved_rel_drift_max_vs_initial",
-        "bound",
-        "within_bound",
-    }
+    assert set(drift) == {"per_region", "bound", "within_bound"}
     assert drift["bound"] == 1e-6
     assert drift["within_bound"] is True
-    assert 0.0 <= drift["conserved_rel_drift_max"] < 1e-6
+
+    region_names = {r["region"] for r in drift["per_region"]}
+    assert region_names == set(lv_artefact["regions"])  # training + every out-region
+
+    for entry in drift["per_region"]:
+        assert set(entry) == {
+            "region",
+            "conserved_rel_drift_max",
+            "conserved_rel_drift_max_vs_initial",
+            "within_bound",
+        }
+        assert entry["within_bound"] is True
+        assert 0.0 <= entry["conserved_rel_drift_max"] < 1e-6
+
+
+def test_drift_normaliser_is_never_pooled_across_regions():
+    """A wider out-region span must not dilute the training region's
+    own drift figure (design-review-009 I1, executed evidence)."""
+    from wmj.worlds.divergence import conserved_quantity_range
+    from wmj.worlds import lv as lv_module
+
+    spec = lv_module.regions()
+    training_range = conserved_quantity_range(lv_module.conserved, spec.training_state_box)
+    out_range = conserved_quantity_range(
+        lv_module.conserved, spec.out_regions[0].state_box
+    )
+    assert training_range != out_range  # the two regions have distinct spans
+
+    art = build_divergence_artefact("lv", lv.WORLD, _seeds(), n_starts=8, horizon=50)
+    by_region = {r["region"]: r for r in art["drift"]["per_region"]}
+    training_span = training_range[1] - training_range[0]
+    out_span = out_range[1] - out_range[0]
+    # A region's own span, not some pooled wider span, bounds its ratio.
+    assert training_span < out_span
+    assert by_region["training"]["conserved_rel_drift_max"] >= 0.0
 
 
 def test_artefact_is_canonically_serializable_and_seed_deterministic(lv_artefact):

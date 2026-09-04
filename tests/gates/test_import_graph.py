@@ -169,6 +169,46 @@ def _is_allowed_models_import(name: str) -> bool:
     return False
 
 
+# design-review-009 I3/A9: reporting.md §4 states the same kind of
+# closed-set claim the judge and models allowlists already enforce
+# ("Reporting imports the judge's Verdict type... read-only and
+# Matplotlib") but had no mechanical gate — the one asymmetry among the
+# four packages' layering claims. Reporting is the sole writer of the
+# public `out/` artefacts (design-review-008 C8), so it is the last
+# boundary before content becomes public (NF-4); unlike the judge's
+# purity concern, the separate-process byte-identity gate (TC-NF1-01)
+# cannot catch a *deterministic* leak here (a stable path, hostname, or
+# env var read via an accidentally-imported os/socket/subprocess would
+# be identical across all ten runs and so invisible to a gate that only
+# flags variation) — so this is the one place a static allowlist is
+# doing work no other control does. `importlib.metadata` is included
+# for reporting.md §6's one sanctioned `package_versions` read
+# (writer.py, not yet built); `wmj.judge` for the Verdict type reporting
+# reads read-only (reporting.md §4).
+REPORTING_ALLOWLIST = {
+    "numpy",
+    "matplotlib",
+    "math",
+    "dataclasses",
+    "typing",
+    "pathlib",
+    "re",
+    "importlib.metadata",
+    "wmj.errors",
+    "wmj.judge",
+}
+REPORTING_OWN_PACKAGE = "wmj.reporting"
+
+
+def _is_allowed_reporting_import(name: str) -> bool:
+    if name == REPORTING_OWN_PACKAGE or name.startswith(REPORTING_OWN_PACKAGE + "."):
+        return True
+    for allowed in REPORTING_ALLOWLIST | ALWAYS_ALLOWED:
+        if name == allowed or name.startswith(allowed + "."):
+            return True
+    return False
+
+
 def _parse_file(path: Path) -> ast.Module:
     return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
 
@@ -181,6 +221,11 @@ def _judge_source_files() -> list[Path]:
 def _models_source_files() -> list[Path]:
     models_dir = SRC_ROOT / "models"
     return sorted(models_dir.rglob("*.py"))
+
+
+def _reporting_source_files() -> list[Path]:
+    reporting_dir = SRC_ROOT / "reporting"
+    return sorted(reporting_dir.rglob("*.py"))
 
 
 def _fixture_files() -> list[Path]:
@@ -232,6 +277,24 @@ def _models_gate_violations(tree: ast.Module) -> list[str]:
         f"models imports {name!r}, outside the allowlist {MODELS_ALLOWLIST}"
         for name in sorted(names)
         if not _is_allowed_models_import(name)
+    ]
+    if scan_metaclass_usage(tree):
+        violations.append(
+            "metaclass usage found (structural ban, P1-C03 pass 3 — see "
+            "module docstring)"
+        )
+    return violations
+
+
+def _reporting_gate_violations(tree: ast.Module) -> list[str]:
+    """design-review-009 I3/A9: reporting's outward imports as a full
+    allowlist, mirroring the models gate's structure exactly (see
+    module-level REPORTING_ALLOWLIST comment above)."""
+    names = full_import_names(tree) | joined_importfrom_names(tree)
+    violations = [
+        f"reporting imports {name!r}, outside the allowlist {REPORTING_ALLOWLIST}"
+        for name in sorted(names)
+        if not _is_allowed_reporting_import(name)
     ]
     if scan_metaclass_usage(tree):
         violations.append(
@@ -363,3 +426,52 @@ def test_tc_nf6_07_08_09_is_a_real_allowlist_not_just_a_four_item_denylist():
     for source in ("import os\n", "import requests\n", "import sys\n"):
         tree = ast.parse(source)
         assert _models_gate_violations(tree) != [], f"{source!r} was not caught"
+
+
+# --- design-review-009 I3/A9: the reporting-side outward-import gate ---
+
+
+def test_dr009_i3_reporting_never_imports_worlds_harness_or_models():
+    reporting_files = _reporting_source_files()
+    assert len(reporting_files) > 0, "expected real reporting source files to exist by now"
+    for path in reporting_files:
+        tree = _parse_file(path)
+        violations = _reporting_gate_violations(tree)
+        assert violations == [], f"{path}: {violations}"
+
+
+def test_dr009_i3_negative_catches_a_forbidden_import_from_shape():
+    """Phantom-gate proof, matching the models gate's own: `from
+    wmj.worlds import lv` must be caught by the joined comparison, not
+    only `import wmj.worlds.lv`."""
+    tree = ast.parse("from wmj.worlds import lv\n")
+    violations = _reporting_gate_violations(tree)
+    assert violations != []
+
+
+def test_dr009_i3_allows_the_sanctioned_reporting_imports():
+    """matplotlib/numpy/stdlib/wmj.errors/wmj.judge (read-only, the
+    Verdict type)/own-package are all reporting's stated boundary
+    (reporting.md §4) — none of them should be flagged."""
+    for source in (
+        "import numpy as np\n",
+        "from matplotlib.figure import Figure\n",
+        "from pathlib import Path\n",
+        "import re\n",
+        "from wmj.errors import WmjError\n",
+        "from wmj.judge.types import Verdict\n",
+        "from wmj.reporting import style\n",
+        "import importlib.metadata\n",
+    ):
+        tree = ast.parse(source)
+        assert _reporting_gate_violations(tree) == [], f"{source!r} was wrongly flagged"
+
+
+def test_dr009_i3_is_a_real_allowlist_not_just_a_denylist():
+    """The gate must reject ANY import outside the sanctioned set, not
+    only worlds/harness/models — otherwise `import os` or `import
+    socket` inside a reporting file would sail through uncaught, and
+    byte-identity cannot catch a deterministic leak through it."""
+    for source in ("import os\n", "import socket\n", "import subprocess\n", "import sys\n"):
+        tree = ast.parse(source)
+        assert _reporting_gate_violations(tree) != [], f"{source!r} was not caught"

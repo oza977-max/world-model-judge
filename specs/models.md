@@ -159,7 +159,7 @@ wmj.models.registry:
 
 ### ADR-M2 — Baselines: persistence and linear extrapolation, with honest training-residual spreads
 
-**Status:** Accepted. [Requirement: MU-2, MU-1] [Test: TC-MU2-01, TC-MU2-02]
+**Status:** Accepted. [Requirement: MU-2, MU-1] [Test: TC-MU2-01, TC-MU2-02, TC-MU2-03]
 
 **Context:** MU-2 requires both baselines in every verdict. MU-1 requires *every* model under test to state uncertainty in the fixed format — baselines included, or the judge would need a special case, which JU-1's blindness forbids.
 
@@ -167,6 +167,8 @@ wmj.models.registry:
 - **Persistence:** mean = current state; spread = per-dimension standard deviation of one-step state *changes* over the training dataset (a constant vector, computed once at fit time). "Nothing changes, give or take how much things usually change."
 - **Linear extrapolation:** mean = current + (current − previous) for the same dimension-wise step (first step of a rollout falls back to persistence, having no previous); spread = per-dimension standard deviation of that rule's own residuals on the training data.
 - Both are fitted (their spread constants) on exactly the training dataset the learned models use, so their calibration is honest rather than decorative.
+- **`ddof=1` (sample standard deviation), pinned for both fits (corrected design-review-009 A8/C1):** the training set is a sample of the world, not its complete population, so the unbiased (Bessel-corrected) estimator is the statistically defensible one — the same convention ADR-M3 already pins for the ensemble spread below. This was left unpinned through Phase 2 and an interim build applied it to persistence only, silently leaving linear on the population default (`ddof=0`) with no guard — a live inconsistency between two baselines under one ADR, caught by design-review-009 before pre-registration. `ddof` changes the emitted spread's bytes and therefore every downstream CRPS, skill score, and Verdict byte (NF-1), so it cannot be a renderer's-discretion detail: both baselines' fits go through one shared, guarded implementation.
+- **Fail loudly on a degenerate fit:** a dimension whose training changes/residuals have zero variance, or too few samples to estimate a sample standard deviation from (`<2`), would otherwise emit a zero-width or non-finite spread the CRPS rightly refuses (judge ADR-J1) — the fit refuses first, instead (`DegenerateSpreadError`), rather than the judge failing later with a less legible error (TC-MU2-03).
 
 **Consequences:** Baselines participate in calibration and exception counting like everyone else — a learned model must beat persistence not only on error (TC-MU2-02's sanity floor) but visibly on the same charts. The judge refuses to run without both baselines present in its input (TC-MU2-01, cross-cutting error conventions).
 
@@ -315,6 +317,7 @@ What the harness extracts from models for the judge — the only model-shaped da
 | 1.6 | 2026-08-31 | Design-review-006 repair (execution-verified): factory `rng` → `SeedSource` (models.base), giving fixtures a real channel to rebuild `direct` (executed weight-identity) and pinning the ensemble K=5 split; `is_baseline` flag added so a new baseline is genuinely one-file; `check_prereg` verifies the specific unrigged model's `prereg/` entry (TC-MU6-03); training count pinned `N_train=2000` with a machine-readable recipe format; distinct seed *purposes* for train/eval/benchmark starts (closing the collision Round 6 found). |
 | 1.7 | 2026-08-31 | Design-review-007 repair (execution-verified): `check_prereg` enforces prereg content-invariance (first-added blob hash == working-tree hash — TC-MU6-04, closing the honestly-dated-second-commit drift Round 7 executed with git); `is_baseline` scope stated (prereg-exempt only, not a comparator — TC-MU6-05); `model_ref` cross-roster shift disclosed (ADR-M1); `models→harness` no-import direction gate-enforced (TC-NF6-08). |
 | 1.8 | 2026-08-31 | Design-review-008 repair (execution-verified): `check_prereg`'s first-added-commit resolution pinned to `--reverse` (closing a delete-then-readd bypass Round 8 executed); MU-5's margin-generalization overclaim in ADR-M5 corrected (fixed pairwise comparison, not N-model); `component_key` call sites now pass `str(k)` explicitly (TC-NF1-08). |
+| 1.9 | 2026-09-04 | Design-review-009 repair (post-construction, verdict: Build with caveats): ADR-M2 pins `ddof=1` for **both** baselines' spread fits, not persistence alone — an interim build had pinned it for persistence only, silently leaving linear on NumPy's population default with no degeneracy guard; both now share one guarded implementation and a fail-loud `DegenerateSpreadError` (A8/C1, TC-MU2-03 added). |
 
 ---
 

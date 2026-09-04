@@ -7,16 +7,20 @@ how wrong they usually are — their spread is fitted from the same
 training data a real model would use, not picked to look good (models
 spec ADR-M2).
 
-**Spread fits:** persistence's fit is the public, guarded
-`fit_persistence_spread` (P2-C05): the *sample* standard deviation
-(`ddof=1`) of one-step training changes — the training set is a sample
-of the world, and the same Bessel correction is what ADR-M3's ensemble
-spread uses. ADR-M2 does not pin `ddof`; the choice is recorded as
-backlog candidate A8 because it changes bytes. A dimension that never
-changes in training would fit a spread of exactly zero, which the CRPS
-rightly refuses — so the fit refuses first, loudly (`DegenerateSpreadError`),
-rather than emitting a model that fails at judging time. Linear's fit
-is refined at P3-C02.
+**Spread fits:** both baselines' fits are public, guarded, and share
+one implementation (`_fit_spread`, P2-C05 + design-review-009 C1): the
+*sample* standard deviation (`ddof=1`) of one-step training changes
+(persistence) or of the linear rule's own training residuals (linear)
+— the training set is a sample of the world, and the same Bessel
+correction is what ADR-M3's ensemble spread uses. ADR-M2 does not pin
+`ddof`; the choice is recorded as backlog candidate A8 because it
+changes bytes (an earlier version of this module pinned it for
+persistence only, leaving linear on NumPy's `ddof=0` population
+default with no guard — design-review-009 caught the asymmetry; both
+now go through the same fit). A dimension that never changes in
+training would fit a spread of exactly zero, which the CRPS rightly
+refuses — so the fit refuses first, loudly (`DegenerateSpreadError`),
+rather than emitting a model that fails at judging time.
 """
 
 from __future__ import annotations
@@ -78,18 +82,22 @@ class LinearModel:
         return Prediction(mean=mean, spread=self._spread)
 
 
-def fit_persistence_spread(training: TrainingData) -> np.ndarray:
-    """Per-dimension sample std (`ddof=1`) of one-step training changes.
+def _fit_spread(residual: np.ndarray, *, rule: str) -> np.ndarray:
+    """Shared per-dimension sample std (`ddof=1`) fit + fail-loud guard.
 
-    ADR-M2: "give or take how much things usually change." Refuses a
-    fit that has fewer than two changes to estimate from, or any
-    dimension whose spread is not strictly positive and finite.
+    One implementation for both baselines (design-review-009 C1: an
+    earlier version pinned `ddof=1` for persistence only, leaving linear
+    on NumPy's population default with no degeneracy guard — two
+    baselines under one ADR silently using two different statistics).
+    Refuses a fit that has fewer than two residuals to estimate a
+    sample std from, or any dimension whose spread is not strictly
+    positive and finite (ADR-M2; the CRPS cannot score a zero-width
+    forecast, judge ADR-J1).
     """
-    changes = training.states[:, 1:, :] - training.states[:, :-1, :]
-    flat = changes.reshape(-1, changes.shape[-1])
+    flat = residual.reshape(-1, residual.shape[-1])
     if flat.shape[0] < 2:
         raise DegenerateSpreadError(
-            f"ADR-M2 persistence spread: need at least 2 one-step changes for a "
+            f"ADR-M2 {rule} spread: need at least 2 residuals for a "
             f"sample std (ddof={SPREAD_DDOF}), got {flat.shape[0]}"
         )
     spread = np.std(flat, axis=0, ddof=SPREAD_DDOF)
@@ -97,21 +105,32 @@ def fit_persistence_spread(training: TrainingData) -> np.ndarray:
     if not np.all(usable):
         bad = np.flatnonzero(~usable).tolist()
         raise DegenerateSpreadError(
-            f"ADR-M2 persistence spread: dimension(s) {bad} have a zero or non-finite "
+            f"ADR-M2 {rule} spread: dimension(s) {bad} have a zero or non-finite "
             f"spread {spread.tolist()} — the CRPS cannot score a zero-width forecast "
             f"(judge ADR-J1), so the fit refuses rather than the judge"
         )
     return spread
 
 
-def _fit_linear_spread(training: TrainingData) -> np.ndarray:
-    """Per-dimension std of the linear rule's own training residuals."""
+def fit_persistence_spread(training: TrainingData) -> np.ndarray:
+    """Per-dimension sample std (`ddof=1`) of one-step training changes.
+
+    ADR-M2: "give or take how much things usually change."
+    """
+    changes = training.states[:, 1:, :] - training.states[:, :-1, :]
+    return _fit_spread(changes, rule="persistence")
+
+
+def fit_linear_spread(training: TrainingData) -> np.ndarray:
+    """Per-dimension sample std (`ddof=1`) of the linear rule's own
+    training residuals — the same fit and the same fail-loud guard as
+    `fit_persistence_spread` (design-review-009 C1)."""
     previous = training.states[:, :-2, :]
     current = training.states[:, 1:-1, :]
     actual_next = training.states[:, 2:, :]
     predicted_next = current + (current - previous)
     residual = actual_next - predicted_next
-    return np.std(residual.reshape(-1, residual.shape[-1]), axis=0)
+    return _fit_spread(residual, rule="linear")
 
 
 def persistence_factory(
@@ -125,4 +144,4 @@ def linear_factory(
     ctx: WorldContext, seeds: SeedSource, training: TrainingData
 ) -> LinearModel:
     """factory(ctx, seeds, training) -> Model (models spec ADR-M1)."""
-    return LinearModel(spread=_fit_linear_spread(training))
+    return LinearModel(spread=fit_linear_spread(training))

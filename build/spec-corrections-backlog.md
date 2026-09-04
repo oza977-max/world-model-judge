@@ -61,3 +61,36 @@ the executed evidence, or the evidence challenged. Section B is a
 decision: accept into requirements (then `/gvm-test-cases` and a build
 chunk), or decline with a reason. Either way the outcome is recorded
 in `reviews/calibration.md` like every other round.
+
+---
+
+## Disposition (Round 9, 2026-09-04)
+
+Every Section A item resolved this round, per the user's explicit direction
+after Round 9's verdict ("Build with caveats") and triage: fix everything
+byte-affecting now, before pre-registration makes it a one-way door.
+
+| # | Disposition |
+|---|---|
+| A1 | Spec corrected (`specs/worlds.md` §4.1/§8): LV reference moved to (4.5, 2.0), independently re-derived a second time this round (two independent plain-Python RK4 implementations, matching to every printed digit) per the blind panel's condition. |
+| A2 | Spec corrected (`specs/worlds.md` §8): pendulum reference value pinned, matching the already-built test constant to all 16 digits. |
+| A3 | Spec corrected (`specs/cross-cutting.md`): identifier list updated to the 23 actually enforced + metaclass ban; one sentence added naming the round-over-round growth pattern honestly (blind panel's condition). Traced to a test case (TC-NF6-11). |
+| A4 | Spec corrected (`specs/cross-cutting.md`, `test-cases/test-cases.md` TC-NF6-09): models allowlist sentence now includes `__future__`, `wmj.errors`, `hashlib` — Contracts panel's finding that the originally-proposed fix text was itself still incomplete was applied. |
+| A5 | Spec corrected alongside A4 (`__future__` + same-package `wmj.judge.*` already covered by A4's edit's neighbouring text). |
+| A6 | Spec corrected (`specs/worlds.md` ADR-W3, `test-cases/test-cases.md` TC-WD4-01): "grows roughly linearly" replaced with "bounded / sub-exponential over the declared horizon," asserted two-sided in both the spec prose and the code (`tests/unit/worlds/test_divergence.py`). |
+| A7 | **Code fixed, not just documented.** The interim per-run pooled normaliser (itself already a correction, but pooling every declared region's starts into one span) was replaced with a per-region deterministic grid (`wmj.worlds.divergence.conserved_quantity_range`) — no RNG, no `n_starts`, never pooled across regions. Executed at full scale for both worlds; the `1e-6` bound re-validated against the new figures (worst case 2.7× margin, not "orders of magnitude" — the spec now says so honestly). `specs/worlds.md` ADR-W1 and §5's worked example both corrected. |
+| A8 | **Code fixed.** `_fit_linear_spread` (private, `ddof=0`, unguarded) replaced by public `fit_linear_spread`, sharing one implementation with `fit_persistence_spread` (`ddof=1`, `DegenerateSpreadError` guard) — the exact asymmetry four panels (C1) flagged. `specs/models.md` ADR-M2 now pins `ddof=1` for both baselines explicitly. |
+| A9 | **Code added.** `REPORTING_ALLOWLIST` gate (`tests/gates/test_import_graph.py`, `TC-NF6-10`) mirroring the models gate, per three of four panels' recommendation. `specs/cross-cutting.md` records the rationale (reporting is the sole `out/` writer; byte-identity cannot catch a deterministic leak there). |
+
+Two orphan fail-loud mechanisms Requirements Coverage flagged (the metaclass
+structural check, `DegenerateSpreadError`) now have phantom-gate test cases
+(`TC-NF6-11`, `TC-MU2-03`).
+
+**Section B (B1, the action-blind model check):** not decided in this pass —
+routed separately, per the panels' own recommendation, through
+`requirements/requirements.md` (which the user must explicitly approve,
+per this project's standing gate) before any test case or build chunk.
+
+All fixes re-verified: full fast suite green (`pytest -m "not slow"`), the
+full-scale slow gate green for both worlds, `tests/gates/` green including
+the two new gate additions.

@@ -60,7 +60,9 @@ Covers requirements **WD-1 through WD-8**. The worlds package (`wmj.worlds`, per
 
 The negative test proves check 1 fails on a mismatched `dt` between two ground-truth call sites (TC-WD3-02).
 
-**Drift bound (the TC-WD3-03 numbers):** over each world's full JU-6 horizon (§4), the relative drift of the conserved quantity under the true dynamics with null action shall stay below **1e-6 (relative)**. RK4 at the step sizes below sits orders of magnitude under this in preliminary hand calculation; the bound is deliberately loose enough to be stable across platforms and tight enough that JU-6's conditioned climatology cannot be corrupted by integrator error. The measured drift curve is stored alongside the divergence benchmark and re-checked by the gate on every full run.
+**Drift bound (the TC-WD3-03 numbers):** over each world's full JU-6 horizon (§4), the relative drift of the conserved quantity under the true dynamics with null action shall stay below **1e-6 (relative)**, checked **per declared region** — never pooled across regions (design-review-009 I1/I2 correction, below). RK4 at the step sizes below sits orders of magnitude under this in preliminary hand calculation for the training regions; the bound is deliberately loose enough to be stable across platforms and tight enough that JU-6's conditioned climatology cannot be corrupted by integrator error. The measured drift curve is stored alongside the divergence benchmark and re-checked by the gate on every full run.
+
+**The normaliser, pinned (corrected design-review-009 A7/I1/I2 — executed evidence found "relative" underspecified and the build's first fix, briefly, wrong in the opposite direction):** "relative" means relative to the conserved quantity's **own dynamic range over that region's declared box** — `max|ΔV| / (grid-max V − grid-min V, that region's box)` — computed by a deterministic grid over the box (`wmj.worlds.divergence.conserved_quantity_range`), never by pooling several regions' spans into one denominator and never sampled from the benchmark's own RNG-drawn starts. Two failure modes this rules out, both found by execution: (1) LV's invariant V(x, y) crosses zero inside the training box (values from −0.225 to +0.245 across the region), so "relative to each start's initial value" divides by numbers as small as 8e-4 and reports a drift over the bound for an absolute leak four orders of magnitude below it — an artefact of the normaliser, not a measurement; (2) an interim fix normalised by the span of *every* declared region's sampled starts pooled together, which dilutes the training region's own figure with a wider out-of-region span (design-review-009's blind panel executed this: 3.4e-8 reported where the training region alone gives ~4.7e-9) — the wrong direction for a safety gate, and entangled with the benchmark's `n_starts`/RNG for a quantity that should depend on neither. At full scale (design-review-009, executed): LV training 4.7e-9, LV out-high-amplitude 4.6e-8, pendulum training 1.3e-10, pendulum out-near-inverted 3.6e-7 — every region comfortably under the 1e-6 bound, though the chaotic out-region is not "orders of magnitude" under it (≈2.7×); the bound is real headroom there, not a formality. The literal drift-relative-to-each-start's-own-initial-value figure is still reported alongside, per region, for transparency.
 
 **Consequences:** Energy/orbit drift exists (RK4 is not structure-preserving — Hairer) but is measured, bounded, and small relative to every task tolerance. If a future world violates the bound, the gate fails the run loudly rather than producing an untrustworthy climatology (TC-WD3-03's "fails loudly" branch).
 
@@ -87,7 +89,7 @@ The negative test proves check 1 fails on a mismatched `dt` between two ground-t
 - **Distance measure:** RMS over *normalised* state dimensions — each dimension divided by its world's declared scale vector (§4), so populations and radians are comparable. This same normalised distance is the error metric the judge uses (one metric everywhere; the judge spec references this definition).
 - **Sampling:** **64 starting states** per declared region (training region and each out-region), sampled by the harness's seeded generator; null actions throughout (the benchmark measures the *world's* drift, not a policy's).
 - **The curve:** median separation at each step out to the world's JU-6 horizon, reported per region, stored as arrays `(region, step) → separation` in the divergence artefact. Median, not mean, because chaotic separations are heavy-tailed and one saturated trajectory would swamp a mean.
-- **Sanity assertions built into the artefact:** LV's curve grows sub-exponentially (log-separation vs step is concave/linear — TC-WD4-01's linear-in-phase check), and the pendulum's low-energy and high-energy curves differ by a declared factor (≥5× separation at half-horizon — TC-WD4-02's regime check).
+- **Sanity assertions built into the artefact (corrected design-review-009 A6/D3):** LV's curve is bounded and grows sub-exponentially **over the declared horizon** (asserted two-sided — TC-WD4-01: the final-to-initial separation ratio stays inside a declared band, catching an exponential runaway above it and a broken integrator collapsing the twin trajectories together below it), and the pendulum's low-energy and high-energy curves differ by a declared factor (≥5× separation at half-horizon — TC-WD4-02's regime check). **The previous wording here ("concave/linear... linear-in-phase") described a shape only visible over dozens of cycles (LV's genuine linear phase-drift shows at ≈20 cycles ≈7,000 steps); at the declared H=700 (≈2 cycles) LV's orbits are neutrally stable and the curve is flat, oscillating within roughly a 0.6×–1.4× band of its initial value — executed evidence corrected the claim to what the declared horizon actually shows.**
 
 **Consequences:** The benchmark is data, computed by one harness command, cached under `out/benchmarks/`, and handed to the judge as arrays. Regenerating it is deterministic (seeded).
 
@@ -105,7 +107,7 @@ The negative test proves check 1 fails on a mismatched `dt` between two ground-t
 
 | Constant | Value | Meaning |
 |---|---|---|
-| α, β, γ, δ | 1.0, 0.4, 0.8, 0.2 | growth/predation/death/conversion; equilibrium at (γ/δ, α/β) = (4.0, 2.5) |
+| α, β, γ, δ | 1.0, 0.4, 0.8, 0.2 | growth/predation/death/conversion; equilibrium at (γ/δ, α/β) = (4.0, 2.5) — **do not use as the §8 TC-WD1-01 reference point (design-review-009 I4/D1): both derivatives are exactly zero there, so RK4 of an identically-zero field returns the input unchanged for any correct or incorrect integrator implementation, catching only a wrong-constant bug, never an integrator bug. §8 pins (4.5, 2.0) instead.** |
 | dt | 0.02 | step size (shared, WD-3); near-equilibrium period ≈ 2π/√(αγ) ≈ 7.0 time units ≈ 351 steps |
 | Horizon H | 700 steps (14.0 time units, ≈2 cycles) | rollout + JU-6 + drift-measurement horizon |
 | Scale vector | (4.0, 2.5) | normalisation for the shared distance measure (equilibrium values) |
@@ -219,7 +221,15 @@ The divergence artefact — the shape the judge and reporting consume (produced 
     "training": {"steps": [0, 1, "...", 700], "median_separation": [0.0, 1.1e-06, "..."]},
     "out-high-amplitude": {"steps": ["..."], "median_separation": ["..."]}
   },
-  "drift": {"conserved_rel_drift_max": 3.2e-09, "bound": 1e-06, "within_bound": true},
+  "drift": {
+    "per_region": [
+      {"region": "training", "conserved_rel_drift_max": 4.7e-09,
+       "conserved_rel_drift_max_vs_initial": 1.6e-06, "within_bound": true},
+      {"region": "out-high-amplitude", "conserved_rel_drift_max": 4.6e-08,
+       "conserved_rel_drift_max_vs_initial": 4.2e-08, "within_bound": true}
+    ],
+    "bound": 1e-06, "within_bound": true
+  },
   "seed": 20260825, "n_starts": 64
 }
 ```
@@ -276,7 +286,12 @@ Field names and the unbounded-outer-bin convention are fixed here; the judge spe
 | Task distinctness + boundary determinism | TC-WD6-01, TC-WD6-02 |
 | Byte-identical trajectories | TC-WD7-01, TC-WD7-02 (negative) |
 
-Hand-verified reference values for TC-WD1-01: one LV step from (4.0, 2.5) with u=0 and one pendulum step from (0.1, 0.1, 0, 0) with u=0, computed independently (symbolic/high-precision) and embedded as constants with 15 significant digits. **The pendulum reference value must be (re-)computed from the design-review-002-corrected EOM above (§4.2) before this case can be implemented** — any value computed from the v1.1 formula's `2·m` coefficients is wrong and must not be reused; the LV reference value is unaffected.
+**Hand-verified reference values for TC-WD1-01 (corrected design-review-009 A1/A2 — both filled from the build's executed evidence, each independently re-derived a second time before being pinned here):**
+
+- **LV:** one step from **(4.5, 2.0)**, u=0, dt=0.02, giving `(4.517962843950525, 2.0040760496001093)`. *(4.0, 2.5) — this document's own §4.1 equilibrium — is unsuitable: both derivatives are exactly zero there, so this case would only ever catch a wrong dynamics constant, never a broken integrator, since RK4 of an identically-zero field returns its input unchanged regardless of whether the four-stage weighting is implemented correctly. (4.5, 2.0) has genuinely nonzero derivatives (dx/dt=0.9, dy/dt=0.2) and lies inside the declared training box. Computed by two independent plain-Python RK4 implementations of the exact equations in §4.1 (no NumPy, no shared code with `wmj.worlds.lv`), matching to every printed digit.*
+- **Pendulum:** one step from (0.1, 0.1, 0, 0), u=0, giving `[0.0999980412811115, 0.0999999999872539, -0.0019587061423893717, -2.5492225466702998e-08]`. *(The pre-review v1.1 formula's `2·m` coefficients were wrong — design-review-002 — and no recomputed value had been pinned here since. This one is computed from the corrected EOM (§4.2) by two independent plain-Python RK4 implementations, matching to all 16 printed significant digits.)*
+
+Both values are embedded as constants to floating-point tolerance in the corresponding unit tests.
 
 ---
 
@@ -289,6 +304,7 @@ Hand-verified reference values for TC-WD1-01: one LV step from (4.0, 2.5) with u
 | 1.2 | 2026-08-30 | Design-review fixes (design-review-002, Round 2): corrected a coefficient error in the v1.1 double-pendulum EOM (`denom1`/`denom2`/θ̈₁'s gravity term needed `3·m`, not `2·m`, for equal masses) — the v1.1 formula was self-consistently wrong and undetectable by any test as designed; flagged the TC-WD1-01 pendulum reference constant as invalid and requiring recomputation from the corrected formula. |
 | 1.3 | 2026-08-30 | Design-review-004 structural repair: canonical `{region_name, axis}` label shape stated verbatim in §5; ADR-W4 gains the `null` axis value judge.md always cited it for; pendulum's natural cycle declared absent explicitly (§4.2), grounding the nullable `natural_units` convention. |
 | 1.4 | 2026-08-31 | Design-review-005 repair: `RegionSpec` and `Task` given full field schemas (§4.3) so the `WorldContext` construction site has a producer contract; `training_action_interval` shape corrected from flat `[2]` to per-action-dimension `[a, 2]`; action-dimension `a` added to the World protocol. |
+| 1.5 | 2026-09-04 | Design-review-009 repair, post-construction (verdict: Build with caveats), reconciling `build/spec-corrections-backlog.md`'s executed evidence: §8's TC-WD1-01 reference points pinned — LV moved off its own degenerate equilibrium (4.0, 2.5) to (4.5, 2.0), the pendulum's previously-unrecorded recomputed value filled in, both independently re-derived twice (A1/A2); ADR-W3's divergence-growth wording corrected from "grows roughly linearly" (falsified at the declared horizon — LV's orbits are neutrally stable and the curve is flat over H=700, not H≈7,000) to "bounded / sub-exponential," asserted two-sided (A6); ADR-W1's drift-bound normaliser pinned exactly — per declared region, from a deterministic grid over that region's own box, never pooled across regions (an interim fix had pooled them, diluting the training region's figure — executed and corrected within the same round, A7/I1/I2); §5's worked drift example updated to the corrected per-region shape. |
 
 ---
 

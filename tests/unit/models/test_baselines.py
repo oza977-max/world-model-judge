@@ -160,3 +160,62 @@ def test_fit_persistence_spread_refuses_too_few_changes_for_a_sample_std():
     states = np.random.default_rng(2).normal(size=(1, 2, 2))  # one change only
     with pytest.raises(DegenerateSpreadError):
         fit_persistence_spread(TrainingData(states=states, actions=np.zeros((1, 1, 1))))
+
+
+# --- design-review-009 C1: linear's spread fit now matches persistence's ---
+
+
+def test_fit_linear_spread_is_sample_std_of_its_own_residuals():
+    from wmj.models.baselines import fit_linear_spread
+
+    training = _training_data()
+    previous = training.states[:, :-2, :]
+    current = training.states[:, 1:-1, :]
+    actual_next = training.states[:, 2:, :]
+    residual = actual_next - (current + (current - previous))
+    expected = np.std(residual.reshape(-1, 2), axis=0, ddof=1)
+    assert np.array_equal(fit_linear_spread(training), expected)
+
+
+def test_linear_factory_uses_the_public_fit():
+    from wmj.models.baselines import fit_linear_spread
+
+    model = linear_factory(_ctx(), _seeds(), _training_data())
+    model.reset()
+    model.predict(np.array([4.0, 2.0]), np.array([0.0]))  # first call: persistence fallback
+    prediction = model.predict(np.array([4.2, 2.1]), np.array([0.0]))
+    assert np.array_equal(prediction.spread, fit_linear_spread(_training_data()))
+
+
+def test_fit_linear_spread_refuses_a_zero_variance_dimension():
+    from wmj.models.baselines import DegenerateSpreadError, fit_linear_spread
+
+    states = np.zeros((3, 7, 2))
+    states[:, :, 0] = np.arange(7) * 0.25  # perfectly linear -> zero residual std
+    states[:, :, 1] = np.random.default_rng(1).normal(size=(3, 7))
+    with pytest.raises(DegenerateSpreadError):
+        fit_linear_spread(TrainingData(states=states, actions=np.zeros((3, 6, 1))))
+
+
+def test_fit_linear_spread_refuses_too_few_residuals_for_a_sample_std():
+    from wmj.models.baselines import DegenerateSpreadError, fit_linear_spread
+
+    states = np.random.default_rng(2).normal(size=(1, 3, 2))  # one residual only
+    with pytest.raises(DegenerateSpreadError):
+        fit_linear_spread(TrainingData(states=states, actions=np.zeros((1, 2, 1))))
+
+
+def test_persistence_and_linear_spread_fits_both_refuse_the_same_degenerate_input():
+    """The two baselines must not silently diverge on the fail-loud
+    guard (design-review-009 C1 — the exact defect this test locks
+    down: persistence was guarded, linear was not)."""
+    from wmj.models.baselines import DegenerateSpreadError, fit_linear_spread, fit_persistence_spread
+
+    degenerate = TrainingData(
+        states=np.zeros((3, 6, 2)) + np.arange(6).reshape(1, 6, 1) * np.array([0.25, 0.0]),
+        actions=np.zeros((3, 5, 1)),
+    )
+    with pytest.raises(DegenerateSpreadError):
+        fit_persistence_spread(degenerate)
+    with pytest.raises(DegenerateSpreadError):
+        fit_linear_spread(degenerate)

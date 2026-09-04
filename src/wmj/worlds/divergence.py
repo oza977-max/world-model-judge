@@ -118,3 +118,28 @@ def assert_drift_within_bound(rel_drift_max: float, bound: float, world_name: st
             f"reference; refusing rather than producing it (worlds ADR-W1, "
             f"TC-WD3-03)"
         )
+
+
+def conserved_quantity_range(
+    conserved: Conserved, box: np.ndarray, target_points: int = 20_000
+) -> tuple[float, float]:
+    """The conserved quantity's `(min, max)` over one declared region's box.
+
+    Deterministic and independent of any RNG or `n_starts` (design-review-009
+    I1: the benchmark's per-start Monte Carlo sample is the wrong source for
+    a normaliser — it entangles a measurement gate with a sampling parameter,
+    and pooling several regions' samples into one range corrupts the very
+    thing the gate protects, worlds ADR-W1). A fixed grid over the box —
+    `target_points` spread evenly across the box's dimensions, corners
+    included via `linspace`'s endpoints — needs no assumption that
+    `conserved` is convex (LV's V provably is; a future world's need not be),
+    at a resolution the runtime budget (NF-2) can always afford: two
+    dimensions get roughly 141 points per axis, four roughly 12, and either
+    is worlds below the ~1e-6 bound's own precision.
+    """
+    d = box.shape[0]
+    per_dim = max(2, round(target_points ** (1.0 / d)))
+    axes = [np.linspace(box[i, 0], box[i, 1], per_dim) for i in range(d)]
+    grid = np.stack(np.meshgrid(*axes, indexing="ij"), axis=-1).reshape(-1, d)
+    values = np.array([conserved(point) for point in grid])
+    return float(values.min()), float(values.max())

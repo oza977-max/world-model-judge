@@ -32,10 +32,12 @@ itself left as `<spec-value>` — filled in once the technical spec sets it,
 never guessed here.
 
 **Coverage discipline (no silent caps):** every Must requirement gets at
-least one case below. 100 case IDs total, of which two (TC-NF6-05, TC-NF1-06) are
-superseded tombstones, leaving 98 live cases — count verified by
-`grep -c '^\*\*TC-'`, not carried forward by arithmetic (the previous "97"/"89"/"85"/"79"/"69"
-here were exactly such carried-forward numbers, stale by later additions).
+least one case below. 103 case IDs total, of which two (TC-NF6-05, TC-NF1-06) are
+superseded tombstones, leaving 101 live cases — count verified by
+`grep -c '^\*\*TC-'`, not carried forward by arithmetic (the previous "100"/"97"/"89"/"85"/"79"/"69"
+here were exactly such carried-forward numbers, stale by later additions; design-review-009
+added three — TC-MU2-03, TC-NF6-10, TC-NF6-11 — closing two orphan fail-loud
+mechanisms with no phantom-gate case and reporting's missing import gate).
 Depth varies deliberately: single
 cases for straightforward requirements, two to three for the requirements
 this project's own risk assessment or the review board flagged as
@@ -77,10 +79,10 @@ Given the shared integrator advancing each world's conserved quantity (pendulum 
 When drift in that quantity is measured against a declared bound,
 Then the drift stays within bound, or the run fails loudly rather than silently producing an untrustworthy climatology reference.
 
-**TC-WD4-01** · scenario test · executable
+**TC-WD4-01** (reworded design-review-009 A6/D3 — executed evidence corrected the growth claim) · scenario test · executable
 Given two trajectories from the same world started a declared small distance apart,
 When their separation is measured at each step out to the rollout horizon,
-Then the result is a curve (separation vs. step), not a single scalar rate — and for Lotka–Volterra specifically, the curve grows roughly linearly rather than exponentially (proving the fix that replaced the old single-"rate" wording actually holds).
+Then the result is a curve (separation vs. step), not a single scalar rate — and for Lotka–Volterra specifically, the curve is bounded and grows sub-exponentially over the declared horizon (proving the fix that replaced the old single-"rate" wording actually holds), asserted **two-sided**: the final-to-initial separation ratio stays inside a declared band (neither an exponential runaway above it nor a broken integrator collapsing the twin trajectories together below it). **The previous wording, "grows roughly linearly," was falsified by execution (design-review-009): LV's orbits are neutrally stable, so the curve is genuinely flat over the declared H=700 horizon — the linear phase-drift the original wording named is real but only visible over ~20 cycles (≈7,000 steps), not the declared horizon. A test asserting monotone/linear growth at H=700 would fail on correctly-behaving code — the exact implementability trap this correction closes.**
 
 **TC-WD4-02** · equivalence partitioning · executable
 Given the double pendulum at a low-energy (near-regular) start and a high-energy (chaotic) start,
@@ -145,6 +147,11 @@ Then the judge refuses to compute a verdict rather than silently proceeding with
 Given the two baselines run on both worlds,
 When their one-step skill scores are computed,
 Then both baselines score below any competent model under test — a sanity floor confirming "beats nothing-changes" is a real, non-trivial bar. (Validates the baselines are non-trivial; primary coverage of MU-2's own "no verdict without comparing" clause is TC-MU2-01.)
+
+**TC-MU2-03 (negative/phantom-gate)** (new, design-review-009 A8/I6) · mutation test · executable
+Given a baseline's spread fit (persistence or linear) presented with a training set whose one-step changes/residuals are constant in some dimension (zero variance) or too few to estimate a sample standard deviation from,
+When the fit is attempted,
+Then it raises `DegenerateSpreadError` rather than emitting a zero-width or non-finite spread — proving the fail-loud guard actually fires, not merely that it is present in the code (the same phantom-gate discipline applied elsewhere, e.g. TC-WD3-02, to every fail-loud mechanism in this project). Both baselines are covered by the same guard (`ddof=1`, sample std, per ADR-M2/ADR-M3's shared Bessel correction — design-review-009 C1 found an earlier build pinned this for persistence only, leaving linear on the population default with no guard at all; this case locks both).
 
 **TC-MU3-01** · scenario test · executable
 Given the overconfident-but-accurate fixture,
@@ -557,7 +564,17 @@ Then none is found — enforcing "models never import the harness," the invarian
 **TC-NF6-09 (models→judge / models→reporting import gate)** (new, design-review-008) · property-based test (import graph) · executable
 Given the AST of every module under `wmj/models/`,
 When each is scanned for an import of `wmj.judge` or `wmj.reporting` (or any of their submodules) — the same joined `node.module + "." + alias.name` comparison as TC-NF6-07/08,
-Then none is found — closing the same class of gap TC-NF6-07/08 closed for `worlds`/`harness`, but for the two remaining sideways directions, which Round 8 found undisclosed as well as unenforced (nothing checked what `wmj/models/*` imports toward `wmj.judge` or `wmj.reporting`, so a model file could in principle reach sideways into judge threshold constants or reporting internals — including hand-tuning a fixture's corruption against the judge's own thresholds, the exact prereg-gaming category MU-6/ADR-M5 otherwise police). `wmj/models/*`'s only sanctioned outward imports are now, completely: `numpy`, `math`, `dataclasses`, `typing`, `wmj.models.base`, `wmj.models.registry`.
+Then none is found — closing the same class of gap TC-NF6-07/08 closed for `worlds`/`harness`, but for the two remaining sideways directions, which Round 8 found undisclosed as well as unenforced (nothing checked what `wmj/models/*` imports toward `wmj.judge` or `wmj.reporting`, so a model file could in principle reach sideways into judge threshold constants or reporting internals — including hand-tuning a fixture's corruption against the judge's own thresholds, the exact prereg-gaming category MU-6/ADR-M5 otherwise police). `wmj/models/*`'s only sanctioned outward imports are, completely: `numpy`, `math`, `dataclasses`, `typing`, `__future__`, `wmj.errors`, `hashlib`, `wmj.models.base`, `wmj.models.registry` (**corrected design-review-009 I5** — the previous wording here, and cross-cutting ADR-003's own sentence, omitted `wmj.errors`/`hashlib`/`__future__`, which the already-built and already-reviewed `wmj/models/base.py` legitimately needs; a spec correction applied verbatim, not just enforced by a gate that quietly diverged from it).
+
+**TC-NF6-10 (reporting's own outward-import gate)** (new, design-review-009 I3/A9) · property-based test (import graph) · executable
+Given the AST of every module under `wmj/reporting/`,
+When each is scanned against a full allowlist — `numpy`, `matplotlib`, `math`, `dataclasses`, `typing`, `pathlib`, `re`, `importlib.metadata`, `wmj.errors`, `wmj.judge` (read-only, the `Verdict` type — reporting.md §4), and reporting's own package,
+Then any import outside that set is flagged. Reporting was the one package among the four (judge, models, worlds, reporting) whose ADR-003 layering claim had no mechanical gate — an inconsistency design-review-009's Structural and Security panels both flagged: reporting is the sole writer of every public `out/` artefact (design-review-008 C8), so it is the last boundary before content becomes public (NF-4), and the separate-process byte-identity gate (TC-NF1-01) structurally cannot catch a *deterministic* leak through it (a stable path/hostname/env-var read via an accidentally-imported `os`/`socket` is identical across all ten runs, so a gate that only flags variation never sees it). This is a fast lint, not a completeness proof — the same disclaimer as TC-NF6-01/07/08/09 — but it is, uniquely for reporting, the only mechanical control of any kind at this boundary.
+
+**TC-NF6-11 (negative/phantom-gate — the metaclass structural ban)** (new, design-review-009 A3/I6) · mutation test (fixture) · executable
+Given the `class X(metaclass=Y): ...` fixture already used to prove the judge gate's metaclass check fires (`tests/gates/fixtures/metaclass_namespace_capture_route.py`),
+When the check is run in isolation against that fixture,
+Then it is flagged specifically by the structural metaclass scan (`scan_metaclass_usage`), independent of any banned-identifier hit — closing the orphan design-review-009's Requirements Coverage panel found: the check was built and applied (judge and models gates) but traced to no test-case ID, and TC-NF6-02's "no finite identifier list bounds Python reflection" disclaimer does not cover it, since a `metaclass=` keyword argument is a structurally different AST shape (a `ClassDef` keyword, not a `Name`/`Attribute`/import-alias) than anything TC-NF6-02 enumerates.
 
 **TC-NF1-07 (seed-key colon rejection)** (new, design-review-007) · mutation test · executable
 Given `component_key`'s pinned construction (cross-cutting ADR-002 rule 2),
@@ -579,7 +596,7 @@ Then the colon-bearing call raises `SeedKeyError` (the join is not injective acr
 | WD-7 | TC-WD7-01, -02 | JU-8 | TC-JU8-01, -02, -03; NF1-05/-06 (paired starts, per-region partitioning — ADR-004) |
 | WD-8 | — (Won't; nothing to verify) | JU-9 | TC-JU9-01, -02, -03 |
 | MU-1 | TC-MU1-01, -02, -03 | JU-10 | TC-JU10-01, -02 |
-| MU-2 | TC-MU2-01, -02; -MU6-05 (baseline-scope) | JU-11 | TC-JU11-01, -02 |
+| MU-2 | TC-MU2-01, -02, -03; -MU6-05 (baseline-scope) | JU-11 | TC-JU11-01, -02 |
 | MU-3 | TC-MU3-01, -02, -03 | JU-12 | TC-JU12-01, -02, -03, -04 |
 | MU-4 | TC-MU4-01, -02 | JU-13 | TC-JU13-01 |
 | MU-5 | TC-MU5-01, -02, -03 | RP-1 | TC-RP1-01 |
@@ -592,11 +609,11 @@ Then the colon-bearing call raises `SeedKeyError` (the join is not injective acr
 | | | RP-8 | TC-RP8-01 |
 | NF-1 | TC-NF1-01, -02, -03, -04, -05, -07, -08, -09 (-06 superseded tombstone) | NF-4 | TC-NF4-01, -02, -03 |
 | NF-2 | TC-NF2-01 | NF-5 | TC-NF5-01, -02 |
-| NF-3 | TC-NF3-01 | NF-6 | TC-NF6-01, -02, -03, -04, -06, -07, -08, -09 (-05 superseded tombstone) |
+| NF-3 | TC-NF3-01 | NF-6 | TC-NF6-01, -02, -03, -04, -06, -07, -08, -09, -10, -11 (-05 superseded tombstone) |
 
 **Every Must and the one mechanically-testable Won't (JU-13) has at least one case. Zero orphan requirements, zero orphan cases.** WD-8 and MU-10 are the two Won'ts with nothing to verify by design (they describe absence, not behaviour).
 
-**Totals:** 100 case IDs (98 live) across 45 requirements — grown round by round (70 after design-review-001/002; +9 after `/gvm-design-review` design-review-003 — Round 3, dual/blind — found: TC-MU9-02, a phantom-gate pairing TC-MU9-01 could not previously have, since its prior git-diff mechanism was structurally incapable of failing; TC-JU9-03, a property test enforcing the `exceptions.observed`/`trials.is_exception` invariant judge.md's prose only asserted; TC-NF6-02 through -06, splitting the single `TC-NF6-01` into one ID per AST-gate check plus a phantom-gate pairing, after the gate grew from one check to five across two rounds with no corresponding test-ID growth; TC-NF4-03, proving the run-time confidentiality scan is a real safety net independent of whether the pre-commit hook was ever installed; TC-NF5-02, covering the previously-orphaned `.md`/`.html` spec-parity hash check. Count independently verified via `grep -c '^\*\*TC-'` = **100**, not carried forward by arithmetic; **design-review-006 (v1.3) added four cases (TC-JU12-03, TC-NF1-04, TC-MU6-03, TC-MU7-02) to the 85; design-review-007 (v1.4) added eight (TC-NF6-08, TC-NF1-07, TC-NF1-05, TC-NF1-06, TC-MU6-04, TC-MU6-05, TC-JU12-04, TC-RP7-02); design-review-008 (v1.5) added three (TC-NF6-09, TC-NF1-08, TC-NF1-09) to the 97; two IDs, TC-NF6-05 and TC-NF1-06, are superseded tombstones, so 98 cases are live**). 11 negative/phantom-gate cases (TC-WD3-02, TC-WD7-02, TC-NF1-02, TC-JU9-02, TC-JU11-02, TC-MU9-02, TC-NF6-04, TC-JU12-02, TC-JU12-03, TC-NF1-07, and TC-MU6-04 — the seed-key colon and prereg-content-drift can-fail proofs; TC-NF6-06 is the complementary clean-pass guard, not counted here). 16 property-based cases (TC-JU1-02, TC-JU4-02, TC-JU5-02, TC-JU12-01, TC-NF6-01, TC-NF6-02, TC-NF6-03, TC-NF6-07, TC-NF6-08, TC-NF6-09, TC-JU9-03, TC-NF1-03, TC-NF1-04, TC-NF1-05, TC-NF1-08, TC-MU7-02). 7 cases marked *judged* rather than *executable* (TC-MU6-02, TC-JU10-02, TC-RP5-01, TC-NF4-02, TC-NF5-01, TC-RP-CARD-01, TC-JU12-04 — plain-language and human-comprehension checks that genuinely need a reader, not a script). **All three former `<spec-value>` placeholders are now filled** from the settled specs (TC-JU8-02 → N=200, TC-NF2-01 → 600 s, TC-NF3-01 → `{numpy, matplotlib}`+dev `{pytest}`; design-review-005 — no case now carries an unresolved `<spec-value>`). 2 cases marked *(supporting)* — they validate wiring between two requirements rather than being the primary coverage of either (TC-MU2-02, TC-JU8-03).
+**Totals:** 103 case IDs (101 live) across 45 requirements — grown round by round (70 after design-review-001/002; +9 after `/gvm-design-review` design-review-003 — Round 3, dual/blind — found: TC-MU9-02, a phantom-gate pairing TC-MU9-01 could not previously have, since its prior git-diff mechanism was structurally incapable of failing; TC-JU9-03, a property test enforcing the `exceptions.observed`/`trials.is_exception` invariant judge.md's prose only asserted; TC-NF6-02 through -06, splitting the single `TC-NF6-01` into one ID per AST-gate check plus a phantom-gate pairing, after the gate grew from one check to five across two rounds with no corresponding test-ID growth; TC-NF4-03, proving the run-time confidentiality scan is a real safety net independent of whether the pre-commit hook was ever installed; TC-NF5-02, covering the previously-orphaned `.md`/`.html` spec-parity hash check. Count independently verified via `grep -c '^\*\*TC-'` = **103**, not carried forward by arithmetic; **design-review-006 (v1.3) added four cases (TC-JU12-03, TC-NF1-04, TC-MU6-03, TC-MU7-02) to the 85; design-review-007 (v1.4) added eight (TC-NF6-08, TC-NF1-07, TC-NF1-05, TC-NF1-06, TC-MU6-04, TC-MU6-05, TC-JU12-04, TC-RP7-02); design-review-008 (v1.5) added three (TC-NF6-09, TC-NF1-08, TC-NF1-09) to the 97; design-review-009 (v1.6) added three (TC-MU2-03, TC-NF6-10, TC-NF6-11) to the 100 — the executed build's own review closing two orphan fail-loud mechanisms (the metaclass structural ban, the baseline spreads' `DegenerateSpreadError` guard) that had no phantom-gate case, plus reporting's previously-ungated outward imports; two IDs, TC-NF6-05 and TC-NF1-06, are superseded tombstones, so 101 cases are live**). 13 negative/phantom-gate cases (TC-WD3-02, TC-WD7-02, TC-NF1-02, TC-JU9-02, TC-JU11-02, TC-MU9-02, TC-NF6-04, TC-JU12-02, TC-JU12-03, TC-NF1-07, TC-MU6-04, TC-MU2-03, and TC-NF6-11 — the seed-key colon, prereg-content-drift, degenerate-spread, and metaclass can-fail proofs; TC-NF6-06 is the complementary clean-pass guard, not counted here). 17 property-based cases (TC-JU1-02, TC-JU4-02, TC-JU5-02, TC-JU12-01, TC-NF6-01, TC-NF6-02, TC-NF6-03, TC-NF6-07, TC-NF6-08, TC-NF6-09, TC-NF6-10, TC-JU9-03, TC-NF1-03, TC-NF1-04, TC-NF1-05, TC-NF1-08, TC-MU7-02). 7 cases marked *judged* rather than *executable* (TC-MU6-02, TC-JU10-02, TC-RP5-01, TC-NF4-02, TC-NF5-01, TC-RP-CARD-01, TC-JU12-04 — plain-language and human-comprehension checks that genuinely need a reader, not a script). **All three former `<spec-value>` placeholders are now filled** from the settled specs (TC-JU8-02 → N=200, TC-NF2-01 → 600 s, TC-NF3-01 → `{numpy, matplotlib}`+dev `{pytest}`; design-review-005 — no case now carries an unresolved `<spec-value>`). 2 cases marked *(supporting)* — they validate wiring between two requirements rather than being the primary coverage of either (TC-MU2-02, TC-JU8-03).
 
 ---
 
