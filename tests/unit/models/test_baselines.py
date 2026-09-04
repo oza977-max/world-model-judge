@@ -122,3 +122,41 @@ def test_tc_mu2_02_baselines_produce_different_predictions_from_each_other():
     linear_pred = linear.predict(np.array([4.3, 2.2]), np.array([0.0]))
 
     assert not np.array_equal(persistence_pred.mean, linear_pred.mean)
+
+
+# --- P2-C05: persistence spread fit made explicit (ADR-M2, backlog A8) ---
+
+
+def test_fit_persistence_spread_is_sample_std_of_one_step_changes():
+    from wmj.models.baselines import fit_persistence_spread
+
+    training = _training_data()
+    changes = training.states[:, 1:, :] - training.states[:, :-1, :]
+    expected = np.std(changes.reshape(-1, 2), axis=0, ddof=1)
+    assert np.array_equal(fit_persistence_spread(training), expected)
+
+
+def test_persistence_factory_uses_the_public_fit():
+    from wmj.models.baselines import fit_persistence_spread
+
+    model = persistence_factory(_ctx(), _seeds(), _training_data())
+    prediction = model.predict(np.array([4.0, 2.0]), np.array([0.0]))
+    assert np.array_equal(prediction.spread, fit_persistence_spread(_training_data()))
+
+
+def test_fit_persistence_spread_refuses_a_zero_variance_dimension():
+    from wmj.models.baselines import DegenerateSpreadError, fit_persistence_spread
+
+    states = np.zeros((3, 6, 2))
+    states[:, :, 0] = np.linspace(0.0, 1.0, 6)  # constant change -> zero std
+    states[:, :, 1] = np.random.default_rng(1).normal(size=(3, 6))
+    with pytest.raises(DegenerateSpreadError):
+        fit_persistence_spread(TrainingData(states=states, actions=np.zeros((3, 5, 1))))
+
+
+def test_fit_persistence_spread_refuses_too_few_changes_for_a_sample_std():
+    from wmj.models.baselines import DegenerateSpreadError, fit_persistence_spread
+
+    states = np.random.default_rng(2).normal(size=(1, 2, 2))  # one change only
+    with pytest.raises(DegenerateSpreadError):
+        fit_persistence_spread(TrainingData(states=states, actions=np.zeros((1, 1, 1))))
