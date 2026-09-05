@@ -144,3 +144,63 @@ Two things the review changed beyond its own findings: the pytest process
 is now single-threaded by construction (ADR-002 rule 1 applied to the
 test runner, not only to `python -m wmj`), and a gate added one commit
 earlier caught a defect in the fix pass that adopted it.
+
+---
+
+## Discovered during build — Phase 3 (input to the next design-review round)
+
+**In plain words:** these were found while writing code, after Round 9
+closed. They are *not* fixed in the spec documents (same reason as
+Section A: a build chunk editing an already-reviewed spec to match its
+own code is the goalpost-moving this project polices). Each is fixed in
+code where it had to be, documented at the point of discovery, and
+collected here for the next design-review round to ratify or challenge.
+
+| # | Document | What the spec says | What the build found | Where recorded |
+|---|---|---|---|---|
+| A10 | `specs/models.md` §8 ("Model training") | "**Gradient check:** one full-batch pass, checked against finite differences to **1e-6 relative**." The metric (how relative error is computed) and how near-zero gradients are handled are unstated. | Two distinct problems, both surfaced only by executing the check against the **real** ADR-M3 net (2 hidden × 64), which no toy net exposes. **(1) The naive relative-error metric misreports correct backprop.** `\|a − num\| / (\|a\| + \|num\|)` (the CS231n formula this check was first written with) blows up for a parameter whose true gradient is near zero: on `[5,64,64,4]` seed 15 one weight's gradient is `2.6e-8`, analytic and numeric agree to four significant figures (absolute difference `~1e-11`), yet the formula reports `1.76e-4` relative — a defect in the *measurement*, not the backprop (proven: the epsilon U-curve, and every other parameter agreeing). **(2) `1e-6` is too tight even with the metric fixed.** A *correct* hand-rolled central-difference check on a 3-weight-layer net floors at a few `1e-7` on float64 rounding + truncation alone — a 240-net sweep across both worlds' real I/O shapes (`[3,64,64,4]`, `[3,64,64,2]`, `[5,64,64,8]`, `[5,64,64,4]`, batch 32, normalised O(1) inputs, 60 seeds each) reads worst `3.6e-7` under the fixed metric. `1e-6` leaves only ~3× margin — inadequate for a gate that must never flake, especially on trained nets downstream (P3-C03/C04) whose gradients drive closer to zero. | `build/prompts/P3-C01.md`, `build/handovers/P3-C01.md`, `src/wmj/models/mlp.py` (`gradient_check` docstring, `GRADIENT_SCALE_FLOOR`), `tests/unit/models/test_mlp.py::test_gradient_check_holds_on_the_real_adr_m3_architecture` |
+
+**What the build did (both changes are in code, flagged here for ratification):**
+
+1. **Metric floor.** The relative-error denominator is floored at
+   `GRADIENT_SCALE_FLOOR = 1e-3` times the network's largest gradient
+   magnitude: a parameter below 0.1% of the peak gradient is judged by
+   absolute agreement at the peak scale, not by its own near-zero
+   magnitude. The floor is **scale-invariant** (multiply the loss by
+   1000 and every reading is unchanged to float64 noise — executed), so
+   it carries to P3-C03/C04's NLL and mean losses unchanged. Under the
+   floored metric the 240-net worst falls from `1.76e-4` to `3.6e-7`.
+2. **Tolerance `1e-6 → 1e-5`.** `1e-5` gives ~30× margin over the
+   correct-backprop noise floor while still sitting four orders of
+   magnitude below any real bug — the phantom-gate ×1.5 first-layer
+   corruption reads `0.2` under the same metric. The check therefore
+   catches every backprop error it exists to catch and no longer trips
+   on float64 finite-difference noise.
+
+**The decision this asks of design review** (stated openly, because the
+floor value is a free parameter and its sensitivity must not be hidden):
+`GRADIENT_SCALE_FLOOR = 1e-3` passes `1e-6` on some nets but only `1e-5`
+robustly across all 240; a laxer floor (`1e-4`) reads worst `1.6e-6` and
+would itself need the `1e-5` tolerance. The build chose the pair
+(`1e-3` floor, `1e-5` tolerance) for a never-flake gate with ~30×
+margin. Round 10 should ratify **both** the metric floor and the
+tolerance, or prefer an alternative (e.g. a numpy-`allclose`-style
+combined absolute+relative criterion). Until then the spec text stands
+at `1e-6` and the code carries the correction, exactly as A7/A8 did
+between their discovery and Round 9.
+
+The floor's **disclosed tradeoff** (flagged by the P3-C01 independent
+review, and stated in the `gradient_check` docstring): holding a
+sub-0.1%-of-peak parameter to absolute agreement gives up sensitivity to
+a backprop bug *localised to such a near-dead unit* — a 5× error on a
+`1e-9` gradient reads `~4e-6` and passes `1e-5`. This is judged
+acceptable (such a parameter is negligible to the optimisation step, and
+a structural formula bug corrupts the peak parameters too and is caught
+there), but it is a genuine blind spot the `allclose`-style alternative
+would not have, and Round 10 owns that choice. Separately, the same
+review hardened the check against a **silent NaN**: a non-finite analytic
+gradient, or a non-finite finite-difference loss, now raises
+`GradientCheckError` explicitly rather than being dropped by a bare
+`max()` (Python's `max()` discards a NaN that is not its first argument) —
+regression-tested (`test_gradient_check_raises_on_a_nan_analytic_gradient`,
+`..._when_the_finite_difference_loss_is_non_finite`).
