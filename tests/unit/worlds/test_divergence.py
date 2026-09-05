@@ -98,7 +98,11 @@ def test_tc_wd4_01_lv_separation_grows_sub_exponentially():
     # Two-sided (review pass 1): executed, the ratio sits in a 0.6-1.4
     # band. An exponential runaway (1e-6 * exp(0.02 t) reaches ~1e6 by
     # step 700) fails the upper bound; a broken integrator that pulls
-    # the twin trajectories together fails the lower one.
+    # the twin trajectories together fails the lower one. The asserted
+    # band is deliberately much wider than the observed one: this is a
+    # sanity gate against a broken integrator, not a regression pin, and
+    # it must not fail on ordinary cross-platform rounding
+    # (code-review-001, Panel D).
     ratio = med[-1] / med[0]
     assert 0.1 < ratio < 10.0, f"TC-WD4-01: LV separation ratio {ratio:.3g} outside (0.1, 10)"
 
@@ -146,3 +150,27 @@ def test_tc_wd3_03_assert_drift_within_bound_passes_when_inside():
 def test_tc_wd3_03_negative_drift_over_bound_fails_loudly():
     with pytest.raises(DriftBoundError):
         assert_drift_within_bound(rel_drift_max=2e-6, bound=1e-6, world_name="lv")
+
+
+def test_conserved_quantity_range_is_deterministic_and_brackets_both_worlds():
+    """code-review-001 (Panel C): direct, fast coverage of the drift
+    normaliser's grid for a 2-D and a 4-D box (the 4-D path was only
+    reached through the slow full-scale gate), and of the per-axis floor."""
+    from wmj.worlds import pendulum
+    from wmj.worlds.divergence import conserved_quantity_range
+
+    lv_box = lv.regions().training_state_box
+    lo, hi = conserved_quantity_range(lv.conserved, lv_box)
+    assert np.isfinite(lo) and np.isfinite(hi) and lo < hi
+    assert (lo, hi) == conserved_quantity_range(lv.conserved, lv_box)  # no RNG anywhere
+    # V is separably convex with its minimum at the equilibrium (4.0, 2.5),
+    # which lies inside the box and on the 141-point grid exactly.
+    assert lo == pytest.approx(lv.conserved(np.array([4.0, 2.5])))
+
+    pd_box = pendulum.regions().training_state_box
+    plo, phi = conserved_quantity_range(pendulum.conserved, pd_box)
+    assert np.isfinite(plo) and np.isfinite(phi) and plo < phi
+
+    # A target so small the per-axis floor of 2 applies: corners only.
+    lo2, hi2 = conserved_quantity_range(lv.conserved, lv_box, target_points=1)
+    assert np.isfinite(lo2) and np.isfinite(hi2) and lo2 <= hi2

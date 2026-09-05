@@ -53,10 +53,26 @@ def crps_gaussian(
     )
 
 
+class NonPositiveBaselineError(ValueError):
+    """Raised when the baseline CRPS a skill score divides by is not > 0.
+
+    A Gaussian CRPS is strictly positive for any finite spread > 0, so
+    anything routed through `crps_gaussian` cannot reach this; the guard
+    exists so a caller that computes its baseline some other way gets
+    the refusal here, at the division, not later as a NaN the canonical
+    serializer rejects (code-review-001, Panel B).
+    """
+
+
 def skill_score(crps_model: float, crps_baseline: float) -> float:
     """skill = 1 - CRPS_model / CRPS_baseline (judge spec ADR-J1).
 
     0 means no better than the baseline; 1 means essentially perfect;
-    negative means worse than the baseline.
+    negative means worse than the baseline. Requires `crps_baseline > 0`.
     """
+    if not crps_baseline > 0.0:
+        raise NonPositiveBaselineError(
+            f"skill_score requires crps_baseline > 0, got {crps_baseline!r} "
+            f"(judge spec ADR-J1: skill is a ratio to the baseline's CRPS)"
+        )
     return float(1.0 - crps_model / crps_baseline)

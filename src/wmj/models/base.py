@@ -22,6 +22,22 @@ import numpy as np
 from wmj.errors import WmjError
 
 
+def _freeze_arrays(*arrays: object) -> None:
+    """Mark numpy arrays read-only in place.
+
+    `frozen=True` on a dataclass stops its *fields* being rebound; it
+    says nothing about the contents of an array a field holds. These
+    types are handed around by reference (a model returns the same
+    fitted spread from every `predict()`; a world's context is built
+    once per run), so a stray in-place write anywhere downstream would
+    silently corrupt every later reader. Read-only flags turn that into
+    an immediate error instead (code-review-001 I7).
+    """
+    for array in arrays:
+        if isinstance(array, np.ndarray):
+            array.setflags(write=False)
+
+
 class SeedKeyError(WmjError):
     """Raised when a component_key part is not a bare, colon-free str."""
 
@@ -69,6 +85,9 @@ class Prediction:
     mean: np.ndarray  # float64[d]
     spread: np.ndarray  # float64[d], one standard deviation
 
+    def __post_init__(self) -> None:
+        _freeze_arrays(self.mean, self.spread)
+
 
 @dataclass(frozen=True)
 class WorldContext:
@@ -87,12 +106,15 @@ class WorldContext:
     training_action_interval: np.ndarray  # float64[a, 2]
     scale: np.ndarray  # float64[d]
 
+    def __post_init__(self) -> None:
+        _freeze_arrays(self.training_state_box, self.training_action_interval, self.scale)
+
 
 @dataclass(frozen=True)
 class TrainingData:
     """The seeded training trajectories every factory fits against.
 
-    Built once per world by the harness and hand identically to every
+    Built once per world by the harness and handed identically to every
     registered factory — one producer, one construction site (models
     spec ADR-M1).
     """

@@ -94,3 +94,53 @@ per this project's standing gate) before any test case or build chunk.
 All fixes re-verified: full fast suite green (`pytest -m "not slow"`), the
 full-scale slow gate green for both worlds, `tests/gates/` green including
 the two new gate additions.
+
+---
+
+## Taxonomy notes — senses of "world model" this judge does not grade
+
+Recorded for the essay's scope statement, not as scope changes. Each is a
+public artefact that uses the phrase "world model" for something the judge
+deliberately does not grade; together they are evidence for the thesis
+that the term has no shared definition, let alone shared measurement.
+
+| Source | What it calls a "world model" | Why the judge does not grade it |
+|---|---|---|
+| World Labs, *Atlas* (Sept 2026, worldlabs.ai/blog/atlas) | A camera-conditioned renderer / 3-D reconstructor. | Its "control" is camera pose, not an intervention on world state; it reports no calibration, no trust horizon, no independent verdict. See B1's context above. |
+| DeepLethe, *Utopia* (github.com/deeplethe/utopia, tagline "World's first open-source enterprise world model") | A Rust enterprise knowledge-management system: a bitemporal knowledge graph with document ingestion, hybrid text/vector search, an editable ontology, and a RAG chat interface. | It simulates nothing, predicts no next state, and responds to no action — there is no dynamics, trajectory, or horizon to grade. Its "governs itself" claim is conflict detection over graph facts, with no calibration, trust horizon, pre-registration, or independent verdict: the "governance in name only" the essay argues against, on a different object. Its bitemporal "what was true / when we believed it" idea is a weaker cousin of this project's own pre-registration proof (a git blob hash at first commit, `check_prereg`, TC-MU6-04 — a content hash, not a database timestamp). Nothing to borrow. |
+
+---
+
+## Disposition (code-review-001, 2026-09-05)
+
+The first code review's findings, closed on the user's "close them"
+authorisation in one pass. Every fix was verified by the fast suite (223
+tests, 18 new), the gates (including the ten-run separate-process
+byte-identity gate), and the full-scale slow gate for both worlds.
+
+| Finding | Disposition |
+|---|---|
+| I1 — this session's own reconciliation gaps | **Fixed.** `__future__` added to cross-cutting item 10's allowlist sentence; TC-NF6-10 wired into the four reporting-gate test names, TC-NF6-11 into the metaclass isolation test, TC-MU2-03 into all five degenerate-spread tests; the full-scale TC-WD4-01 gate now asserts the two-sided band its fast counterpart has. |
+| I2 — stale `ddof` docstring in `baselines.py` | **Fixed.** Docstring now states `ddof=1` as ADR-M2's pinned decision and cites it; the "backlog candidate" framing is gone. |
+| I3 — `assert_single_threaded()` dead code | **Fixed.** `cli.main()` asserts the guard on every entry; `tests/conftest.py` now sets it for the test process itself before NumPy loads (the test process was previously running at ambient thread count with nothing saying so); a phantom-gate test proves `main()` refuses when a variable is wrong. |
+| I4 — tautological `within_bound` | **Fixed.** The field is now derived from the same comparison the gate makes, with the gate raising immediately after; a comment states plainly that in any *returned* artefact it is necessarily True and why the field is kept. |
+| I5 — phantom-gate discipline gap | **Fixed.** Seven new `_validate` cases in `test_horizon_plot.py` (dt negative/NaN/wrong-type, per_region not a list, entry not a dict, block not a dict, single step), `SeedKeyError` on `my_name=None`, `CaptionLengthError` on a fourth sentence, and the CLI's `wmj run` fallthrough (exit 2) — every fail-loud guard the panel named now has a test proving it fires. |
+| I6 — unguarded `ZeroDivisionError` from `--n-trials 0` | **Fixed.** `PreviewArgumentError` (a `WmjError`) names the argument and why; `n_starts`, `n_trials`, `horizon` are all validated `>= 1` at the producer, with tests. |
+| I7 — frozen dataclasses handing back shared mutable arrays | **Fixed.** `Prediction`, `WorldContext`, `RegionSpec`, `OutRegion` mark their arrays read-only in `__post_init__`; `_fit_spread` returns a read-only vector. A stray in-place write now raises immediately. Tests prove it for all four types. |
+| I8 — silent `span<=0` unit-change fallback | **Fixed.** `DegenerateInvariantRangeError` is raised for a region whose invariant has no finite positive range; a stub constant-invariant world proves it fires. |
+| Panel F — five stub-detection findings | **Dismissed** as heuristic false positives: `PersistenceModel.reset()` (documented no-op), `within_tolerance`, `declared_region_names`, `lv.regions`, `pendulum.regions` are fully-implemented single-statement functions, not placeholders. No code change. |
+| Minor — `skill_score` precondition | **Adopted.** `NonPositiveBaselineError` (judge-local `ValueError`, per the judge's no-`wmj.errors` rule) guards the division; tested. |
+| Minor — `conserved_rel_drift_max_vs_initial` nullability | **Adopted.** worlds.md §5 now states the field is `float \| null` and why. |
+| Minor — `DEFAULT_N_STARTS` duplicated | **Adopted.** `preview.py` imports it from `benchmarks.py`. The dev-seed literal in tests is left as-is on purpose — each test pins its own seed for readability. |
+| Minor — `conserved_quantity_range` untested directly | **Adopted.** A fast direct test covers the 2-D and 4-D boxes, determinism, the convex minimum at the equilibrium, and the per-axis floor. |
+| Minor — `null_action` hardcoded shape | **Adopted.** `build_divergence_artefact` passes `np.zeros(world.a)` explicitly. |
+| Minor — stale `regions.py` docstring claim | **Adopted.** Names the test that covers the path. |
+| Minor — comment/assertion band mismatch | **Adopted.** The comment now says the asserted band is deliberately wider than the observed one, and why. |
+| Minor — "hand" → "handed" typo | **Adopted.** |
+| Minor — global `rcParams` mutation | **Adopted (test-side).** An autouse `rc_context` fixture restores rcParams around every reporting test; `style.py` documents why the single global style is safe and what to do if a second style is ever needed (scope creation *and* save, because `svg.hashsalt` must be in force at save time). Production code unchanged on purpose. |
+| Minor — non-atomic artefact writes | **Adopted.** Every writer (`skeleton`, `captions`, `style.save_figure`) writes to a sibling `.tmp` and `Path.replace()`s it. **The reporting gate (TC-NF6-10) caught the first draft of this fix** — it used `import os` for `os.replace`, precisely the ambient-capability import the gate exists to keep out of the package that writes public output; `Path.replace` is atomic and already sanctioned. Concurrent invocation against one `out/` is documented as unsupported in the CLI docstring. |
+
+Two things the review changed beyond its own findings: the pytest process
+is now single-threaded by construction (ADR-002 rule 1 applied to the
+test runner, not only to `python -m wmj`), and a gate added one commit
+earlier caught a defect in the fix pass that adopted it.

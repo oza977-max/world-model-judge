@@ -144,7 +144,7 @@ def test_persistence_factory_uses_the_public_fit():
     assert np.array_equal(prediction.spread, fit_persistence_spread(_training_data()))
 
 
-def test_fit_persistence_spread_refuses_a_zero_variance_dimension():
+def test_tc_mu2_03_fit_persistence_spread_refuses_a_zero_variance_dimension():
     from wmj.models.baselines import DegenerateSpreadError, fit_persistence_spread
 
     states = np.zeros((3, 6, 2))
@@ -154,7 +154,7 @@ def test_fit_persistence_spread_refuses_a_zero_variance_dimension():
         fit_persistence_spread(TrainingData(states=states, actions=np.zeros((3, 5, 1))))
 
 
-def test_fit_persistence_spread_refuses_too_few_changes_for_a_sample_std():
+def test_tc_mu2_03_fit_persistence_spread_refuses_too_few_changes_for_a_sample_std():
     from wmj.models.baselines import DegenerateSpreadError, fit_persistence_spread
 
     states = np.random.default_rng(2).normal(size=(1, 2, 2))  # one change only
@@ -187,7 +187,7 @@ def test_linear_factory_uses_the_public_fit():
     assert np.array_equal(prediction.spread, fit_linear_spread(_training_data()))
 
 
-def test_fit_linear_spread_refuses_a_zero_variance_dimension():
+def test_tc_mu2_03_fit_linear_spread_refuses_a_zero_variance_dimension():
     from wmj.models.baselines import DegenerateSpreadError, fit_linear_spread
 
     states = np.zeros((3, 7, 2))
@@ -197,7 +197,7 @@ def test_fit_linear_spread_refuses_a_zero_variance_dimension():
         fit_linear_spread(TrainingData(states=states, actions=np.zeros((3, 6, 1))))
 
 
-def test_fit_linear_spread_refuses_too_few_residuals_for_a_sample_std():
+def test_tc_mu2_03_fit_linear_spread_refuses_too_few_residuals_for_a_sample_std():
     from wmj.models.baselines import DegenerateSpreadError, fit_linear_spread
 
     states = np.random.default_rng(2).normal(size=(1, 3, 2))  # one residual only
@@ -205,10 +205,11 @@ def test_fit_linear_spread_refuses_too_few_residuals_for_a_sample_std():
         fit_linear_spread(TrainingData(states=states, actions=np.zeros((1, 2, 1))))
 
 
-def test_persistence_and_linear_spread_fits_both_refuse_the_same_degenerate_input():
-    """The two baselines must not silently diverge on the fail-loud
-    guard (design-review-009 C1 — the exact defect this test locks
-    down: persistence was guarded, linear was not)."""
+def test_tc_mu2_03_persistence_and_linear_spread_fits_both_refuse_the_same_degenerate_input():
+    """TC-MU2-03 (negative/phantom-gate): the two baselines must not
+    silently diverge on the fail-loud guard (design-review-009 C1 — the
+    exact defect this test locks down: persistence was guarded, linear
+    was not)."""
     from wmj.models.baselines import DegenerateSpreadError, fit_linear_spread, fit_persistence_spread
 
     degenerate = TrainingData(

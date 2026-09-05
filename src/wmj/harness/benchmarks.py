@@ -51,6 +51,7 @@ import numpy as np
 
 from wmj.models.base import SeedSource
 from wmj.worlds.divergence import (
+    DegenerateInvariantRangeError,
     assert_drift_within_bound,
     conserved_drift,
     conserved_quantity_range,
@@ -103,6 +104,10 @@ def build_divergence_artefact(
     regions_out: dict[str, dict[str, list[float]]] = {}
     drift_per_region: list[dict[str, Any]] = []
     steps = list(range(horizon + 1))
+    # The null action is the world's own zero vector, not a hardcoded
+    # shape (code-review-001, Panel C): both built worlds have a = 1,
+    # but this function is written for any world.
+    null_action = np.zeros(world.a)
 
     for region_name, box in declared_regions(world):
         rng = seeds.rng_for(world_name, region_name, "benchmark-starts")
@@ -110,7 +115,9 @@ def build_divergence_artefact(
 
         curves = np.stack(
             [
-                separation_curve(world.transition, start, horizon, world.scale, delta0)
+                separation_curve(
+                    world.transition, start, horizon, world.scale, delta0, null_action=null_action
+                )
                 for start in starts
             ]
         )
@@ -122,7 +129,9 @@ def build_divergence_artefact(
         abs_drifts: list[float] = []
         initial_values: list[float] = []
         for start in starts:
-            max_abs, initial = conserved_drift(world.transition, world.conserved, start, horizon)
+            max_abs, initial = conserved_drift(
+                world.transition, world.conserved, start, horizon, null_action=null_action
+            )
             abs_drifts.append(max_abs)
             initial_values.append(initial)
 
@@ -133,8 +142,15 @@ def build_divergence_artefact(
         # bound is meant to protect).
         range_min, range_max = conserved_quantity_range(world.conserved, box)
         span = range_max - range_min
+        if not (np.isfinite(span) and span > 0.0):
+            raise DegenerateInvariantRangeError(
+                f"WD-3 drift gate: {world_name}/{region_name} conserved quantity has range "
+                f"{span!r} over its declared box — 'relative drift' is undefined and the "
+                f"1e-6 bound cannot be applied; the region's box or invariant is a spec "
+                f"defect (worlds ADR-W1)"
+            )
         max_abs_drift = max(abs_drifts)
-        rel_drift_max = max_abs_drift / span if span > 0.0 else max_abs_drift
+        rel_drift_max = max_abs_drift / span
         # The literal "relative to the initial value" figure, reported
         # for transparency only. A start whose invariant is exactly 0.0
         # has no such ratio; it is skipped rather than emitted as inf,
@@ -149,16 +165,22 @@ def build_divergence_artefact(
         # transparency-only figure; report NaN-free None instead.
         rel_vs_initial = max(ratios_vs_initial) if ratios_vs_initial else None
 
-        assert_drift_within_bound(rel_drift_max, drift_bound, f"{world_name}/{region_name}")
-
+        # `within_bound` is derived from the same comparison the gate
+        # makes, not written as a literal. In any artefact this function
+        # RETURNS it is necessarily True — a False raises on the next
+        # line and nothing is returned — but the field is kept so the
+        # JSON is self-describing to a reader who has the file and not
+        # this code (code-review-001 I4).
+        within_bound = bool(rel_drift_max < drift_bound)
         drift_per_region.append(
             {
                 "region": region_name,
                 "conserved_rel_drift_max": rel_drift_max,
                 "conserved_rel_drift_max_vs_initial": rel_vs_initial,
-                "within_bound": True,
+                "within_bound": within_bound,
             }
         )
+        assert_drift_within_bound(rel_drift_max, drift_bound, f"{world_name}/{region_name}")
 
     return {
         "world": world_name,

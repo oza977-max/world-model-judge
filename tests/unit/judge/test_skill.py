@@ -84,3 +84,14 @@ def test_skill_score_positive_when_model_beats_baseline():
 
 def test_skill_score_negative_when_model_loses_to_baseline():
     assert skill_score(1.5, 1.0) == pytest.approx(-0.5)
+
+
+def test_skill_score_refuses_a_non_positive_baseline():
+    """code-review-001 (Panel B): the ratio's precondition is enforced at
+    the division, not discovered later as a NaN the serializer rejects."""
+    from wmj.judge.skill import NonPositiveBaselineError
+
+    with pytest.raises(NonPositiveBaselineError):
+        skill_score(0.1, 0.0)
+    with pytest.raises(NonPositiveBaselineError):
+        skill_score(0.1, -1.0)

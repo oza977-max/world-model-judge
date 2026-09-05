@@ -8,6 +8,8 @@ retyped, so the two can never drift apart.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from wmj.reporting.captions import (
     CHART2_FULL,
     CHART2_SCOPED,
@@ -42,3 +44,15 @@ def test_write_caption_creates_parents_and_writes_utf8(tmp_path):
     written = write_caption(path, CHART2_SCOPED)
     assert written == path
     assert path.read_text(encoding="utf-8") == CHART2_SCOPED
+
+
+def test_rp5_write_caption_refuses_a_fourth_sentence():
+    """code-review-001 I5: RP-5's three-sentence limit had no test proving
+    the `CaptionLengthError` guard fires — it was only ever exercised with
+    the two-sentence scoped caption."""
+    import pytest
+
+    from wmj.reporting.captions import CaptionLengthError
+
+    with pytest.raises(CaptionLengthError):
+        write_caption(Path("unused.txt"), "One. Two. Three. Four.")

@@ -129,5 +129,9 @@ def write_skeleton_report(seed: int = SKELETON_SEED) -> Path:
     """Build the report and write it via the canonical serializer."""
     report = build_skeleton_report(seed)
     REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    REPORT_PATH.write_bytes(canonical_serialize(report))
+    # Write-then-replace so the report is never observed half-written
+    # (code-review-001, Panel E).
+    tmp = REPORT_PATH.with_name(REPORT_PATH.name + ".tmp")
+    tmp.write_bytes(canonical_serialize(report))
+    tmp.replace(REPORT_PATH)
     return REPORT_PATH

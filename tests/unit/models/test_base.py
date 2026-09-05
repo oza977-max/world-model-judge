@@ -103,3 +103,54 @@ def test_tc_mu7_02_seed_source_rng_for_purpose_streams_are_independent():
     eval_ = seeds.rng_for("lv", "training", "eval-starts").random()
     benchmark = seeds.rng_for("lv", "training", "benchmark-starts").random()
     assert len({train, eval_, benchmark}) == 3
+
+
+# --- code-review-001: phantom gates proved, shared arrays proved read-only ---
+
+
+def test_seed_source_rng_without_my_name_raises_seed_key_error():
+    """code-review-001 I5: the `my_name is None` guard in `SeedSource.rng()`
+    had no test proving it fires (cross-cutting ADR-002 rule 2)."""
+    import pytest
+
+    from wmj.models.base import SeedKeyError, SeedSource
+
+    with pytest.raises(SeedKeyError):
+        SeedSource(run_seed=20260825, my_name=None).rng("weights")
+
+
+def test_prediction_arrays_are_read_only():
+    """code-review-001 I7: `frozen=True` protects the fields, not the
+    array contents; a stray in-place write must fail at once, not
+    silently corrupt every later reader of the shared array."""
+    import numpy as np
+    import pytest
+
+    from wmj.models.base import Prediction
+
+    prediction = Prediction(mean=np.array([1.0, 2.0]), spread=np.array([0.1, 0.2]))
+    with pytest.raises(ValueError):
+        prediction.mean[0] = 9.0
+    with pytest.raises(ValueError):
+        prediction.spread[0] = 9.0
+
+
+def test_world_context_arrays_are_read_only():
+    """code-review-001 I7, same discipline for the per-run world geometry."""
+    import numpy as np
+    import pytest
+
+    from wmj.models.base import WorldContext
+
+    ctx = WorldContext(
+        world_name="lv",
+        state_dim=2,
+        action_dim=1,
+        training_state_box=np.array([[2.0, 6.0], [1.0, 4.0]]),
+        training_action_interval=np.array([[-0.5, 0.5]]),
+        scale=np.array([4.0, 2.5]),
+    )
+    with pytest.raises(ValueError):
+        ctx.scale[0] = 0.0
+    with pytest.raises(ValueError):
+        ctx.training_state_box[0, 0] = 0.0

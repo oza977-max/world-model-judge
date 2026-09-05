@@ -151,3 +151,31 @@ def test_tc_wd3_03_artefact_build_fails_loudly_when_drift_exceeds_bound():
         build_divergence_artefact(
             "lv", lv.WORLD, _seeds(), n_starts=8, horizon=50, drift_bound=1e-30
         )
+
+
+def test_tc_wd3_03_degenerate_invariant_range_fails_loudly_not_silently():
+    """code-review-001 I8: a region whose conserved quantity has no
+    range over its box cannot define 'relative drift'. Refuse, rather
+    than fall back to an absolute figure that silently changes what the
+    1e-6 bound measures (worlds ADR-W1)."""
+    from wmj.worlds.divergence import DegenerateInvariantRangeError
+
+    class ConstantInvariantWorld:
+        d = lv.WORLD.d
+        a = lv.WORLD.a
+        scale = lv.WORLD.scale
+
+        def transition(self, state, action):
+            return lv.transition(state, action)
+
+        def conserved(self, state):
+            return 1.0  # no range anywhere
+
+        def regions(self):
+            return lv.regions()
+
+        def tasks(self):
+            return lv.tasks()
+
+    with pytest.raises(DegenerateInvariantRangeError):
+        build_divergence_artefact("const", ConstantInvariantWorld(), _seeds(), n_starts=2, horizon=5)

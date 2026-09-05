@@ -307,8 +307,10 @@ def _reporting_gate_violations(tree: ast.Module) -> list[str]:
 # --- Metaclass structural ban (P1-C03 pass 3) ---
 
 
-def test_metaclass_fixture_is_caught_specifically_by_the_metaclass_check():
-    """Isolation proof, matching how the __dict__ fixture was verified:
+def test_tc_nf6_11_metaclass_fixture_is_caught_specifically_by_the_metaclass_check():
+    """TC-NF6-11 (negative/phantom-gate for the metaclass structural ban).
+
+    Isolation proof, matching how the __dict__ fixture was verified:
     this fixture must be flagged BECAUSE of the metaclass mechanism,
     not confounded by some already-banned identifier also present."""
     tree = _parse_file(
@@ -428,10 +430,10 @@ def test_tc_nf6_07_08_09_is_a_real_allowlist_not_just_a_four_item_denylist():
         assert _models_gate_violations(tree) != [], f"{source!r} was not caught"
 
 
-# --- design-review-009 I3/A9: the reporting-side outward-import gate ---
+# --- TC-NF6-10 (design-review-009 I3/A9): the reporting-side outward-import gate ---
 
 
-def test_dr009_i3_reporting_never_imports_worlds_harness_or_models():
+def test_tc_nf6_10_reporting_never_imports_worlds_harness_or_models():
     reporting_files = _reporting_source_files()
     assert len(reporting_files) > 0, "expected real reporting source files to exist by now"
     for path in reporting_files:
@@ -440,7 +442,7 @@ def test_dr009_i3_reporting_never_imports_worlds_harness_or_models():
         assert violations == [], f"{path}: {violations}"
 
 
-def test_dr009_i3_negative_catches_a_forbidden_import_from_shape():
+def test_tc_nf6_10_negative_catches_a_forbidden_import_from_shape():
     """Phantom-gate proof, matching the models gate's own: `from
     wmj.worlds import lv` must be caught by the joined comparison, not
     only `import wmj.worlds.lv`."""
@@ -449,7 +451,7 @@ def test_dr009_i3_negative_catches_a_forbidden_import_from_shape():
     assert violations != []
 
 
-def test_dr009_i3_allows_the_sanctioned_reporting_imports():
+def test_tc_nf6_10_allows_the_sanctioned_reporting_imports():
     """matplotlib/numpy/stdlib/wmj.errors/wmj.judge (read-only, the
     Verdict type)/own-package are all reporting's stated boundary
     (reporting.md §4) — none of them should be flagged."""
@@ -467,7 +469,7 @@ def test_dr009_i3_allows_the_sanctioned_reporting_imports():
         assert _reporting_gate_violations(tree) == [], f"{source!r} was wrongly flagged"
 
 
-def test_dr009_i3_is_a_real_allowlist_not_just_a_denylist():
+def test_tc_nf6_10_is_a_real_allowlist_not_just_a_denylist():
     """The gate must reject ANY import outside the sanctioned set, not
     only worlds/harness/models — otherwise `import os` or `import
     socket` inside a reporting file would sail through uncaught, and

@@ -71,3 +71,21 @@ def test_one_step_skill_runs_over_real_trajectories():
     result = one_step_skill_persistence_vs_linear(_seeds(), n_trials=12)
     assert result.crps_persistence > 0.0 and result.crps_linear > 0.0
     assert result.skill == 1.0 - result.crps_persistence / result.crps_linear
+
+
+def test_chart_preview_refuses_non_positive_sizes_loudly():
+    """code-review-001 I6: a bare CLI integer of 0 used to reach a
+    division and surface as a contextless ZeroDivisionError; every
+    refusal now names what failed (cross-cutting Error-Handling rule 2)."""
+    import pytest
+
+    from wmj.harness.preview import PreviewArgumentError
+
+    with pytest.raises(PreviewArgumentError):
+        build_lv_persistence_error_vs_horizon(_seeds(), n_starts=4, n_trials=0, horizon=10)
+    with pytest.raises(PreviewArgumentError):
+        build_lv_persistence_error_vs_horizon(_seeds(), n_starts=0, n_trials=2, horizon=10)
+    with pytest.raises(PreviewArgumentError):
+        build_lv_persistence_error_vs_horizon(_seeds(), n_starts=2, n_trials=2, horizon=0)
+    with pytest.raises(PreviewArgumentError):
+        one_step_skill_persistence_vs_linear(_seeds(), n_trials=0)

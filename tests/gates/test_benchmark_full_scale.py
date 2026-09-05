@@ -28,9 +28,14 @@ def test_tc_wd3_03_wd4_01_lv_full_scale_benchmark():
     for region in artefact["regions"].values():
         assert region["steps"] == list(range(lv.HORIZON + 1))
     training = artefact["regions"]["training"]["median_separation"]
-    # TC-WD4-01: sub-exponential over the declared horizon (executed:
-    # flat/oscillating; see build/prompts/P2-C03.md)
-    assert training[-1] / training[0] < 10.0
+    # TC-WD4-01, asserted two-sided at full scale exactly as at reduced
+    # scale (code-review-001 I1): bounded/sub-exponential over the
+    # declared horizon — executed, the ratio is flat/oscillating (see
+    # build/prompts/P2-C03.md). The upper bound catches an exponential
+    # runaway; the lower bound catches a broken integrator collapsing
+    # the twin trajectories together.
+    ratio = training[-1] / training[0]
+    assert 0.1 < ratio < 10.0, f"TC-WD4-01 (full scale): ratio {ratio:.3g} outside (0.1, 10)"
 
 
 @pytest.mark.slow

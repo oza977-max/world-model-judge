@@ -16,6 +16,21 @@ from dataclasses import dataclass
 import numpy as np
 
 
+def _freeze_arrays(*arrays: object) -> None:
+    """Mark numpy arrays read-only in place.
+
+    A world's region boxes are built once at import and returned by
+    reference from every `regions()` call for the rest of the process;
+    `frozen=True` protects the field bindings, not the array contents.
+    Read-only flags make a stray in-place write fail at once instead
+    of silently changing the region for every later caller
+    (code-review-001 I7).
+    """
+    for array in arrays:
+        if isinstance(array, np.ndarray):
+            array.setflags(write=False)
+
+
 @dataclass(frozen=True)
 class OutRegion:
     """One declared out-of-training region (worlds spec ADR-W4)."""
@@ -25,6 +40,9 @@ class OutRegion:
     state_box: np.ndarray  # float64[d, 2]
     action_box: np.ndarray  # float64[a, 2]
 
+    def __post_init__(self) -> None:
+        _freeze_arrays(self.state_box, self.action_box)
+
 
 @dataclass(frozen=True)
 class RegionSpec:
@@ -33,6 +51,9 @@ class RegionSpec:
     training_state_box: np.ndarray  # float64[d, 2]
     training_action_interval: np.ndarray  # float64[a, 2]
     out_regions: tuple[OutRegion, ...]
+
+    def __post_init__(self) -> None:
+        _freeze_arrays(self.training_state_box, self.training_action_interval)
 
 
 @dataclass(frozen=True)

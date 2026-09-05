@@ -39,8 +39,10 @@ class UndeclaredRegionError(WmjError):
     The name is the join key every downstream lookup uses; a typo here
     would silently detach the trial from its divergence curve and
     climatology table, so it fails loudly instead (WD-5, worlds ADR-W4;
-    no numbered test case covers this path — it is a fail-loudly
-    convention, cross-cutting Error-Handling rule 1).
+    a fail-loudly convention, cross-cutting Error-Handling rule 1).
+    Exercised by `test_label_trial_fails_loudly_on_an_undeclared_region_name`
+    in `tests/unit/harness/test_regions.py`; no numbered TC-ID is
+    assigned to it.
     """
 
 

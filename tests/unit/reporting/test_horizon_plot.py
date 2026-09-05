@@ -100,14 +100,35 @@ def test_non_fixture_carries_no_fixture_label():
         lambda b: b["per_region"][0]["median_error"].pop(),
         lambda b: b["per_region"][0]["median_error"].__setitem__(5, 0.0),
         lambda b: b.__setitem__("per_region", []),
+        # code-review-001 I5: every disjunct of every guard has a case
+        # that reaches it, so no branch of the fail-loud path is a phantom.
+        lambda b: b.__setitem__("dt", -1.0),
+        lambda b: b.__setitem__("dt", float("nan")),
+        lambda b: b.__setitem__("dt", "0.02"),
+        lambda b: b.__setitem__("per_region", {"training": {}}),
+        lambda b: b["per_region"].__setitem__(0, ["not", "a", "dict"]),
+        lambda b: b["per_region"].__setitem__(
+            0,
+            {**b["per_region"][0], "steps": [0], "median_error": [0.0], "divergence_reference": [0.0]},
+        ),
     ],
-    ids=["no-dt", "no-reference", "steps-not-from-zero", "length-mismatch", "zero-on-log", "no-regions"],
+    ids=[
+        "no-dt", "no-reference", "steps-not-from-zero", "length-mismatch", "zero-on-log", "no-regions",
+        "dt-negative", "dt-nan", "dt-wrong-type", "per-region-not-a-list", "entry-not-a-dict",
+        "single-step",
+    ],
 )
 def test_malformed_block_fails_loudly(mutate):
     block = _block(1)
     mutate(block)
     with pytest.raises(HorizonBlockError):
         build_horizon_figure(block, model_label="persistence")
+
+
+def test_block_that_is_not_a_dict_fails_loudly():
+    """code-review-001 I5: the `not isinstance(block, dict)` disjunct."""
+    with pytest.raises(HorizonBlockError):
+        build_horizon_figure(["not", "a", "block"], model_label="persistence")
 
 
 def test_render_horizon_chart_writes_both_files(tmp_path):

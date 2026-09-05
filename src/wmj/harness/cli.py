@@ -6,6 +6,19 @@ MVP slice), and `chart-preview`, an internal-only command (reporting
 ADR-R5) that draws the first real chart from real trajectories
 (P2-C05). Later chunks add the real `wmj run`, `wmj verify` and
 `wmj list-models`.
+
+Every command first *verifies* the single-thread guard (cross-cutting
+ADR-002 rule 1): `python -m wmj` sets the three BLAS thread variables
+before NumPy loads, but anything that reaches `main()` another way —
+a test importing it directly, a library caller — would otherwise run
+with whatever thread count is ambient and nothing saying so
+(code-review-001 I3). The check is on the *command* being given;
+byte-identity (TC-NF1-01) remains the empirical backstop.
+
+Concurrent invocations against the same `out/` directory are not
+supported: every artefact writer replaces its target atomically, but
+two runs writing the same paths would still interleave at the level
+of whole files (code-review-001, Panel E).
 """
 
 from __future__ import annotations
@@ -15,6 +28,7 @@ from typing import Sequence
 
 from wmj.harness import preview
 from wmj.harness.skeleton import write_skeleton_report
+from wmj.harness.thread_guard import assert_single_threaded
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -44,6 +58,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    assert_single_threaded()
     parser = _build_parser()
     args = parser.parse_args(argv)
 

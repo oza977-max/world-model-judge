@@ -61,5 +61,11 @@ def write_caption(path: Path, text: str) -> Path:
         )
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    # Write-then-replace so a reader never sees a half-written caption
+    # (code-review-001, Panel E). `Path.replace` is the atomic rename;
+    # reporting deliberately imports no `os` (TC-NF6-10 — the gate
+    # caught the first draft of this very line).
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    tmp.replace(path)
     return path

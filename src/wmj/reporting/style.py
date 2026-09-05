@@ -18,6 +18,15 @@ alone leaves a difference. PNG bytes are not claimed identical
 Figures are created directly from `matplotlib.figure.Figure`, never
 through `pyplot`: no global figure registry, no display backend, no
 hidden state between renders.
+
+One deliberate piece of process-wide state remains: `apply_style()`
+writes into `matplotlib.rcParams`, which is global. This is safe only
+because the project has exactly one style and every `new_figure()`
+re-applies the same fixed dict, so no render can observe a different
+style depending on what ran before it. If a second style is ever
+needed, scope it with `matplotlib.rc_context` around both figure
+creation *and* save — `svg.hashsalt` must be in force at save time
+for the SVG bytes to be reproducible (code-review-001, Panel E).
 """
 
 from __future__ import annotations
@@ -109,5 +118,14 @@ def save_figure(fig: Figure, png_path: Path, svg_path: Path) -> None:
     svg_path = Path(svg_path)
     png_path.parent.mkdir(parents=True, exist_ok=True)
     svg_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(png_path, format="png", dpi=DPI)
-    fig.savefig(svg_path, format="svg", metadata={"Date": None})
+    # Save to a sibling temp path and replace atomically, so a reader
+    # never sees a partly-written chart (code-review-001, Panel E). The
+    # format is passed explicitly because the temp name's extension is
+    # not the format. `Path.replace` is the atomic rename; reporting
+    # deliberately imports no `os` (TC-NF6-10).
+    png_tmp = png_path.with_name(png_path.name + ".tmp")
+    svg_tmp = svg_path.with_name(svg_path.name + ".tmp")
+    fig.savefig(png_tmp, format="png", dpi=DPI)
+    png_tmp.replace(png_path)
+    fig.savefig(svg_tmp, format="svg", metadata={"Date": None})
+    svg_tmp.replace(svg_path)

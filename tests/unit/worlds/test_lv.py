@@ -147,3 +147,15 @@ def test_regions_declares_training_and_out_region():
 def test_tasks_declares_control_and_planning():
     task_names = {task.name for task in lv.tasks()}
     assert task_names == {"lv-control", "lv-planning"}
+
+
+def test_region_boxes_are_read_only_shared_singletons():
+    """code-review-001 I7: `regions()` returns one object for the life of
+    the process; its arrays are read-only so a stray in-place write fails
+    immediately instead of silently changing the region for every caller."""
+    spec = lv.regions()
+    assert spec is lv.regions()
+    with pytest.raises(ValueError):
+        spec.training_state_box[0, 0] = 0.0
+    with pytest.raises(ValueError):
+        spec.out_regions[0].state_box[0, 0] = 0.0

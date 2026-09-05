@@ -8,19 +8,24 @@ training data a real model would use, not picked to look good (models
 spec ADR-M2).
 
 **Spread fits:** both baselines' fits are public, guarded, and share
-one implementation (`_fit_spread`, P2-C05 + design-review-009 C1): the
-*sample* standard deviation (`ddof=1`) of one-step training changes
-(persistence) or of the linear rule's own training residuals (linear)
-— the training set is a sample of the world, and the same Bessel
-correction is what ADR-M3's ensemble spread uses. ADR-M2 does not pin
-`ddof`; the choice is recorded as backlog candidate A8 because it
-changes bytes (an earlier version of this module pinned it for
-persistence only, leaving linear on NumPy's `ddof=0` population
-default with no guard — design-review-009 caught the asymmetry; both
-now go through the same fit). A dimension that never changes in
-training would fit a spread of exactly zero, which the CRPS rightly
-refuses — so the fit refuses first, loudly (`DegenerateSpreadError`),
-rather than emitting a model that fails at judging time.
+one implementation (`_fit_spread`): the *sample* standard deviation
+(`ddof=1`) of one-step training changes (persistence) or of the linear
+rule's own training residuals (linear). **`ddof=1` is pinned by ADR-M2
+for both fits** — the training set is a sample of the world, and the
+same Bessel correction is what ADR-M3's ensemble spread uses. The
+choice changes emitted bytes (NF-1), which is exactly why the spec
+pins it rather than leaving it to the implementer: an earlier build
+had pinned it for persistence only, leaving linear on NumPy's `ddof=0`
+population default with no guard, and design-review-009 (C1) caught
+the asymmetry. A dimension that never changes in training would fit a
+spread of exactly zero, which the CRPS rightly refuses — so the fit
+refuses first, loudly (`DegenerateSpreadError`), rather than emitting
+a model that fails at judging time (TC-MU2-03).
+
+The fitted spread array is returned read-only: every `Prediction` a
+baseline hands back references the same fitted vector, and a stray
+in-place write downstream would otherwise corrupt every later
+forecast silently (code-review-001 I7).
 """
 
 from __future__ import annotations
@@ -109,6 +114,7 @@ def _fit_spread(residual: np.ndarray, *, rule: str) -> np.ndarray:
             f"spread {spread.tolist()} — the CRPS cannot score a zero-width forecast "
             f"(judge ADR-J1), so the fit refuses rather than the judge"
         )
+    spread.setflags(write=False)
     return spread
 
 

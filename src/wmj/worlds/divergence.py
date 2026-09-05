@@ -38,6 +38,19 @@ class DriftBoundError(WmjError):
     """
 
 
+class DegenerateInvariantRangeError(WmjError):
+    """Raised when a region's conserved quantity has no range to
+    normalise drift by.
+
+    ADR-W1's bound is *relative to the invariant's range over the
+    region*. If that range is zero or not finite, "relative drift" has
+    no meaning, and quietly falling back to an absolute figure would
+    change what the 1e-6 bound measures without saying so
+    (code-review-001 I8). A world whose declared box gives its
+    invariant no range is a spec defect, reported as one.
+    """
+
+
 def perturb(state: np.ndarray, delta0: float) -> np.ndarray:
     """ADR-W3's declared perturbation: relative size delta0 applied to
     every state dimension, sign-alternating (+, -, +, -, ...).

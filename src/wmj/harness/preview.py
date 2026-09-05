@@ -31,7 +31,13 @@ from pathlib import Path
 
 import numpy as np
 
-from wmj.harness.benchmarks import build_divergence_artefact, declared_regions, sample_region_starts
+from wmj.errors import WmjError
+from wmj.harness.benchmarks import (
+    DEFAULT_N_STARTS,
+    build_divergence_artefact,
+    declared_regions,
+    sample_region_starts,
+)
 from wmj.judge.skill import crps_gaussian, skill_score
 from wmj.models.base import SeedSource, TrainingData, WorldContext
 from wmj.models.baselines import linear_factory, persistence_factory
@@ -41,13 +47,30 @@ from wmj.worlds import lv
 from wmj.worlds.base import distance
 
 DEFAULT_SEED = 20260825
-DEFAULT_N_STARTS = 64  # divergence benchmark starts per region (worlds ADR-W3)
 DEFAULT_N_TRIALS = 200  # evaluation trials per region (judge ADR-J4)
 DEFAULT_HORIZON = lv.HORIZON
 N_TRAIN = 8  # training trajectories for the baselines' spread fits
 H_TRAIN = 50
 CHART_STEM = "lv-persistence-horizon"
 MODEL_LABEL = "persistence"
+
+
+class PreviewArgumentError(WmjError):
+    """Raised when a chart-preview size argument cannot produce a chart.
+
+    A bare CLI integer reaches a division and a median here; `0` would
+    surface as a contextless ZeroDivisionError far from its cause. The
+    project's convention is that every refusal names what failed and
+    why (cross-cutting Error-Handling rule 2; code-review-001 I6).
+    """
+
+
+def _require_positive(name: str, value: int) -> None:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        raise PreviewArgumentError(
+            f"chart-preview: --{name.replace('_', '-')} must be an integer >= 1, got {value!r} "
+            f"(a run with no trials, no starts, or no steps has nothing to plot)"
+        )
 
 
 def _build_context() -> WorldContext:
@@ -90,6 +113,9 @@ def build_lv_persistence_error_vs_horizon(
     the forecast at step 0), matching judge §5's shared step-zero
     origin with the divergence artefact.
     """
+    _require_positive("n_starts", n_starts)
+    _require_positive("n_trials", n_trials)
+    _require_positive("horizon", horizon)
     artefact = build_divergence_artefact("lv", lv.WORLD, seeds, n_starts=n_starts, horizon=horizon)
     per_region = []
     for region_name, box in declared_regions(lv.WORLD):
@@ -119,6 +145,7 @@ class OneStepSkill:
 
 def one_step_skill_persistence_vs_linear(seeds: SeedSource, n_trials: int) -> OneStepSkill:
     """Mean one-step CRPS of both baselines on shared seeded trials, and the skill."""
+    _require_positive("n_trials", n_trials)
     ctx = _build_context()
     training = _generate_training_data(seeds)
     persistence = persistence_factory(ctx, seeds, training)
