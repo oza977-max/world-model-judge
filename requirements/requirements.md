@@ -2,7 +2,9 @@
 
 **A governance harness for learned simulators, at toy scale.**
 
-Version 1.2 · 25 August 2026 · Derived from the essay *Words Are a Menu. The World Is Not.* (draft v2.7)
+Version 1.3 · 5 September 2026 · Derived from the essay *Words Are a Menu. The World Is Not.* (draft v2.7)
+
+> **Change note (v1.3, 5 September 2026 — design-review-009, B1 acceptance).** MU-3 gains a fourth fixture failure mode — **action-blind** (a model that ignores its action input) — and, with it, an **action-response check** every model under test faces: given one start state and two different actions, identical predictions flag the model action-blind. The pass/fail rule is fixed here, before any model is built (MU-6/JU-11). This closes an asymmetry the project's own world-side discipline (WD-2/TC-WD2-01, the world's action lever) would otherwise leave open on the *model* side. Sourced from published external evidence (arXiv 2605.27589) and entered through requirements → test-case → design-review before any build, per the project's own anti-goalpost-moving rule. No other requirement changed.
 
 > **Change note (v1.2).** Revised after a six-expert GVM review board examined this
 > document alongside the essay. Two critical fixes and roughly twenty important ones
@@ -199,11 +201,11 @@ Two distinctions carry most of this project's honesty. First, the difference bet
 
 > Taken straight from weather forecasting: a score with nothing to compare it to is uninterpretable. A model that can't beat "nothing changes" hasn't earned anything, no matter how small its error looks.
 
-**MU-3 (Must):** The harness shall provide fixture models failing in specified ways, covering at minimum: accurate but overconfident; less accurate but honestly uncertain; and accurate inside the training region but catastrophically wrong outside it.
+**MU-3 (Must):** The harness shall provide fixture models failing in specified ways, covering at minimum: accurate but overconfident; less accurate but honestly uncertain; accurate inside the training region but catastrophically wrong outside it; **and action-blind — a model that ignores its action input entirely, returning the same prediction whichever action it is given.** For the action-blind mode, the harness shall additionally perform an **action-response check** on every model under test: given one starting state and two different actions from the training region, a model whose two predictions are identical is flagged action-blind. **The pass/fail condition is fixed here, before any model is built (MU-6/JU-11 apply): the two predictions must differ by more than floating-point noise for at least one such (state, action-pair) probe; a model that never distinguishes any action pair fails.**
 
-**In plain words:** we build three broken models on purpose — one that's right but cocky, one that's rougher but honest, and one that's excellent at home and disastrous away from home.
+**In plain words:** we build four broken models on purpose — one that's right but cocky, one that's rougher but honest, one that's excellent at home and disastrous away from home, and one that doesn't listen to the action at all. For the last one we also add a check every model faces: give it the same starting point and two different actions, and if it predicts the exact same future both times, it isn't really a `(state, action) → next state` model — it's a disguised forecaster, one level up from the trap TC-WD2-01 catches in the *world*.
 
-> These are the judge's own test suite. The cocky one matters most: it's the case where ranking models by average error actively misleads you.
+> These are the judge's own test suite. The cocky one matters most: it's the case where ranking models by average error actively misleads you. The action-blind one closes a gap the project's own world-side discipline (WD-2) would otherwise leave asymmetric — we check the *world's* action lever is real, so we must also check a *model* under test actually uses it. The failure is silent under null-action trials, which is exactly why it needs its own probe. Added design-review-009 (B1), sourced from published external evidence (arXiv 2605.27589 reports 13.1% of surveyed models pass every single-trajectory check yet ignore the action), entered through requirements → test-case → design-review before any build, never patched in mid-round.
 
 **MU-4 (Must):** Fixture models shall be labelled as test fixtures wherever they appear — in code, documentation, and any published output — and never presented as findings.
 
@@ -478,7 +480,7 @@ These are unresolved and carried forward to the next stage rather than guessed a
 | WD-8 | Worlds | No randomness, hidden state, or high-dimensional input | Won't |
 | MU-1 | Models | One interface returning prediction and a defined uncertainty format | Must |
 | MU-2 | Models | Persistence and linear baselines, always compared | Must |
-| MU-3 | Models | Three fixture models with specified failure modes | Must |
+| MU-3 | Models | Four fixture failure modes (incl. action-blind) + the action-response check every model faces | Must |
 | MU-4 | Models | Fixtures labelled as fixtures everywhere | Must |
 | MU-5 | Models | Two unrigged models, matched to a fixed margin, differing on uncertainty method | Must |
 | MU-6 | Models | Recipe, formats, margin, and expected ranking recorded before judging | Must |
