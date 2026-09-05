@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Code Review 001 — World Model Judge</title>
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+
+    body {
+      font-family: "ET Book", Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif;
+      color: #111;
+      background: #fffff8;
+      line-height: 1.6;
+      padding: 2rem 1rem 6rem;
+      max-width: 1480px;
+      margin: 0 auto;
+    }
+
+    /* ── Typography ── */
+    h1 {
+      font-size: 2.4rem;
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.4rem;
+      color: #111;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 400;
+      font-style: italic;
+      margin-top: 3rem;
+      margin-bottom: 1rem;
+      color: #111;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 0.3rem;
+    }
+
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-top: 2rem;
+      margin-bottom: 0.6rem;
+      color: #333;
+    }
+
+    p, li {
+      font-size: 1rem;
+      line-height: 1.7;
+      margin-bottom: 0.8rem;
+      max-width: 1000px;
+    }
+
+    ul, ol { padding-left: 1.4rem; margin-bottom: 1.2rem; }
+    li { margin-bottom: 0.4rem; }
+
+    .subtitle {
+      font-size: 1.1rem;
+      font-style: italic;
+      color: #555;
+      margin-bottom: 2.5rem;
+      max-width: 1000px;
+    }
+
+    .date {
+      font-size: 0.9rem;
+      color: #888;
+      margin-bottom: 0.2rem;
+    }
+
+    /* ── Floating TOC (Left Side) ── */
+    nav.toc {
+      position: fixed;
+      top: 2rem;
+      left: 2rem;
+      width: 220px;
+      max-height: calc(100vh - 4rem);
+      overflow-y: auto;
+      background: #fffff8;
+      border-right: 2px solid #ddd;
+      padding: 1rem 1rem 1rem 0;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      z-index: 100;
+    }
+
+    nav.toc .toc-title {
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #999;
+      margin-bottom: 0.6rem;
+    }
+
+    nav.toc a {
+      color: #555;
+      text-decoration: none;
+      display: block;
+      padding: 0.15rem 0;
+      transition: color 0.15s;
+    }
+
+    nav.toc a:hover { color: #111; }
+    nav.toc a.active { color: #111; font-weight: 600; }
+    nav.toc .toc-h3 { padding-left: 0.8rem; font-size: 0.78rem; color: #888; }
+    nav.toc .toc-h3:hover { color: #555; }
+
+    /* Offset main content for left TOC */
+    main {
+      margin-left: 260px;
+      max-width: 1000px;
+    }
+
+    /* ── Sidenotes (Right Margin) ── */
+    .sidenote {
+      float: right;
+      clear: right;
+      width: 220px;
+      margin-right: -260px;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      color: #666;
+      padding-left: 1rem;
+      border-left: 2px solid #e0e0e0;
+    }
+
+    /* ── Tables (Few's principles) ── */
+    table {
+      border-collapse: collapse;
+      margin: 1.5rem 0 2rem;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      width: auto;
+      min-width: 480px;
+      overflow-x: auto;
+    }
+
+    thead th {
+      text-align: left;
+      font-weight: 600;
+      padding: 0.5rem 1rem 0.5rem 0;
+      border-bottom: 2px solid #333;
+      color: #111;
+    }
+
+    tbody td {
+      padding: 0.45rem 1rem 0.45rem 0;
+      border-bottom: 1px solid #e8e8e8;
+      vertical-align: top;
+    }
+
+    tbody tr:last-child td { border-bottom: 2px solid #333; }
+    tbody tr:nth-child(even) { background: #f9f9f4; }
+
+    caption {
+      font-style: italic;
+      font-size: 0.88rem;
+      color: #666;
+      text-align: left;
+      margin-bottom: 0.4rem;
+    }
+
+    /* ── Inline Code ── */
+    code {
+      font-family: "Menlo", "Consolas", "Monaco", monospace;
+      font-size: 0.88rem;
+      background: #f0f0e8;
+      padding: 0.1rem 0.35rem;
+      border-radius: 2px;
+    }
+
+    pre {
+      font-family: "Menlo", "Consolas", "Monaco", monospace;
+      font-size: 0.85rem;
+      background: #f0f0e8;
+      padding: 1rem;
+      overflow-x: auto;
+      border-radius: 2px;
+      margin: 1rem 0;
+      max-width: 1000px;
+      line-height: 1.5;
+    }
+
+    /* ── Verdict Box (review components) ── */
+    .verdict {
+      border: 2px solid #333;
+      padding: 1.2rem 1.5rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+    }
+
+    .verdict-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+      margin-bottom: 0.3rem;
+    }
+
+    .verdict-text {
+      font-size: 1.3rem;
+      font-weight: 400;
+      color: #111;
+      margin-bottom: 0.4rem;
+    }
+
+    .verdict-basis {
+      font-size: 0.88rem;
+      color: #555;
+      max-width: 1000px;
+    }
+
+    .verdict.ready { border-color: #27ae60; background: #f0faf4; }
+    .verdict.ready .verdict-text { color: #27ae60; }
+
+    .verdict.caveats { border-color: #e67e22; background: #fef8f0; }
+    .verdict.caveats .verdict-text { color: #e67e22; }
+
+    .verdict.not-ready { border-color: #c0392b; background: #fdf0ef; }
+    .verdict.not-ready .verdict-text { color: #c0392b; }
+
+    /* ── Score Card ── */
+    .score-card {
+      background: #f7f7f0;
+      border: 2px solid #333;
+      padding: 1.5rem 2rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+    }
+
+    .score-card-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+      margin-bottom: 1.2rem;
+    }
+
+    .dimension-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin: 0.8rem 0;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid #e8e8e8;
+    }
+
+    .dimension-row:last-child {
+      border-bottom: none;
+    }
+
+    .dimension-name {
+      font-weight: 600;
+      color: #333;
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .dimension-scores {
+      font-size: 0.92rem;
+      color: #555;
+      min-width: 160px;
+      text-align: right;
+    }
+
+    .dimension-scores strong {
+      font-weight: 600;
+    }
+
+    /* ── Honesty Check Section ── */
+    .honesty-check {
+      background: #f0faf4;
+      border: 2px solid #27ae60;
+      border-left: 6px solid #27ae60;
+      padding: 1.5rem 1.5rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+    }
+
+    .honesty-check-header {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #27ae60;
+      margin-bottom: 0.6rem;
+    }
+
+    .honesty-check h3 {
+      margin-top: 0;
+      color: #27ae60;
+    }
+
+    .honesty-check ul {
+      margin-left: 1rem;
+    }
+
+    .honesty-check li {
+      margin-bottom: 0.6rem;
+    }
+
+    /* ── Review Components (issues) ── */
+    .issue {
+      border-left: 3px solid;
+      padding: 0.8rem 1rem;
+      margin: 0.8rem 0;
+      max-width: 1000px;
+    }
+
+    .issue.critical {
+      border-left-color: #c0392b;
+      background: #fdf0ef;
+    }
+
+    .issue.important {
+      border-left-color: #e67e22;
+      background: #fef8f0;
+    }
+
+    .issue-title {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 0.3rem;
+    }
+
+    .issue-detail {
+      font-size: 0.92rem;
+      color: #555;
+      margin-bottom: 0.3rem;
+    }
+
+    .issue-location {
+      font-size: 0.78rem;
+      color: #999;
+      font-style: italic;
+    }
+
+    /* ── Important Findings List ── */
+    .important-list {
+      max-width: 1000px;
+    }
+
+    .important-item {
+      margin: 0.8rem 0;
+      padding: 0.5rem 0 0.5rem 1rem;
+      border-left: 3px solid #e67e22;
+      background: #fef8f0;
+    }
+
+    .important-item-title {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 0.2rem;
+    }
+
+    .important-item-text {
+      font-size: 0.92rem;
+      color: #555;
+    }
+
+    /* ── Meta-Finding Callout ── */
+    .meta-finding {
+      border: 2px solid #c0392b;
+      border-left: 6px solid #c0392b;
+      padding: 1.5rem 1.5rem;
+      margin: 2.5rem 0;
+      max-width: 1000px;
+      background: #fff5f3;
+    }
+
+    .meta-finding-header {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #c0392b;
+      margin-bottom: 0.6rem;
+    }
+
+    .meta-finding h3 {
+      margin-top: 0;
+      color: #c0392b;
+    }
+
+    .meta-finding ol {
+      margin: 1.2rem 0;
+    }
+
+    .meta-finding li {
+      margin-bottom: 0.8rem;
+    }
+
+    /* ── New badge for BC-5 ── */
+    .new-badge {
+      display: inline-block;
+      background: #c0392b;
+      color: #fff;
+      font-size: 0.65rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.25rem 0.5rem;
+      margin-left: 0.5rem;
+      border-radius: 2px;
+    }
+
+    /* ── Cluster sections ── */
+    .cluster {
+      border-left: 4px solid #333;
+      padding-left: 1.2rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+    }
+
+    .cluster h3 {
+      margin-top: 0;
+    }
+
+    /* ── GVM Attribution ── */
+    .gvm-attribution {
+      font-size: 0.75rem;
+      color: #999;
+      font-style: italic;
+      text-align: center;
+      margin-top: 3rem;
+      margin-bottom: 0;
+      max-width: none;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 1200px) {
+      nav.toc {
+        position: static;
+        width: 100%;
+        max-height: none;
+        border-right: none;
+        border-bottom: 1px solid #ddd;
+        padding: 1rem 0;
+        margin-bottom: 2rem;
+      }
+      main { margin-left: 0; }
+      .sidenote {
+        float: none;
+        width: 100%;
+        margin: 0.8rem 0;
+        padding: 0.6rem 0 0.6rem 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="toc" id="toc">
+    <div class="toc-title">Contents</div>
+  </nav>
+
+  <main>
+    <p class="date">Round 1 (first-ever code review) · 6 panels (A References, B Contracts, C Logic & Completeness, D Naming & Spec Compliance, E Concurrency & Ordering, F Stub Detection) · 5 September 2026</p>
+    <h1>World Model Judge — Code Review 001</h1>
+    <p class="subtitle">The first code review this project has run, after nine design-review rounds and two completed build phases (worlds + first chart). Six defect-class panels scanned every file under src/wmj/ and its paired tests. The codebase is fundamentally sound — physics, determinism, and contracts are correct — but this pass found a specific, recurring pattern: the spec-reconciliation work done earlier in this same session (design-review-009's gap closures) did not fully propagate to every sibling location it touched, and several fail-loud guards this project's own conventions require have never been proven to actually fire.</p>
+
+    <h2 id="verdict">Verdict</h2>
+    <div class="verdict caveats">
+      <div class="verdict-label">Verdict</div>
+      <div class="verdict-text">Merge with caveats</div>
+      <p class="verdict-basis">First-ever code review for this project. No Critical findings survive triage — Panel F (stub detection) flagged five functions under its mechanical single-return-statement heuristic, but all five are legitimate, fully-implemented code (a documented no-op, a boundary comparison, a tuple builder, two validated-singleton accessors), not incomplete placeholders; recommended disposition is DISMISS as heuristic false positives. Eight Important findings remain, none of which represent a live functional break: three trace to this session's own design-review-009 reconciliation pass not fully propagating (a stale docstring, a spec sentence missing the same fix just applied to its sibling, three new test-case IDs never wired into test names, a full-scale gate missing the two-sided assertion its fast counterpart has); a systematic gap in this project's own phantom-gate discipline (several fail-loud guards have no test proving they fire); one dead-by-construction field that can never be observed False by any caller; one unguarded division reachable from a bare CLI integer; and one defect two panels found independently (frozen dataclasses handing back shared, uncopied numpy arrays). Accepted risk if merged as-is: none of these affect today's numbers or verdicts — they are verification-completeness and documentation-accuracy gaps, exactly the class of thing a first code review exists to catch before Phase 3 raises the stakes.</p>
+    </div>
+
+    <h2 id="score-card">Panel Summary</h2>
+    <div class="score-card">
+      <table>
+        <tbody>
+          <tr><td><strong>Panel A (References)</strong></td><td>0 Critical/Important, 2 Minor/Observation. Clean: all 208 tests collect with zero import errors; dependency versions match the lock file exactly.</td></tr>
+          <tr><td><strong>Panel B (Contracts)</strong></td><td>1 Important, 3 Minor/Borderline. Zero mock-budget violations (test suite uses real instances throughout, confirmed by grep).</td></tr>
+          <tr><td><strong>Panel C (Logic & Completeness)</strong></td><td>4 Important-equivalent ("Medium"), several Low/Borderline. Confirmed: exactly one except clause in all of src/, and it re-raises with context — no swallowed errors anywhere.</td></tr>
+          <tr><td><strong>Panel D (Naming & Spec Compliance)</strong></td><td>5 Important, 2 Borderline. Confirmed clean on the four heavily-scrutinized post-design-review-009 items (ADR-M2, ADR-W1's pooled-span removal, TC-WD1-01 constants character-for-character, the models allowlist correction).</td></tr>
+          <tr><td><strong>Panel E (Concurrency & Ordering)</strong></td><td>1 Important, 3 Borderline. Top-line: codebase is genuinely free of threads/processes/async (confirmed by exhaustive grep) — stated explicitly per the panel's own mandate, not a null result.</td></tr>
+          <tr><td><strong>Panel F (Stub Detection)</strong></td><td>5 Critical-by-heuristic, all recommended DISMISS as false positives from an overly literal "single return statement" rule.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 id="themes">Cross-Panel Themes</h2>
+    <ul>
+      <li><strong>Reconciliation-propagation gap (Panels B + D):</strong> the design-review-009 fix pass, applied within this same session, corrected several spec/code mismatches but left three sibling instances of the identical defect class uncorrected — a stale module docstring, a spec sentence missing the fix just made to its twin, and three newly-minted test-case IDs never wired into the test names this project's own convention requires. Elevated because the SAME session that fixed the pattern also reproduced it.</li>
+      <li><strong>Phantom-gate discipline gap (Panel C):</strong> this project's own stated convention is that every fail-loud mechanism needs a test proving it can fire, not just exist. Panel C found this convention inconsistently applied — several validate/guard branches in reporting/horizon_plot.py, models/base.py's SeedKeyError, reporting/captions.py's CaptionLengthError, and the CLI's argparse fallthrough all lack a firing test.</li>
+      <li><strong>Frozen-but-mutable shared state (Panels B + E, independently):</strong> Prediction/RegionSpec/WorldContext are `frozen=True` dataclasses whose numpy-array fields are handed back by reference, uncopied, across calls. Two independent panels flagged the same defect class without cross-talk — elevated per the synthesis rule that convergent independent findings raise confidence and severity.</li>
+    </ul>
+
+    <h2 id="important">Important Findings</h2>
+    <div class="important-list">
+      <div class="important-item">
+        <div class="important-item-title">I1 — This session's own spec-reconciliation pass left three sibling defects of the same class uncorrected</div>
+        <div class="important-item-text">specs/cross-cutting.md item 10 (the new REPORTING_ALLOWLIST gate, added in this session) omits `__future__` from its allowlist prose — the exact defect just corrected for item 9's models-allowlist sentence in the same commit, even though every reporting module carries `from __future__ import annotations` and the code only passes because `ALWAYS_ALLOWED` is silently unioned in. Separately, this session minted three new test-case IDs (TC-NF6-10, TC-NF6-11, TC-MU2-03) but never wired any of them into the actual test function names or docstrings in tests/gates/test_import_graph.py or tests/unit/models/test_baselines.py — breaking this project's own stated convention that requirement/case IDs appear in gate-test names, exactly where a brand-new ID was introduced. And tests/gates/test_benchmark_full_scale.py's full-scale TC-WD4-01 gate still asserts only the upper bound (`ratio < 10.0`); the two-sided fix applied to the fast test (`0.1 < ratio < 10.0`) never propagated to its full-scale counterpart. Fix: add `__future__` to item 10's stated set; rename or add the three ID references into the relevant test names; add the lower-bound assertion to the full-scale gate.</div>
+      </div>
+      <div class="important-item">
+        <div class="important-item-title">I2 — baselines.py's own module docstring still describes ddof as an open backlog item the spec has since settled</div>
+        <div class="important-item-text">The docstring says: 'ADR-M2 does not pin ddof; the choice is recorded as backlog candidate A8 because it changes bytes.' specs/models.md ADR-M2 now reads 'ddof=1 (sample standard deviation), pinned for both fits (corrected design-review-009 A8/C1)' — an Accepted decision, not an open question. The runtime code is correct; only the code's own contract commentary is stale, and a maintainer reading only this docstring could believe ddof is still a renderer's-discretion choice and 'fix' it away from the pinned value, silently changing every downstream CRPS/skill/Verdict byte. Fix: update the docstring to state ddof=1 as the spec-pinned decision, citing ADR-M2 directly, dropping the backlog framing.</div>
+      </div>
+      <div class="important-item">
+        <div class="important-item-title">I3 — assert_single_threaded(), the actual verifier ADR-002 rule 1 calls for, is dead code at the real entry points</div>
+        <div class="important-item-text">Only ensure_single_threaded() (the setter) is called, in __main__.py, before cli is imported. assert_single_threaded() (the verifier) is invoked nowhere except its own unit test. Every unit test that imports wmj.harness.cli.main directly bypasses the thread guard entirely — numpy/BLAS get whatever thread count is ambient in the pytest process, with nothing asserting or reporting it. The one place this ordering claim actually matters today (TC-NF1-01's byte-identity gate) is unaffected — it launches genuinely separate OS processes via subprocess.run, which does go through __main__.py in the correct order. Fix: call assert_single_threaded() at the top of cli.main() (or the top of write_skeleton_report()/run_chart_preview()), not only ensure_single_threaded() in __main__.py, so the invariant is enforced at every entry point, not only the one the byte-identity gate happens to use.</div>
+      </div>
+      <div class="important-item">
+        <div class="important-item-title">I4 — the per-region drift artefact's within_bound field is dead-by-construction — it can never be observed False by any caller</div>
+        <div class="important-item-text">assert_drift_within_bound() raises before the line that would ever set within_bound to False is reached, so build_divergence_artefact's drift_per_region entries hardcode within_bound: True unconditionally, and the top-level all(...) aggregate is equally tautological. Existing tests only assert the value is True, which is guaranteed by construction, not by measurement. A future consumer (reporting, judge) that branches on drift['within_bound'] believing it carries real per-region information will always take the true branch. Fix: either drop the field (the raise already is the gate) or restructure so the boolean is genuinely derived from a stored comparison rather than a literal; if kept, comment explicitly that it is always True by construction.</div>
+      </div>
+      <div class="important-item">
+        <div class="important-item-title">I5 — a systematic gap in this project's own phantom-gate discipline: several fail-loud guards have no test proving they fire</div>
+        <div class="important-item-text">reporting/horizon_plot.py's _validate function has several compound `or` guards where only one disjunct is ever exercised by the parametrized test suite (the dt-guard's negative/NaN/wrong-type cases, the non-list/non-dict type-check halves, the n<2 case). models/base.py's SeedSource.rng() SeedKeyError guard (fires when my_name is None) is never exercised by any test. reporting/captions.py's CaptionLengthError (the RP-5 three-sentence limit) is never raised in any test — write_caption is only ever called with a 2-sentence string. harness/cli.py's argparse fallthrough ('no runnable command selected') — the path a user hits by typing the most obvious invocation, `wmj run` without `--skeleton` — is never exercised. Each is a genuine phantom gate: the raise exists in the code but nothing proves it can actually fire for that specific condition, against this project's own explicitly stated convention that every fail-loud mechanism needs a negative/phantom-gate test. Fix: add the missing negative-case tests for each guard listed.</div>
+      </div>
+      <div class="important-item">
+        <div class="important-item-title">I6 — an unguarded ZeroDivisionError is reachable from a bare CLI integer, violating the project's own Error-Handling convention</div>
+        <div class="important-item-text">one_step_skill_persistence_vs_linear's mean_crps divides by len(starts) with no guard; n_trials is a bare CLI integer (--n-trials) passed straight through. --n-trials 0 reaches this division and produces an unguarded, contextless ZeroDivisionError — naming nothing about which requirement's gate fired, contrary to this project's own Error-Handling rule that every exception message names what failed and why. Fix: validate n_trials >= 1 (and n_starts >= 1, horizon >= 1) at the top of run_chart_preview/build_lv_persistence_error_vs_horizon, raising a named WmjError subclass with a requirement reference, rather than letting a bare ZeroDivisionError reach the user.</div>
+      </div>
+      <div class="important-item">
+        <div class="important-item-title">I7 — frozen dataclasses hand back shared, uncopied numpy arrays across calls (found independently by two panels)</div>
+        <div class="important-item-text">Prediction, RegionSpec, and WorldContext are declared frozen=True, but frozen=True only blocks field reassignment — it does nothing to the contents of a numpy array a field holds. PersistenceModel/LinearModel hand back the identical self._spread array object from every single predict() call rather than a copy; lv._REGION_SPEC and WORLD.scale are built once at import time and returned by reference, uncopied, for the rest of the process. No current call site does an in-place write into any of these (every consumer uses / not /=), so there is no live bug today — but a single future stray in-place op anywhere downstream would silently corrupt a shared singleton for every unrelated call for the rest of the process, in a project whose entire credibility claim is that no such hidden cross-call dependency exists. Fix: either .copy() the arrays at construction, or enforce read-only via array.setflags(write=False) on the module-level singletons and on self._spread in the baselines, so a future in-place mutation raises immediately instead of silently propagating.</div>
+      </div>
+      <div class="important-item">
+        <div class="important-item-title">I8 — the drift normaliser's span<=0 fallback silently changes what the bound measures, with no error, log, or test</div>
+        <div class="important-item-text">rel_drift_max = max_abs_drift / span if span > 0.0 else max_abs_drift silently changes units — from 'relative to the invariant's range' to 'absolute drift' — whenever a region's conserved-quantity range collapses to a single value, with no error, no log, and no test ever exercising this branch. Currently unreachable for LV/pendulum's declared boxes (both have real non-zero conserved-quantity ranges, independently verified), but nothing prevents a future world's box from hitting it silently, changing what the 1e-6 bound means without disclosure. Fix: raise a dedicated error when span <= 0.0 for a region declared to have a genuine invariant, matching this project's own fail-loudly doctrine, or explicitly document the fallback's unit change in the artefact schema.</div>
+      </div>
+    </div>
+
+    <h2 id="minor">Minor Findings & Observations</h2>
+    <ul>
+      <li>"skill_score (judge/skill.py) has no stated or enforced precondition on crps_baseline > 0. Very likely unreachable given crps_gaussian's own spread>0 guard, but the function's own public contract doesn't say so — a future caller bypassing crps_gaussian could get a silent inf/nan surfacing far from the actual division. (Panel B)"</li>
+      <li>"conserved_rel_drift_max_vs_initial can be None, a value type worlds.md §5's worked JSON example doesn't disclose (unlike judge.md's explicit natural_units: null convention). Add a one-line nullability note. (Panel B)"</li>
+      <li>"DEFAULT_N_STARTS (harness/benchmarks.py and harness/preview.py) and the dev-seed literal 20260825 are each independently hardcoded in multiple files rather than sourced from one shared constant — currently all agree, but a future change would need to be caught by grep, not by following one reference. (Panel A, DRY)"</li>
+      <li>"conserved_quantity_range has no direct fast unit test in its own owning test module; the pendulum's 4-dimensional path and the max(2,...) resolution floor are only exercised via the slow, not-run-by-default full-scale gate. Independently re-verified numerically correct against a finer grid, but unverified-by-construction in the default test run. (Panel C)"</li>
+      <li>"separation_curve/conserved_drift's null_action default is a hardcoded np.zeros(1) — safe today since both worlds have action-dimension 1, but a latent silent-shape-mismatch trap for any future world with a different action dimension. (Panel C)"</li>
+      <li>"harness/regions.py's UndeclaredRegionError docstring claims 'no numbered test case covers this path,' but a test does exercise it directly (just without a formal TC- ID) — a stale self-disclosure in a project whose credibility argument rests on accurate self-disclosure. (Panel C)"</li>
+      <li>"tests/unit/worlds/test_divergence.py's comment states the executed ratio sits in a 0.6-1.4 band, but the actual assertion is the much wider 0.1 < ratio < 10.0, with no note reconciling why the assertion is looser than the observed figure. (Panel D)"</li>
+      <li>"models/base.py's TrainingData docstring has a typo: 'hand identically' should read 'handed identically'. (Panel D)"</li>
+      <li>"reporting/style.py's apply_style() mutates the global, process-wide matplotlib.rcParams rather than scoping via rc_context — idempotent today (one style, always reapplied identically) but a future fixture-specific style variant would silently leak across renders depending on call order. (Panel E)"</li>
+      <li>"Every artefact writer (skeleton.py, preview.py, style.py's save_figure, captions.py's write_caption) writes straight to its final path with no temp-file-then-rename — two overlapping invocations against the same out/ directory could interleave writes. Not exercised today (every test uses its own tmp_path; the byte-identity gate gives each of its ten runs a distinct subdirectory). If concurrent invocation is ever a supported pattern, write to a temp path and os.replace() atomically; otherwise state explicitly that concurrent invocation against shared out/ is unsupported. (Panel E)"</li>
+    </ul>
+
+    <h2 id="stubs">Stub Detection (Panel F)</h2>
+    <p>Panel F's heuristic treats any function body that is a bare pass or a single return statement as a stub candidate, then applies a namespace policy: since none of this codebase lives under a stubs/ directory, any heuristic match auto-escalates to Critical. All five matches below are, on inspection, legitimate fully-implemented code, not incomplete placeholders — recommended disposition is DISMISS for all five, as false positives of an overly literal heuristic, not real findings.</p>
+    <table>
+      <thead><tr><th>Symbol</th><th>File:Line</th><th>Why flagged</th><th>Recommended disposition</th></tr></thead>
+      <tbody>
+        <tr><td>PersistenceModel.reset</td><td>src/wmj/models/baselines.py:56</td><td>body is `pass` only</td><td>Documented intentional no-op — persistence has no rollout-local state to clear</td></tr>
+        <tr><td>within_tolerance</td><td>src/wmj/worlds/base.py:69</td><td>single return statement</td><td>Fully-implemented boundary comparison (worlds spec ADR-W1)</td></tr>
+        <tr><td>declared_region_names</td><td>src/wmj/harness/regions.py:77</td><td>single return statement</td><td>Fully-implemented tuple builder from a generator expression</td></tr>
+        <tr><td>lv.regions</td><td>src/wmj/worlds/lv.py:135</td><td>single return statement (`return _REGION_SPEC`)</td><td>Returns a validated module-level singleton built and checked at import time</td></tr>
+        <tr><td>pendulum.regions</td><td>src/wmj/worlds/pendulum.py:137</td><td>single return statement (`return _REGION_SPEC`)</td><td>Same validated-singleton pattern as lv.py</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="verified">Confirmed Clean by Execution</h2>
+    <ul>
+      <li>All 208 tests collect with zero import/collection errors; dependency versions in .venv match requirements.lock exactly across all 14 pinned packages. (Panel A)</li>
+      <li>Zero mock-budget violations anywhere in the test suite — every test uses real world/model/judge instances and real trajectories, including process-boundary byte-identity tests that spawn real subprocesses. (Panel B)</li>
+      <li>Exactly one except clause exists in all of src/wmj/, and it re-raises with context — no swallowed errors anywhere in the codebase. (Panel C)</li>
+      <li>conserved_quantity_range's grid construction, reshape, and conserved() call chain independently re-verified numerically correct for both LV (2-D) and the pendulum (4-D) against a finer reference grid. (Panel C)</li>
+      <li>models/baselines.py's shared _fit_spread guard is correctly wired into both fit_persistence_spread and fit_linear_spread, and both are exercised by tests for both baselines — design-review-009 C1's asymmetry is genuinely fixed, no stale unguarded function remains anywhere. (Panel C)</li>
+      <li>The four heavily-scrutinized post-design-review-009 spec/code pairs (ADR-M2's ddof pin, ADR-W1's pooled-span removal, TC-WD1-01's reference constants, the models-allowlist correction) all match character-for-character between spec and code. (Panel D)</li>
+      <li>The codebase is genuinely free of threads, processes, and async anywhere in src/ or tests/ — confirmed by exhaustive grep, stated explicitly rather than as a silent non-finding. SeedSource never touches numpy's legacy global RNG; LinearModel.reset() is correctly called before every predict() at both of its call sites. (Panel E)</li>
+    </ul>
+
+    <h2 id="disposition">Recommended Disposition (for user triage)</h2>
+    <p>Nothing below is decided here. Each is the panel's recommendation; fix/defer/dismiss is the user's call.</p>
+    <ol>
+      <li>I1–I2 (this session's own reconciliation gaps): recommend fix now — small, mechanical, and the same session that created them can close them cleanly.</li>
+      <li>I3 (thread-guard verifier dead code): recommend fix — one function call, closes a real verification gap at every non-CLI entry point.</li>
+      <li>I4 (tautological within_bound field): recommend fix — either drop the field or restructure so it's genuinely derived.</li>
+      <li>I5 (phantom-gate discipline gap): recommend fix — add the missing negative-case tests; this project's credibility rests on this exact discipline being applied consistently.</li>
+      <li>I6 (unguarded ZeroDivisionError): recommend fix — a named, informative refusal is one guard clause away.</li>
+      <li>I7 (frozen-but-mutable shared arrays): recommend fix or explicitly document — no live bug, but cheap to close with .copy() or setflags(write=False).</li>
+      <li>I8 (span<=0 silent fallback): recommend fix — matches this project's own fail-loudly doctrine, currently unreachable but a latent trap for a future world.</li>
+      <li>Panel F's five stub-detection findings: recommend DISMISS all five as heuristic false positives — confirmed on inspection to be legitimate, fully-implemented code.</li>
+      <li>Minor findings and observations: recommend adopt at the user's discretion — none are urgent, several are one-line fixes.</li>
+    </ol>
+
+  </main>
+
+  <script>
+    (function () {
+      var toc = document.getElementById('toc');
+      if (!toc) return;
+      var heads = document.querySelectorAll('main h2[id]');
+      heads.forEach(function (h) {
+        var a = document.createElement('a');
+        a.href = '#' + h.id;
+        a.textContent = h.textContent;
+        a.className = 'toc-link';
+        toc.appendChild(a);
+      });
+      function onScroll() {
+        var y = window.scrollY + 120, cur = null;
+        heads.forEach(function (h) { if (h.offsetTop <= y) cur = h.id; });
+        document.querySelectorAll('.toc-link').forEach(function (l) {
+          l.classList.toggle('active', l.getAttribute('href') === '#' + cur);
+        });
+      }
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    })();
+  </script>
+</body>
+</html>
