@@ -18,6 +18,9 @@ Project-level calibration layer for GVM review skills (`/gvm-design-review`, `/g
 | 5 | 2026-08-31 | design (dual/blind, post-repair) | — (see per-panel) | 6 | 4 | 4 | 4 | 2 | 5 | 3 |
 | 6 | 2026-08-31 | design (dual/blind, post-v1.5-fix-all) | — (see per-panel) | 8 | 6 | 5 | 6 | 3 | 5 | 5 |
 | 9 | 2026-09-04 | design (dual/blind, backlog reconciliation) | — (see per-panel) | 7 | 7 | 7 | 6 | 7 | 5 | n/a |
+| 1 | 2026-09-05 | code | — (see per-panel) | 9¹ | 7¹ | 6¹ | 6¹ | 7¹ | n/a¹ | n/a¹ |
+
+¹ Code review's six panels (A References, B Contracts, C Logic & Completeness, D Naming & Spec Compliance, E Concurrency & Ordering, F Stub Detection) are a different defect-class partition than design review's seven — mapped positionally into this table's existing columns (A→A, B→B, C→C, D→D, E→E) for a single shared history; Panel F (Stub Detection) has no design-review analogue and is recorded in prose only, not a column.
 
 **Round 6 was the first round whose failure shape inverted, and the closest to buildable.** 14 reviewers; calibrated panels pressure-tested the v1.5 enforcement fixes with running code. Verdict is **Do not build** a sixth time (Security 3/10, multiple Criticals), but the design/contract/coverage surface **converged and verified clean** (A 9/8, B 6/8, C 5/7, D 6/6 — panels that scored 2–4 for five rounds scored 6–9) and **three v1.5 design decisions were confirmed working by execution**: content-addressed seeding's no-shift property (3 panels), the TC-MU9-01 registry teardown (2 panels reproduced both Round-5 leaks as regressions), and the import-join (2 panels, 16 ast.parse cases). The critical path (10 chunks) and chunk count (28) are correct on three independent re-derivations. The remaining Criticals are concentrated in two mechanism-precision clusters with known small fixes — the runtime purity harness and the determinism derivations — and **v1.5's own "fix all" pass planted 5 of the 10 Criticals** (self-verified, at speed: the BC-2 pattern). See `design-review/design-review-006.html`.
 
@@ -286,3 +289,33 @@ Genuinely verified sound: NF-4's `--batch` mechanism (three independent executio
 **Resolved / confirmed-sound this round (verified by execution):** the LV equilibrium degeneracy (A1), the invariant zero-crossing (A7 premise), the `ddof` byte-impact (A8 premise), the widened judge/models allowlists (A4/A5, 22 gate tests green), the banned-identifier growth as sound diagnostic lint (A3), and a clean confidentiality scan of the whole backlog and B1 (NF-4 holds).
 
 **Recurring pattern retired.** The "rebind-vs-mutate purity defeat" that recurred Rounds 6–8 did not appear this round — the reframed tripwire-plus-byte-identity posture the build implemented is holding. The recurring finding this round is milder and of a new kind: a fix applied to one of two siblings (A8 persistence but not linear), the same shape as A7's per-region-but-shipped-pooled gap — a "half-applied correction" class worth watching as Phase 3 extends both.
+
+---
+
+## Round 1 (2026-09-05) — first code review, post-Phase-2, post-design-review-009
+
+**Verdict: Merge with caveats.** First-ever `/gvm-code-review` run for this project — design review had run nine rounds against the plan and executed evidence, but no panel had done a line-by-line pass over the actual implementation until now. Scope: everything under `src/wmj/` and its paired tests (28 source files, 55+ test files, 208 collected tests). Six defect-class panels (A References, B Contracts, C Logic & Completeness, D Naming & Spec Compliance, E Concurrency & Ordering, F Stub Detection).
+
+**Headline result: the codebase is fundamentally sound.** Physics (LV/pendulum RK4), the canonical serializer, the SeedSource/component_key seeding scheme, and all four import-allowlist gates (including the just-added REPORTING_ALLOWLIST) all passed clean or near-clean. Zero swallowed errors anywhere in `src/`. Zero mock-budget violations. The codebase is confirmed genuinely single-threaded with no concurrency hazards (Panel E's explicit top-line finding, per its own always-on mandate).
+
+**The one real pattern this round surfaced: reconciliation work done *in this same session* (design-review-009's gap closures) did not fully propagate to every sibling location it touched.** Panels B and D independently found: the `baselines.py` module docstring still describes `ddof` as an open backlog item after `specs/models.md` was updated to pin it as Accepted in the same session; the new `REPORTING_ALLOWLIST` spec sentence has the identical `__future__`-omission bug just fixed on its sibling models-allowlist sentence; three test-case IDs minted in the same round (TC-NF6-10, TC-NF6-11, TC-MU2-03) were never wired into the actual test names, breaking this project's own ID-traceability convention exactly where a new ID was introduced; and the full-scale slow-gate test for TC-WD4-01 never received the two-sided assertion added to its fast counterpart. None of these are functional bugs — they are the specific failure mode of doing careful reconciliation work under time pressure: the fix lands on the flagship instance and not its siblings.
+
+**A second theme: inconsistent application of this project's own phantom-gate discipline.** Panel C found several fail-loud guards (`horizon_plot.py`'s several `_validate` disjuncts, `SeedSource.rng()`'s `SeedKeyError`, `captions.py`'s `CaptionLengthError`, the CLI's argparse fallthrough) with no test proving they actually fire — the same discipline gap this project has caught and closed for itself repeatedly in design review, now found live in the code that was supposed to already have it.
+
+**Panel F (stub detection) returned five Critical-by-heuristic findings, all recommended DISMISS.** Its mechanical "single return statement or bare `pass`" rule fired on legitimate, fully-implemented code (`PersistenceModel.reset()`'s documented no-op, `within_tolerance()`'s boundary comparison, `declared_region_names()`'s tuple builder, both worlds' `regions()` singleton accessors) — the heuristic is deliberately over-broad by design (mechanical matching, human triage decides), and this round's human triage found no real stub anywhere in `src/wmj/`.
+
+**Convergent findings (2+ panels, elevated per synthesis rule):** frozen dataclasses (`Prediction`, `RegionSpec`, `WorldContext`) handing back shared, uncopied numpy arrays across calls — found independently by Panel B (contract/ownership angle) and Panel E (concurrency/publication angle) with no cross-talk between the two dispatches. No live bug (every consumer only reads), but elevated to Important because two orthogonal defect-class scans converged on it.
+
+**Findings carried forward (for user triage — none dispositioned here):**
+- I1 (Important, elevated): this session's own reconciliation gaps — `__future__` missing from the reporting-allowlist spec sentence, three new test-case IDs unwired, the full-scale gate's missing lower bound.
+- I2 (Important): `baselines.py` docstring stale relative to the now-pinned `ddof=1` spec text.
+- I3 (Important): `assert_single_threaded()` (the verifier) is dead code at every entry point except the one the byte-identity gate happens to use.
+- I4 (Important): the per-region drift artefact's `within_bound` field is dead-by-construction — the raise already is the gate, so the field can never be observed False.
+- I5 (Important, systemic): phantom-gate discipline gap across four separate fail-loud guards with no firing test.
+- I6 (Important): an unguarded `ZeroDivisionError` reachable from `--n-trials 0`, violating the project's own named-refusal Error-Handling convention.
+- I7 (Important, 2-panel convergence): frozen dataclasses hand back shared, uncopied numpy arrays.
+- I8 (Important): the drift normaliser's `span<=0` fallback silently changes units, unreachable today but undisclosed and untested.
+- Panel F's five stub-detection findings: recommended DISMISS, heuristic false positives.
+- Ten Minor/Observation items (DRY duplication, undocumented preconditions, a stale docstring claim, a comment/assertion mismatch, a typo, global rcParams scoping, non-atomic writes) — see `code-review/code-review-001.html` for the full list.
+
+**No recurring-finding table entry yet** — this is Round 1 for code review; recurrence tracking begins at Round 2.
