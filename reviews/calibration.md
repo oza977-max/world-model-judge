@@ -1,3 +1,6 @@
+---
+schema_version: 0
+---
 # Review Calibration — World Model Judge
 
 Project-level calibration layer for GVM review skills (`/gvm-design-review`, `/gvm-code-review`, `/gvm-doc-review`). Per `review-reference.md`'s progressive-calibration protocol: this file is read at the start of every review round and updated at the end of it.
