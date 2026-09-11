@@ -258,3 +258,81 @@ the decision is not made silently inside a build chunk.
 
 *Where recorded:* `build/prompts/P3-C02.md`, `build/handovers/P3-C02.md`,
 `src/wmj/models/registry.py` (module docstring).
+
+---
+
+### A12 — two pre-registration values the spec left open, pinned at P3-C07
+
+**What the spec says.** (1) models §4 pins `training_trajectories: 2000`
+but records the epoch count only as `epochs: <pinned>` — no value. (2)
+judge ADR-J4 pins the sharpness-hedge threshold as "a fixed value … set
+per world from the world's own scale vector," but not the *formula*.
+
+**What the build did (both are genuine pre-registration modelling choices,
+fixed in advance — which is what pre-registration is, not a defect).**
+1. **`epochs: 100`** — a round figure, no early stopping. Pinned in
+   `prereg/recipe.md`.
+2. **`sharpness_hedge_threshold = scale`** (per dimension) — a 90% interval
+   as wide as the state's own characteristic magnitude has said nothing, so
+   anything wider is hedging. Computed per world by `derive_thresholds.py`,
+   committed in `prereg/thresholds.json`.
+
+**The real tension this asks design review to weigh (the one worth naming).**
+The implementation guide orders P3-C07 **before** P3-C03/C04/C06 because
+those chunks read the epoch count and trajectory count from the recipe. But
+the *right* epoch count (and the training-trajectory horizon, itself
+unpinned) depends on what those later chunks measure — convergence, and
+runtime against the NF-2 600 s budget. So these counts are pinned before
+their feasibility is observable: a genuine ordering chicken-and-egg. Two
+honest resolutions: (a) a quick feasibility spike on real training before
+the recipe is frozen; or (b) accept an open recipe revision before any
+judged run if `100` proves wrong — which is the spec's own sanctioned
+remedy ("revise the recipe openly and re-run, never nudge a trained
+model"), **but** note that revising `recipe.md` after its first commit will
+make `check_prereg`'s content-hash (TC-MU6-04) fail at P6-C03 against the
+original first-add blob, so an open revision is not free: the
+pre-registration's "commit-of-record" has to be re-established and the
+revision's own honesty rests on it predating the judged run (which, since
+judging is P6-C03, it still does). P3-C03/C06 should report measured
+convergence + runtime at `epochs: 100` and, if a change is needed, make it
+openly there — before P6-C03 — not silently. Design review should also
+ratify the `sharpness_hedge_threshold = scale` formula.
+
+*Where recorded:* `build/prompts/P3-C07.md`, `build/handovers/P3-C07.md`,
+`prereg/recipe.md` (the `epochs` note), `src/wmj/harness/derive_thresholds.py`
+(`sharpness_hedge_threshold` docstring).
+
+---
+
+### A13 — a new disclosed residual for `check_prereg`: entry substance is not verifiable
+
+**What the build found (P3-C07 independent review).** `check_prereg`'s
+per-model entry check (TC-MU6-03) confirms the model's *name* appears as a
+token in the committed, pre-dated recipe and prediction. It cannot verify
+that the surrounding text is a *genuine* recipe/prediction for that model:
+a hollow incidental mention ("possible future model: newmodel") in both
+files passes. Verifying substance would require semantic understanding of
+prose, which is not mechanizable.
+
+**Disposition — disclose, do not "fix" (the project's own residual-risk
+discipline).** This is the same family as models ADR-M5's three named
+residual risks (git-history rewritability, non-publication, and — the
+closest sibling — timestamp forgeability), all of which are "named, not
+solved" because no technical control in a single-author, offline,
+no-server-side-witness project closes them. A fake "substance" check would
+give false assurance, which is worse than an honest disclosure. Recorded
+in `src/wmj/harness/prereg.py`'s module docstring as disclosed residual #2.
+**Design review should formally add it to ADR-M5's disclosed-residuals
+list** so the spec and the code agree on what pre-registration does and
+does not guarantee.
+
+**Also confirmed (not a new finding): ADR-M5 residual #3 is now real in
+code.** The same review noted the ordering check reads a locally-forgeable
+committer timestamp — exactly ADR-M5's already-disclosed residual #3. The
+code correctly implements the specified timestamp check; the forgeability
+is the accepted, spec-disclosed limitation (the spec even *removed* the
+GitHub-API push-time mitigation for introducing a network dependency). No
+action beyond noting it in prereg.py's disclosed residual #1.
+
+*Where recorded:* `build/handovers/P3-C07.md`, `src/wmj/harness/prereg.py`
+(module docstring, "Disclosed residuals").

@@ -1,0 +1,30 @@
+{
+  "agreement_threshold": 1.0,
+  "bands": {
+    "amber_outer": [
+      8,
+      35
+    ],
+    "amber_outside_prob": 0.0008727389767076177,
+    "expected_exceptions": 20,
+    "green": [
+      12,
+      29
+    ],
+    "green_outside_prob": 0.033116099102065095,
+    "n": 200,
+    "p": 0.1
+  },
+  "sharpness_hedge_threshold": {
+    "lv": [
+      4.0,
+      2.5
+    ],
+    "pendulum": [
+      3.141592653589793,
+      3.141592653589793,
+      6.283185307179586,
+      6.283185307179586
+    ]
+  }
+}
