@@ -34,6 +34,7 @@ import numpy as np
 
 from wmj.errors import WmjError
 from wmj.models.base import Prediction, SeedSource, TrainingData, WorldContext
+from wmj.models.registry import register
 
 SPREAD_DDOF = 1  # sample std — see module docstring and backlog A8
 
@@ -151,3 +152,11 @@ def linear_factory(
 ) -> LinearModel:
     """factory(ctx, seeds, training) -> Model (models spec ADR-M1)."""
     return LinearModel(spread=fit_linear_spread(training))
+
+
+# Registry wiring (P3-C02, models ADR-M1 / MU-9): module-level calls at
+# import time put both baselines in the registry under their names. Both
+# carry is_baseline=True; the flag's only consumer is prereg-exemption, not
+# the MU-2 comparison set (models ADR-M1 scope note).
+register("persistence", persistence_factory)
+register("linear", linear_factory)

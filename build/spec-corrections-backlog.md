@@ -204,3 +204,57 @@ gradient, or a non-finite finite-difference loss, now raises
 `max()` (Python's `max()` discards a NaN that is not its first argument) —
 regression-tested (`test_gradient_check_raises_on_a_nan_analytic_gradient`,
 `..._when_the_finite_difference_loss_is_non_finite`).
+
+---
+
+### A11 — the registry's auto-discovery contradicts the models import-allowlist (both in cross-cutting ADR-003)
+
+**What the spec says.** ADR-003 pins the registry's auto-discovery
+mechanism (cross-cutting.md, discovery bullet): "`registry.all_models()`
+calls `importlib.invalidate_caches()` and then
+`pkgutil.iter_modules(wmj.models.__path__)` … importing each discovered
+submodule via `importlib.import_module`." The **same** ADR-003 pins the
+models import-allowlist (item 9, TC-NF6-09): "`wmj/models/*`'s only
+sanctioned outward imports are, completely: numpy, math, dataclasses,
+typing, `__future__`, `wmj.errors`, `hashlib`, `wmj.models.base`,
+`wmj.models.registry` — nothing else, in any direction," enforced by the
+gate's `MODELS_ALLOWLIST`.
+
+**What the build found.** The two clauses contradict. `registry.py` lives
+under `wmj/models/`, so the import gate scans it; yet the discovery clause
+requires it to import `importlib` and `pkgutil`, neither of which is in
+the allowlist. Building discovery as specified would trip the TC-NF6
+models gate (executed: the gate flags any import outside the allowlist).
+Nine design-review rounds did not catch it because the registry had not
+been built — P3-C02 is the first chunk that needs it. This is the same
+class as A4 (the allowlist text falsified by a legitimately-required
+import — there, `wmj.errors`/`hashlib`; here, `importlib`/`pkgutil`).
+
+**What the build did.** Split the registry across chunks along the seam
+the wiring matrix already draws: the discovery half is consumed by
+`harness.trials` and tested by TC-MU9-01, both at **P6-C01**. P3-C02
+builds only the registration substrate (`register`, `all_models` in
+sorted-name order, `DuplicateModelError`), which imports only `typing` +
+`wmj.errors` and stays inside the allowlist — gate untouched. Nothing
+enumerates the roster before P6-C01, so no behaviour reachable today
+depends on discovery. `all_models()` returns the models registered so far
+(a model registers when its module is imported); its docstring says so
+plainly and does not claim to discover.
+
+**The decision this asks of design review / P6-C01.** When discovery is
+built at P6-C01, `registry.py` must import `importlib`/`pkgutil`, which
+needs a gate change. The recommended form is a **narrow, registry-scoped
+carve-out** — only `wmj/models/registry.py` may import `importlib` and
+`pkgutil`; every other model file (the contestants and fixtures, which
+are the files that could reach sideways to game the judge) stays on the
+strict allowlist — with a phantom-gate test proving a non-registry model
+file importing `importlib` still fails. The alternative (widening
+`MODELS_ALLOWLIST` package-wide) is weaker and not recommended. Either
+way it touches a load-bearing security gate, so P6-C01 should make the
+change explicitly and a design-review round should ratify it; the spec
+text (ADR-003's "nothing else" list) should then be corrected to name the
+registry's two discovery imports as the sole exception. Recorded now so
+the decision is not made silently inside a build chunk.
+
+*Where recorded:* `build/prompts/P3-C02.md`, `build/handovers/P3-C02.md`,
+`src/wmj/models/registry.py` (module docstring).
