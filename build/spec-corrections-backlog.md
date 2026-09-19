@@ -336,3 +336,44 @@ action beyond noting it in prereg.py's disclosed residual #1.
 
 *Where recorded:* `build/handovers/P3-C07.md`, `src/wmj/harness/prereg.py`
 (module docstring, "Disclosed residuals").
+
+---
+
+## Horizon scan (2026-09-19) — external research, for positioning not build
+
+**In plain words:** a scan of public research on world-model evaluation, to
+see if anything should change the build. **Conclusion: nothing changes now.**
+We are mid-Phase-3, and adding a check or metric after reading a paper is the
+exact goalpost-moving MU-6/JU-11 police — the same reason B1 (action-blind)
+went through the front door (requirements → test-cases → design review →
+build) rather than a mid-build patch. Everything below is either evidence for
+the essay's thesis (taxonomy/positioning) or a **future-version candidate**
+for a later design review. Recorded in the same spirit as the Atlas/Utopia
+taxonomy notes.
+
+**Verification honesty:** this environment's egress proxy blocks `arxiv.org`
+and `huggingface.co`, so the arXiv items below are **surfaced by web search
+only, not verified against the primary source** — confirm each (title,
+authors, claims, that the ID resolves) before citing it in any published
+artefact. The two GitHub/vendor items were fetched and are verified.
+
+### Verified (primary source fetched)
+
+| Source | What it is | Bearing on this project |
+|---|---|---|
+| **`github.com/megazron/trusthorizon-worldmodel`** (MIT, NumPy-only) — verified via README | A near-twin: a harness that decides "whether a learned world model's rollout can be trusted, and for how many steps" — trust horizon vs a task tolerance, linear-vs-exponential drift classification, calibration of uncertainty bands, divergence onset, physics-plausibility, toy 1-D worlds, three example models (well-calibrated / biased-drift / unstable). | **The strongest thesis exhibit found — "measurement without institution."** Its own README confirms it does **not** report sharpness alongside calibration, does **not** pre-register thresholds, and has **no independent-verdict mechanism**. It is the measurement fragment built without the governance discipline — precisely the essay's claim. Sharpens differentiation; belongs in the essay's scope statement. Nothing to borrow into the build. |
+| **Jev / TypeSafe AI** (typesafe.ai; covered by Arize, LangChain, DataCamp, litellm docs) — verified via multiple vendor/independent pages | A "System One" model returning **typed structured decisions + probabilities** instead of generated text ("can't hallucinate"; ~40–400× cheaper than an LLM on classification); invoked with a state + questions. Not a world model. | Tangential to the build. Quiet validation of the design instinct: serious evaluation is moving toward structured, calibrated, **typed** outputs — which is what this project's pure-function `Verdict` already is (vs. a chatty LLM judge). A landscape note, not an input. |
+
+### Search-surfaced, NOT primary-verified (arXiv blocked this session)
+
+| Source (arXiv ID, unverified) | What search reports it says | Bearing |
+|---|---|---|
+| *A Definition and Roadmap for World Models* (2607.06401) | A 2026 paper attempting to **define** "world model" and chart evaluation. | Thesis evidence: the term is contested enough that defining it is itself a 2026 research contribution. Positioning only. |
+| *How Should World Models Be Evaluated? A Decision-Making-Centric Position* (2606.15032) | Argues world-model eval is fragmented; proposes dimensions incl. counterfactual branches, policy-ranking agreement, optimization lift, exploitability, **uncertainty calibration**. | Thesis evidence (fragmentation) **and** a possible source of future eval dimensions (esp. policy-ranking agreement) — a **future-version** design-review candidate, not now. |
+| *Conformal Orbit-Valid Trust Horizons for Equivariant World Models* (2606.24946); *Certified World Models* (2606.13092) | The field now uses the phrase **"trust horizon"** and applies **conformal prediction** to certify it with distribution-free finite-sample coverage (reported median certified-to-measured ratio ~0.67). | Both validation (shared framing/vocabulary — we are not alone) **and** a genuine methodological alternative to JU-11's fixed binomial bands: conformal calibration gives coverage guarantees our binomial-band approach does not. **Strongest future-version candidate.** Adopting it now would be goalpost-moving + scope creep; note for a future design review. |
+| *RoboTrustBench* (2606.01600); *WorldPrediction* (2506.04363); DreamX-World, 4DWorldBench, WBench, WorldMark, WorldScore, VBench-2.0 | Video / 3-D-4-D / interactive world-model benchmarks (visual quality, controllability, physical plausibility). | Mostly the renderer/generator sense of "world model" this judge deliberately does not grade (cf. the Atlas note) — taxonomy evidence, not build input. |
+
+**Net disposition:** no change to Phase 3 or any spec. One future-version
+design-review candidate worth remembering — **conformal trust horizons** as a
+possible complement/alternative to JU-11's binomial bands. Verify the arXiv
+IDs before any of this reaches a published artefact.
