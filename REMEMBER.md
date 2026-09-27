@@ -43,14 +43,15 @@ Build state at compile time: P1-C01…P3-C02 and P3-C07 done; P3-C06 next.*
 
 ## 2. Decisions waiting on the owner
 
-Ordered by when they bite. **D1–D6 should be settled before P3-C03**
-(Model A), ideally in one short Round 10 design review (D12).
+Ordered by when they bite. **D3 and D14 block P3-C06 now; D1–D6 must be settled before P3-C03**
+(Model A). All of them fit one short Round 10 design review (D12).
 
 | # | Decision | Recommendation | Source |
 |---|---|---|---|
 | D1 | **Model A's loss.** The recipe trains Model A with plain Gaussian NLL, a setup the literature (Seitzer et al., ICLR 2022) documents as fitting poorly. If kept and the ensemble wins, the headline looks rigged. Switch to β-NLL, or keep NLL and report the fit? | Decide before P3-C03; β-NLL is the standard fix and keeps Model A a self-predicted-error-bar model. | backlog horizon addendum; 2026-09-27 |
 | D2 | **Freeze-point contradiction.** The spec's remedy is "revise the recipe openly", but `check_prereg` compares `recipe.md` to its *first* commit, so any revision — even an honest one before results — fails certification at P6-C03. Freeze at a declared pre-judging commit instead? | Yes; spec change via design review. | backlog A12; 2026-09-27 |
-| D3 | **Pinned values:** `epochs: 100`, the unstated training-trajectory horizon, and `sharpness_hedge_threshold = scale` (per world, not per region). | Ratify after P3-C06 measures runtime. | backlog A12; DR-008 minor |
+| D3 | **The training recipe cannot run in budget (measured 2026-09-27).** 2,000 full-horizon trajectories × 100 epochs × 6 networks per world ≈ **13.7 hours** of training vs a 6-minute allowance (600 s whole run). Choose: train offline and cache (restate NF-2), or short training segments + measured epochs + larger batch + vectorised generation. Also: `sharpness_hedge_threshold = scale` (per world, not per region). **Blocks P3-C06.** | Short segments + measured epochs + vectorised generation; ratify at Round 10. | backlog A12, A14; DR-008 minor |
+| D14 | **How action sequences are drawn** (unspecified anywhere). A new random push every step averages to noise and would make the action lever — and P3-C08's action-blind check — nearly meaningless. **Blocks P3-C06.** | Piecewise-constant pushes held for a fixed span of world time, same generator for training and evaluation; ratify at Round 10. | backlog A15 |
 | D4 | **Gradient-check tolerance:** metric floor 1e-3 and tolerance 1e-5 (spec says 1e-6), including the disclosed near-dead-unit blind spot. | Ratify, or prefer an `allclose`-style check. | backlog A10 |
 | D5 | **A13 disposition:** `check_prereg` cannot verify an entry's substance — disclosed rather than "fixed". Confirm "disclose, don't fake a check", and add it to ADR-M5's residuals. Never confirmed by the owner. | Confirm. | backlog A13; P3-C07 handover |
 | D6 | **Does the new B1 text (MU-3's 4th fixture, TC-MU3-04, P3-C08) need its own design review?** Its route was "requirements → test cases → design review → build"; no design review of the new text has run. | Include in Round 10. | calibration:287 |

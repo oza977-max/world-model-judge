@@ -430,3 +430,55 @@ checks the *world's* conserved quantity (the drift bound) but not whether
 a *model's* predictions break it. Both worlds have a conserved quantity, so
 "model violates the invariant" is a natural future check — front door
 only, not now.
+
+---
+
+### A14 — the pre-registered training recipe is ~140× over the runtime budget (measured, 2026-09-27)
+
+**What the spec says.** models §4: `training_trajectories: 2000` per world,
+"of full horizon", "well inside the NF-2 budget". judge ADR-J6: the whole
+run completes in under 600 s, with training "two small MLPs … budgeted at
+≤ 6 minutes combined". `prereg/recipe.md`: `epochs: 100`, `batch_size: 32`.
+
+**What the build measured (before any model was trained or judged).** One
+world transition ≈ 26–30 µs; one Adam step on the real ADR-M3 net at batch
+32 ≈ 230–250 µs (this machine, single-threaded). Full-horizon training sets
+are 2,000 × 700 = 1.4 M examples (LV) and 2,000 × 5,000 = 10 M (pendulum).
+At 100 epochs, batch 32, and **six** networks per world (direct + five
+ensemble members — ADR-J6's "two small MLPs" undercounts), training costs
+≈ 1.8 h (LV) + 11.9 h (pendulum) ≈ **13.7 h**, against a 6-minute training
+allowance. Generating the pendulum data one trajectory at a time adds
+≈ 263 s. "Well inside the NF-2 budget" is falsified by execution.
+
+**Why it matters now.** P3-C06 reads these counts from the recipe; P3-C03/04
+train with them. No faithful build of P3-C06 is possible until the numbers
+are chosen. Any fix changes `prereg/recipe.md`, which runs into the
+freeze-point contradiction (REMEMBER.md D2). No results exist yet, so a
+revision is legitimate — through design review and an open, dated recipe
+revision.
+
+**Options for design review:** (a) keep the numbers, train once offline and
+cache weights, and restate NF-2 to exclude training; (b) keep 2,000
+training starts but use short training segments (the models are one-step
+predictors — a full 5,000-step pendulum trajectory adds correlated examples,
+not new information) and set epochs from a measured budget; (c) a larger
+batch and vectorised data generation to cut cost per example. (b) + (c)
+together is the recommendation. ADR-J6's "× 7 models" and "two small MLPs"
+also need correcting (roster is 8; networks trained are 12).
+
+### A15 — the form of the action sequences is not specified
+
+**What the spec says.** models §4: training uses "seeded trained-range
+action sequences"; judge ADR-J4: each evaluation trial has "its own seeded
+action sequence". Nowhere says how an action sequence is drawn.
+
+**Why it is a design decision, not a detail.** A fresh random push every
+step (i.i.d.) at the pendulum's 0.002 s step averages out to noise, so a
+model could ignore the action and lose almost nothing — which would make the
+action lever, and P3-C08's action-blind check, close to meaningless. A push
+held for a stretch of world time (piecewise-constant, resampled every k
+steps from the training action interval) has a visible effect. The same
+generator should serve training and evaluation so train and test actions
+are alike. **Recommendation:** piecewise-constant, resampled from the
+training interval every fixed span of world time, pinned per world in the
+recipe; ratify at design review.
