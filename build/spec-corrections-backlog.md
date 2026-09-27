@@ -377,3 +377,56 @@ artefact. The two GitHub/vendor items were fetched and are verified.
 design-review candidate worth remembering — **conformal trust horizons** as a
 possible complement/alternative to JU-11's binomial bands. Verify the arXiv
 IDs before any of this reaches a published artefact.
+
+### Addendum (2026-09-27) — abstracts read, twin's code read
+
+**Papers — abstract level.** arXiv and every mirror (alphaXiv, Semantic
+Scholar, OpenAlex, HuggingFace, Bytez) are still refused by this
+environment's network policy. Abstracts below were read through the search
+engine's arXiv index, so titles, authors and abstract claims are now
+confirmed; **full text is not**. Nothing here changes the build.
+
+| Paper | What its abstract says | Where it bears |
+|---|---|---|
+| MiraBench (2605.29360) | Action-conditioned reliability as a benchmark target: physics adherence, **action-following fidelity**, **optimism bias**. Findings: visual fidelity is a poor proxy for action fidelity; scale does not reliably fix action following; optimism bias is pervasive. | Second independent source (after What-If World) for **P3-C08 / TC-MU3-04**, the action-blind check. |
+| *Overcoming Statistical Bias in Action-Controllable World Models* (2608.04653, Shi et al.) | Models can fit data "without making their dynamics meaningfully depend on the action… different actions may produce similar futures, while motion may persist even under zero action"; proposes Action Response Consistency. | Names P3-C08's exact failure mode. Its "motion persists under zero action" is a possible **second** action check — a future front-door candidate, not now. |
+| *How Should World Models Be Evaluated for Embodied Decision-Making?* (2606.15032, Yu et al.) | "Metric diversity and a recurring problem of **claim/evidence mismatch**" — papers claim more than their evaluation can show; proposes a decision-centric protocol including uncertainty calibration. | The essay's thesis, stated independently. Thesis evidence. |
+| *A Definition and Roadmap for World Models* (2607.06401) | "There is no consensus on what a world model fundamentally is, what it should predict, or how it should be built." | Quotable thesis evidence for the essay's scope statement. |
+| *Conformal Orbit-Valid Trust Horizons* (2606.24946) and *Certified World Models* (2606.13092), both H. Wang | A computable trust-horizon certificate, calibrated by split-conformal, audited with an **exact-binomial** 95% bound (the same test JU-11 uses). Theorem B: under the finite-time Lyapunov spectrum, expanding directions give a **logarithmic** horizon and neutral directions accumulate error **linearly**. | Future-version candidate for JU-11 (conformal calibration). Theorem B's log-vs-linear picture is consistent with ADR-W3 and backlog A6 (pendulum chaotic, LV orbits neutral with linear phase drift) — supporting context for design review ratifying A6, not proof. Equivariance-specific, single author. |
+| Seitzer et al., *On the Pitfalls of Heteroscedastic Uncertainty Estimation* (2203.09168, ICLR 2022) | Training a variance head with Gaussian NLL down-weights the squared error where predicted variance is high, so fit quality can suffer. | **Known risk for P3-C03 (Model A).** The recipe's Model A is exactly this setup. If it under-fits, MU-5's accuracy match can fail for reasons unrelated to calibration. The recipe is committed and must not be tuned; P3-C03 should measure and report fit honestly, and any change goes through an open recipe revision (A12). |
+
+Snippet-level only (not a full abstract; lower confidence): *Do Robotic
+World Models Really Follow Actions?* (2608.24885), *AD-WM* (2609.30264 —
+factual accuracy vs counterfactual action comparison mismatch), JEPA
+action-consistency (2608.12939), ActSWM (2607.26712). Renderer/video sense,
+taxonomy only: RoboTrustBench (2606.01600), WorldExam, H2R-Bench,
+DreamX-World, WorldScore, VBench-2.0, 4DWorldBench, WBench, WorldMark.
+
+**The twin — code read in full** (`megazron/trusthorizon-worldmodel`,
+HEAD `ed92eed`, 6 commits, all 16–17 Sep 2026, ~1,260 lines, MIT). Its
+second commit reads "remove project-specific origin references" — it was
+extracted from another project. It shares **no** identifiers, files or
+distinctive terms with this repo (grep for wmj, CRPS, sharpness,
+pre-registration, persistence, pendulum, SR 11-7: none). The "trust
+horizon" wording also appears in independent June 2026 papers. No evidence
+of derivation either way.
+
+Where it lands on this project's own requirements:
+
+| This project's rule | The twin |
+|---|---|
+| Strictly proper scoring rule (JU-4) + sharpness beside it (JU-5) | Coverage gap at ±1/2/3σ vs Gaussian targets — a calibration check, not a proper score; no sharpness. |
+| Thresholds fixed before judging (JU-11, MU-6) | Tolerance is a CLI flag / default argument (`tol=0.05`) chosen at run time. |
+| Separate "model is wrong" from "world is unpredictable" | One non-chaotic 1-D world; its "divergence onset" is model-vs-truth, not the world's own divergence floor. |
+| Truth and model share one integrator/step, enforced by test (WD-3) | `check_aligned` checks horizon, start state and actions — not the timestep. |
+| Trials and statistics (N=200, binomial bands) | Trust horizon is a first-crossing on one rollout per scenario, then a median; RMSE mixes state units with no scale normalisation. |
+| Baselines and skill (MU-2) | None. |
+| Fixtures labelled as fixtures (MU-4, RP-8) | `models.py` says plainly the models are injected-error mocks, but the README chart caption calls them "three learned models". |
+| Action lever graded (state + action → next state) | Yes, and it refuses to compare rollouts driven by different actions. No action-response check. |
+
+One idea worth remembering: its **physics-plausibility checks on the
+model's rollout** (no NaN, passive energy must not rise). This project
+checks the *world's* conserved quantity (the drift bound) but not whether
+a *model's* predictions break it. Both worlds have a conserved quantity, so
+"model violates the invariant" is a natural future check — front door
+only, not now.
