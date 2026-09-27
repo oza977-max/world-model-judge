@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Design Review 010 — World Model Judge</title>
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+
+    body {
+      font-family: "ET Book", Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif;
+      color: #111;
+      background: #fffff8;
+      line-height: 1.6;
+      padding: 2rem 1rem 6rem;
+      max-width: 1480px;
+      margin: 0 auto;
+    }
+
+    /* ── Typography ── */
+    h1 {
+      font-size: 2.4rem;
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.4rem;
+      color: #111;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 400;
+      font-style: italic;
+      margin-top: 3rem;
+      margin-bottom: 1rem;
+      color: #111;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 0.3rem;
+    }
+
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-top: 2rem;
+      margin-bottom: 0.6rem;
+      color: #333;
+    }
+
+    p, li {
+      font-size: 1rem;
+      line-height: 1.7;
+      margin-bottom: 0.8rem;
+      max-width: 1000px;
+    }
+
+    ul, ol { padding-left: 1.4rem; margin-bottom: 1.2rem; }
+    li { margin-bottom: 0.4rem; }
+
+    .subtitle {
+      font-size: 1.1rem;
+      font-style: italic;
+      color: #555;
+      margin-bottom: 2.5rem;
+      max-width: 1000px;
+    }
+
+    .date {
+      font-size: 0.9rem;
+      color: #888;
+      margin-bottom: 0.2rem;
+    }
+
+    /* ── Floating TOC (Left Side) ── */
+    nav.toc {
+      position: fixed;
+      top: 2rem;
+      left: 2rem;
+      width: 220px;
+      max-height: calc(100vh - 4rem);
+      overflow-y: auto;
+      background: #fffff8;
+      border-right: 2px solid #ddd;
+      padding: 1rem 1rem 1rem 0;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      z-index: 100;
+    }
+
+    nav.toc .toc-title {
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #999;
+      margin-bottom: 0.6rem;
+    }
+
+    nav.toc a {
+      color: #555;
+      text-decoration: none;
+      display: block;
+      padding: 0.15rem 0;
+      transition: color 0.15s;
+    }
+
+    nav.toc a:hover { color: #111; }
+    nav.toc a.active { color: #111; font-weight: 600; }
+    nav.toc .toc-h3 { padding-left: 0.8rem; font-size: 0.78rem; color: #888; }
+    nav.toc .toc-h3:hover { color: #555; }
+
+    /* Offset main content for left TOC */
+    main {
+      margin-left: 260px;
+      max-width: 1000px;
+    }
+
+    /* ── Sidenotes (Right Margin) ── */
+    .sidenote {
+      float: right;
+      clear: right;
+      width: 220px;
+      margin-right: -260px;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      color: #666;
+      padding-left: 1rem;
+      border-left: 2px solid #e0e0e0;
+    }
+
+    /* ── Tables (Few's principles) ── */
+    table {
+      border-collapse: collapse;
+      margin: 1.5rem 0 2rem;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      width: auto;
+      min-width: 480px;
+      overflow-x: auto;
+    }
+
+    thead th {
+      text-align: left;
+      font-weight: 600;
+      padding: 0.5rem 1rem 0.5rem 0;
+      border-bottom: 2px solid #333;
+      color: #111;
+    }
+
+    tbody td {
+      padding: 0.45rem 1rem 0.45rem 0;
+      border-bottom: 1px solid #e8e8e8;
+      vertical-align: top;
+    }
+
+    tbody tr:last-child td { border-bottom: 2px solid #333; }
+    tbody tr:nth-child(even) { background: #f9f9f4; }
+
+    caption {
+      font-style: italic;
+      font-size: 0.88rem;
+      color: #666;
+      text-align: left;
+      margin-bottom: 0.4rem;
+    }
+
+    /* ── Inline Code ── */
+    code {
+      font-family: "Menlo", "Consolas", "Monaco", monospace;
+      font-size: 0.88rem;
+      background: #f0f0e8;
+      padding: 0.1rem 0.35rem;
+      border-radius: 2px;
+    }
+
+    pre {
+      font-family: "Menlo", "Consolas", "Monaco", monospace;
+      font-size: 0.85rem;
+      background: #f0f0e8;
+      padding: 1rem;
+      overflow-x: auto;
+      border-radius: 2px;
+      margin: 1rem 0;
+      max-width: 1000px;
+      line-height: 1.5;
+    }
+
+    /* ── Verdict Box (review components) ── */
+    .verdict {
+      border: 2px solid #333;
+      padding: 1.2rem 1.5rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+    }
+
+    .verdict-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+      margin-bottom: 0.3rem;
+    }
+
+    .verdict-text {
+      font-size: 1.3rem;
+      font-weight: 400;
+      color: #111;
+      margin-bottom: 0.4rem;
+    }
+
+    .verdict-basis {
+      font-size: 0.88rem;
+      color: #555;
+      max-width: 1000px;
+    }
+
+    .verdict.ready { border-color: #27ae60; background: #f0faf4; }
+    .verdict.ready .verdict-text { color: #27ae60; }
+
+    .verdict.caveats { border-color: #e67e22; background: #fef8f0; }
+    .verdict.caveats .verdict-text { color: #e67e22; }
+
+    .verdict.not-ready { border-color: #c0392b; background: #fdf0ef; }
+    .verdict.not-ready .verdict-text { color: #c0392b; }
+
+    .verdict.pending { border-color: #333; background: #f9f9f4; }
+    .verdict.pending .verdict-text { color: #333; }
+
+    /* ── Review Components (issues/findings) ── */
+    .issue {
+      border-left: 3px solid;
+      padding: 0.8rem 1rem;
+      margin: 0.8rem 0;
+      max-width: 1000px;
+    }
+
+    .issue.critical {
+      border-left-color: #c0392b;
+      background: #fdf0ef;
+    }
+
+    .issue.important {
+      border-left-color: #e67e22;
+      background: #fef8f0;
+    }
+
+    .issue.minor {
+      border-left-color: #7f8c8d;
+      background: #f7f7f4;
+    }
+
+    .issue-title {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 0.3rem;
+    }
+
+    .issue-detail {
+      font-size: 0.92rem;
+      color: #555;
+      margin-bottom: 0.3rem;
+    }
+
+    .issue-location {
+      font-size: 0.78rem;
+      color: #999;
+      font-style: italic;
+    }
+
+    /* ── Finding Cards ── */
+    .finding {
+      border-left: 3px solid;
+      padding: 1rem 1rem;
+      margin: 1.2rem 0;
+      max-width: 1000px;
+    }
+
+    .finding.critical {
+      border-left-color: #c0392b;
+      background: #fdf0ef;
+    }
+
+    .finding.important {
+      border-left-color: #e67e22;
+      background: #fef8f0;
+    }
+
+    .finding.minor {
+      border-left-color: #7f8c8d;
+      background: #f7f7f4;
+    }
+
+    .finding-id {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 0.4rem;
+      font-size: 0.95rem;
+    }
+
+    .finding-text {
+      font-size: 0.92rem;
+      color: #555;
+      margin-bottom: 0.4rem;
+    }
+
+    .finding-recommend {
+      font-size: 0.92rem;
+      color: #555;
+      font-style: italic;
+      margin-bottom: 0;
+    }
+
+    /* ── Findings Summary Table ── */
+    .findings-summary {
+      margin: 2rem 0;
+      font-size: 0.88rem;
+      max-width: 1000px;
+    }
+
+    .findings-summary thead th {
+      font-weight: 600;
+      padding: 0.5rem 0.8rem;
+      text-align: left;
+      border-bottom: 2px solid #333;
+      font-size: 0.85rem;
+    }
+
+    .findings-summary tbody td {
+      padding: 0.4rem 0.8rem;
+      border-bottom: 1px solid #e8e8e8;
+      font-size: 0.88rem;
+    }
+
+    .findings-summary tbody tr:nth-child(even) { background: #f9f9f4; }
+    .findings-summary tbody tr:last-child td { border-bottom: 2px solid #333; }
+
+    .severity-critical { color: #c0392b; font-weight: 600; }
+    .severity-important { color: #e67e22; font-weight: 600; }
+    .severity-minor { color: #7f8c8d; font-weight: 600; }
+
+    /* ── Section clusters ── */
+    .cluster {
+      border-left: 4px solid #333;
+      padding-left: 1.2rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+    }
+
+    .cluster h3 {
+      margin-top: 0;
+    }
+
+    /* ── Honesty Check Section ── */
+    .honesty-section {
+      background: #f0faf4;
+      border: 2px solid #27ae60;
+      border-left: 6px solid #27ae60;
+      padding: 1.5rem 1.5rem;
+      margin: 2rem 0;
+      max-width: 1000px;
+    }
+
+    .honesty-section-header {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #27ae60;
+      margin-bottom: 0.6rem;
+    }
+
+    .honesty-section h3 {
+      margin-top: 0;
+      color: #27ae60;
+    }
+
+    .honesty-section ul {
+      margin-left: 1rem;
+    }
+
+    .honesty-section li {
+      margin-bottom: 0.6rem;
+    }
+
+    /* ── GVM Attribution ── */
+    .gvm-attribution {
+      font-size: 0.75rem;
+      color: #999;
+      font-style: italic;
+      text-align: center;
+      margin-top: 3rem;
+      margin-bottom: 0;
+      max-width: none;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 1200px) {
+      nav.toc {
+        position: static;
+        width: 100%;
+        max-height: none;
+        border-right: none;
+        border-bottom: 1px solid #ddd;
+        padding: 1rem 0;
+        margin-bottom: 2rem;
+      }
+      main { margin-left: 0; }
+      .sidenote {
+        float: none;
+        width: 100%;
+        margin: 0.8rem 0;
+        padding: 0.6rem 0 0.6rem 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="toc" id="toc">
+    <div class="toc-title">Contents</div>
+  </nav>
+
+  <main>
+    <p class="date">Round 10 · Quick check on training-recipe revision (budget, 10-minute rule, kicks, Model A loss, freeze point, ratifications) · 12 panels (6 calibrated defect-class + 6 blind) · 27 September 2026</p>
+    <h1>World Model Judge — Design Review — Round 10</h1>
+    <p class="subtitle">Before the two practice models are trained, twelve independent reviewers checked the plan for how they will be trained. They found twenty real problems. None of them is a result — nothing has been trained. They are holes in the plan that would have forced a builder to guess, or that would have let the pre-registered recipe be quietly changed. Several were confirmed by running code, not by argument.</p>
+
+    <h2 id="verdict">Verdict</h2>
+    <div class="verdict pending">
+      <div class="verdict-label">Verdict</div>
+      <div class="verdict-text">PENDING OWNER TRIAGE</div>
+      <p class="verdict-basis">The owner decides each finding first; the verdict follows (shared rule 28).</p>
+    </div>
+
+    <h2 id="method">Method</h2>
+    <ul>
+      <li>6 defect-class panels (A requirements coverage; B interface contracts; C structural soundness; D implementability; E integrity/anti-gaming; F runtime quality attribute), each run twice: calibrated (with review history) and blind (without), 12 reports, Sonnet, strict Round-10 criterion.</li>
+      <li>~70 raw findings merged into 20 (R10-F01..F20). Verbatim quotes spot-checked against the files (ADR-J6 envelope, worlds ADR-W3 null actions, models ADR-M3 identical data, ADR-M5 non-publication residual, out/ gitignored, prereg.py:266, recipe batch_size 32) — all matched.</li>
+      <li>All 20 then re-checked by one fresh-context verifier that had not seen the panels' reasoning, told to look for reasons each was wrong: 20 CONFIRMED, 0 partial, 0 refuted.</li>
+      <li>Measurements run in this session (single thread, this environment — not the 4-core reference laptop):
+        <ul>
+          <li>one network call at a time: 11–14 µs; batched 200: ~0.7 µs per state.</li>
+          <li>gradient check on 50,000 examples: ~400–700 s (extrapolated from 32/256/2000); on 32: 0.4 s.</li>
+          <li>kicks over the full horizon: LV 4 crashes in 2,000 training-region runs; 17/300 with out-of-range kicks; 68/300 from out-region starts (0/300 there without kicks). Pendulum 0/300.</li>
+          <li>batched world step (same <code>rk4_step</code>, batch-aware derivative, np.sin/np.cos): bit-identical to the one-at-a-time step for both worlds; 25–100× faster.</li>
+          <li>np.sin/np.cos vs math.sin/math.cos: 0 mismatches over 2,000,000 values (NumPy 1.26.4) — must still be a permanent test, since it is platform-dependent.</li>
+        </ul>
+      </li>
+      <li>Calibrated vs blind: the blind panels found the same core issues (freeze gaps, subsample ownership, out-of-range actions, β-NLL gradient, eval runtime). Blind-only: re-freezing before a judged run (Cb-1); unnamed reference machine (Db-9). Calibrated-only: freeze-file self-reference (C-5); gradient-check cost (D-8); β-NLL calibration effect (C-3). High overlap suggests few defects remain unfound in this scope.</li>
+    </ul>
+
+    <h2 id="ten-minute">The 10-minute Question (Owner Asked: Challenge It)</h2>
+    <p><strong>Where 600 s came from.</strong> NF-2 (approved, Must) says only "minutes rather than hours" and states no purpose. The 600 s figure was chosen by the tech spec (judge ADR-J6) to make "minutes" testable, sized on an estimate now shown wrong three times (per-region multiplier, network count, and now evaluation cost).</p>
+    <p><strong>What it is for.</strong> Both runtime panels agree: re-runnability — anyone can re-run the whole judge on an ordinary laptop and check the verdict themselves. That is the essay's "independent institution" in miniature. The number itself is not sacred: 10 or 20 minutes serves the same purpose.</p>
+    <p><strong>What the measurements say.</strong> Run as currently designed (models asked one state at a time), the whole run is ~10–11 minutes — over. If the 200 test runs step forward together (batched), it is ~4–5 minutes: training ~3–4 min, judging well under a minute. Batching gives bit-identical numbers.</p>
+    <p><strong>Recommendation.</strong> Keep the whole run in minutes; write the purpose (re-runnability) into NF-2's plain-words line; record 600 s in ADR-J6 as a revisable target with a measured envelope, not a FLOP guess; batch the evaluation. The alternative — loosen to ~20 minutes and keep one-at-a-time calls — serves the purpose equally; it is the owner's choice.</p>
+
+    <h2 id="findings-summary">Findings Summary (20 total: Critical 9, Important 10, Minor 1)</h2>
+    <table class="findings-summary">
+      <thead>
+        <tr>
+          <th>Finding</th>
+          <th>Area</th>
+          <th>Severity</th>
+          <th>Title</th>
+          <th>Recommendation</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>R10-F01</td>
+          <td>Runtime</td>
+          <td><span class="severity-critical">Critical</span></td>
+          <td>Judging time never measured</td>
+          <td>FIX — batch the rollouts; rewrite ADR-J6 with measured numbers</td>
+        </tr>
+        <tr>
+          <td>R10-F02</td>
+          <td>Runtime</td>
+          <td><span class="severity-critical">Critical</span></td>
+          <td>Gradient check would take 7–10 minutes</td>
+          <td>FIX — pin a small fixed gradient-check batch (e.g. 64 examples, seeded)</td>
+        </tr>
+        <tr>
+          <td>R10-F03</td>
+          <td>Training data</td>
+          <td><span class="severity-important">Important</span></td>
+          <td>Who draws the 50,000-example sample is unstated</td>
+          <td>FIX — harness draws it once per world; every network gets the same one</td>
+        </tr>
+        <tr>
+          <td>R10-F04</td>
+          <td>Training data</td>
+          <td><span class="severity-important">Important</span></td>
+          <td>No seed names for four new random draws</td>
+          <td>FIX — pin the purpose keys</td>
+        </tr>
+        <tr>
+          <td>R10-F05</td>
+          <td>Training data</td>
+          <td><span class="severity-important">Important</span></td>
+          <td>New numbers not machine-readable; rate→per-step formula missing</td>
+          <td>FIX — key lines for every new value; exact rate; p = rate × dt stated</td>
+        </tr>
+        <tr>
+          <td>R10-F06</td>
+          <td>Kicks</td>
+          <td><span class="severity-critical">Critical</span></td>
+          <td>Kick generator cannot produce out-of-range kicks</td>
+          <td>FIX — generator takes the kick-size range as a parameter; declare per-world test formation</td>
+        </tr>
+        <tr>
+          <td>R10-F07</td>
+          <td>Kicks</td>
+          <td><span class="severity-critical">Critical</span></td>
+          <td>Kicks crash predator-prey over full-length runs</td>
+          <td>FIX — re-measure and pick LV kick size/rate with no crashes; owner decides on redraw vs fixed</td>
+        </tr>
+        <tr>
+          <td>R10-F08</td>
+          <td>Training data</td>
+          <td><span class="severity-important">Important</span></td>
+          <td>No rule for which kick examples to keep when more than 25% cap</td>
+          <td>FIX — seeded shuffle, take first ⌈0.25·M⌉; refuse loudly on shortfall</td>
+        </tr>
+        <tr>
+          <td>R10-F09</td>
+          <td>Kicks</td>
+          <td><span class="severity-critical">Critical</span></td>
+          <td>World's own drift measured with no kicks; tests now have kicks</td>
+          <td>FIX — measure the drift benchmark with the same kick sequence applied to both twin runs</td>
+        </tr>
+        <tr>
+          <td>R10-F10</td>
+          <td>Kicks</td>
+          <td><span class="severity-important">Important</span></td>
+          <td>Training has 25% kicks, testing ~0.2–2%; unassessed</td>
+          <td>FIX — disclose as a limit; report a quick sensitivity check at P3-C03</td>
+        </tr>
+        <tr>
+          <td>R10-F11</td>
+          <td>Training data</td>
+          <td><span class="severity-important">Important</span></td>
+          <td>Batched world step has no bit-identity test</td>
+          <td>FIX — new test, exact equality, batched path must call same rk4_step</td>
+        </tr>
+        <tr>
+          <td>R10-F12</td>
+          <td>Model A's loss</td>
+          <td><span class="severity-critical">Critical</span></td>
+          <td>β-NLL has no written gradient</td>
+          <td>FIX — per dimension, with w = σ^(2β) held constant: ∂L/∂μ = −w·(y−μ)/σ², ∂L/∂(log σ) = w·(1 − (y−μ)²/σ²); update recipe text</td>
+        </tr>
+        <tr>
+          <td>R10-F13</td>
+          <td>Model A's loss</td>
+          <td><span class="severity-important">Important</span></td>
+          <td>Prediction's reasoning names the flaw β-NLL removes</td>
+          <td>FIX — owner re-affirms or rewrites the reasoning now, before any training</td>
+        </tr>
+        <tr>
+          <td>R10-F14</td>
+          <td>Fairness</td>
+          <td><span class="severity-critical">Critical</span></td>
+          <td>Model sample-size adequacy judged by model-matching</td>
+          <td>FIX — pin an outcome-independent test before training (each model's own held-out loss vs larger sample)</td>
+        </tr>
+        <tr>
+          <td>R10-F15</td>
+          <td>Freeze point</td>
+          <td><span class="severity-critical">Critical</span></td>
+          <td>The lock can be moved (git tag moves silently; FREEZE file not certified)</td>
+          <td>FIX — freeze commit is the commit that first added FREEZE (git-derived, not chosen), certified like other files</td>
+        </tr>
+        <tr>
+          <td>R10-F16</td>
+          <td>Freeze point</td>
+          <td><span class="severity-critical">Critical</span></td>
+          <td>Cannot refuse a second freeze after a judged run (unpublished runs leave no trace)</td>
+          <td>FIX — FREEZE may be added exactly once, ever (a second add is refused by check_prereg from git history)</td>
+        </tr>
+        <tr>
+          <td>R10-F17</td>
+          <td>Freeze point</td>
+          <td><span class="severity-important">Important</span></td>
+          <td>The verdict would record the wrong commit</td>
+          <td>FIX — check_prereg returns the freeze commit; build R10-5 before P6-C01</td>
+        </tr>
+        <tr>
+          <td>R10-F18</td>
+          <td>Freeze point</td>
+          <td><span class="severity-important">Important</span></td>
+          <td>The tests describe the old lock</td>
+          <td>FIX — rewrite TC-MU6-01/04; add freeze tests (one freeze ever; freeze precedes judging; certified FREEZE)</td>
+        </tr>
+        <tr>
+          <td>R10-F19</td>
+          <td>Freeze point</td>
+          <td><span class="severity-minor">Minor</span></td>
+          <td>Option (a)'s weight hashing is unspecified</td>
+          <td>DEFER — specify only if (a) is chosen</td>
+        </tr>
+        <tr>
+          <td>R10-F20</td>
+          <td>Runtime</td>
+          <td><span class="severity-important">Important</span></td>
+          <td>One blended timing, unnamed machine</td>
+          <td>FIX — per-world figures, name the machine; TC-NF2-01 on reference hardware stays the real check</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="runtime">Runtime</h2>
+    <div class="finding critical">
+      <div class="finding-id">R10-F01 · Critical · Judging time never measured</div>
+      <div class="finding-text">ADR-J6 guessed "well under a minute" from a FLOP count. Measured: ~23M one-at-a-time network calls ≈ 4–5 min, plus the true-world runs.</div>
+      <div class="finding-recommend">Recommend: FIX — batch the rollouts across the 200 trials (a batched predict that must equal the one-at-a-time answer exactly); rewrite ADR-J6's envelope with measured numbers. Changes the model interface (MU-1/ADR-M1) — owner decision.</div>
+    </div>
+
+    <div class="finding critical">
+      <div class="finding-id">R10-F02 · Critical · Gradient check would take 7–10 minutes</div>
+      <div class="finding-text">The spec says "one full-batch pass"; on 50,000 examples that alone exceeds the budget. It only needs to prove the maths is right.</div>
+      <div class="finding-recommend">Recommend: FIX — pin a small fixed gradient-check batch (e.g. 64 examples, seeded).</div>
+    </div>
+
+    <div class="finding important">
+      <div class="finding-id">R10-F20 · Important · One blended timing, unnamed machine</div>
+      <div class="finding-text">Pendulum networks train ~37% slower than predator-prey; the reference machine is a 4-core laptop, not this container.</div>
+      <div class="finding-recommend">Recommend: FIX — per-world figures, name the machine; TC-NF2-01 on reference hardware stays the real check.</div>
+    </div>
+
+    <h2 id="training-data">Training Data</h2>
+    <div class="finding important">
+      <div class="finding-id">R10-F03 · Important · Who draws the 50,000-example sample is unstated</div>
+      <div class="finding-text">Specs require training data built once by the harness and shared by all networks (ensemble members "identical training data"; fixtures rebuild direct bit-identically).</div>
+      <div class="finding-recommend">Recommend: FIX — harness draws it once per world; every network gets the same one.</div>
+    </div>
+
+    <div class="finding important">
+      <div class="finding-id">R10-F04 · Important · No seed names for four new random draws</div>
+      <div class="finding-text">The specifications require seed naming for every random draw (sample, stratified selection, kick timing, kick size). The collision class fixed this three times before.</div>
+      <div class="finding-recommend">Recommend: FIX — pin the purpose keys.</div>
+    </div>
+
+    <div class="finding important">
+      <div class="finding-id">R10-F05 · Important · New numbers not machine-readable; batch_size 32 still pinned; "≈1/s" not exact; rate→per-step formula missing</div>
+      <div class="finding-text">All new configuration values must be machine-readable and tied to their purpose; the conversion from per-second to per-step is omitted.</div>
+      <div class="finding-recommend">Recommend: FIX — key lines for every new value; exact rate; p = rate × dt stated.</div>
+    </div>
+
+    <div class="finding important">
+      <div class="finding-id">R10-F08 · Important · No rule for which kick examples to keep when more exist than the 25% cap (~20k–28k available vs 12,500)</div>
+      <div class="finding-text">The training data preparation step does not specify how to select kick examples when the pool is larger than the 25% limit.</div>
+      <div class="finding-recommend">Recommend: FIX — seeded shuffle, take first ⌈0.25·M⌉; refuse loudly on shortfall.</div>
+    </div>
+
+    <div class="finding important">
+      <div class="finding-id">R10-F11 · Important · Batched world step has no bit-identity test</div>
+      <div class="finding-text">Measured bit-identical in this session, but platform-dependent. The batched stepping path must be held to the same determinism standard as single-step.</div>
+      <div class="finding-recommend">Recommend: FIX — new test, exact equality, and the batched path must call the same rk4_step.</div>
+    </div>
+
+    <h2 id="kicks">Kicks (The Action Lever)</h2>
+    <div class="finding critical">
+      <div class="finding-id">R10-F06 · Critical · The kick generator cannot produce out-of-range kicks</div>
+      <div class="finding-text">WD-5/TC-WD5-02 already require out-of-range kicks (and no world declares an action-axis out-region today). The current implementation has no such capability.</div>
+      <div class="finding-recommend">Recommend: FIX — generator takes the kick-size range as a parameter; declare how the out-of-range-kick test runs are formed per world.</div>
+    </div>
+
+    <div class="finding critical">
+      <div class="finding-id">R10-F07 · Critical (upgraded from Important by measurement) · Kicks crash predator-prey over full-length runs</div>
+      <div class="finding-text">4 of 2,000 training runs; 23% of out-region runs; 6% with out-of-range kicks. The current rule aborts the whole job on any crash, so the training data cannot be generated.</div>
+      <div class="finding-recommend">Recommend: FIX — re-measure and pick an LV kick size/rate with no crashes in every region, or a seeded per-run redraw with the discard count reported and a hard cap; owner decides.</div>
+    </div>
+
+    <div class="finding critical">
+      <div class="finding-id">R10-F09 · Critical · The "world's own drift" yardstick was measured with no kicks, but every test run now has kicks</div>
+      <div class="finding-text">Chart 2's "only the gap above the line is the model's fault" and the switch-step/trust-horizon cap would compare against the wrong yardstick.</div>
+      <div class="finding-recommend">Recommend: FIX — measure the drift benchmark with the same kick sequence applied to both twin runs.</div>
+    </div>
+
+    <div class="finding important">
+      <div class="finding-id">R10-F10 · Important · Training has 25% kicks, testing ~0.2–2%</div>
+      <div class="finding-text">Same for both models, but unassessed. The asymmetry between training and testing conditions has not been examined for impact.</div>
+      <div class="finding-recommend">Recommend: FIX — disclose as a limit; report a quick sensitivity check at P3-C03.</div>
+    </div>
+
+    <h2 id="model-a-loss">Model A's Loss</h2>
+    <div class="finding critical">
+      <div class="finding-id">R10-F12 · Critical · β-NLL has no written gradient</div>
+      <div class="finding-text">The network has no automatic differentiation; the plain loss was written out for exactly this reason. The β-NLL loss function lacks its analytical gradient specification, making implementation error-prone.</div>
+      <div class="finding-recommend">Recommend: FIX — per dimension, with w = σ^(2β) held constant: ∂L/∂μ = −w·(y−μ)/σ², ∂L/∂(log σ) = w·(1 − (y−μ)²/σ²); summed over dimensions, averaged over the batch; update recipe text.</div>
+    </div>
+
+    <div class="finding important">
+      <div class="finding-id">R10-F13 · Important · The prediction's reasoning names the flaw β-NLL removes</div>
+      <div class="finding-text">prediction.md expects direct to be overconfident — the plain-loss pathology that the custom β-NLL loss is designed to correct. This reasoning should be reaffirmed or revised before any training begins.</div>
+      <div class="finding-recommend">Recommend: FIX — owner re-affirms or rewrites the reasoning now, before any training (allowed: nothing has been trained).</div>
+    </div>
+
+    <h2 id="fairness">Fairness (Anti-Gaming)</h2>
+    <div class="finding critical">
+      <div class="finding-id">R10-F14 · Critical · "Is 50,000 enough?" would be judged by whether the two models come out matched</div>
+      <div class="finding-text">The adequacy of the training sample size would be evaluated by comparing the two model outcomes — tuning a setting until the result looks right, which is exactly the goalpost-moving this project is designed to detect.</div>
+      <div class="finding-recommend">Recommend: FIX — pin an outcome-independent test before training (each model's own held-out loss vs a larger sample), never the between-model margin.</div>
+    </div>
+
+    <h2 id="freeze-point">The Freeze Point</h2>
+    <div class="finding critical">
+      <div class="finding-id">R10-F15 · Critical · The lock can be moved</div>
+      <div class="finding-text">A git tag moves silently; the FREEZE file is not itself certified; unclear which wins; the file cannot contain its own commit id.</div>
+      <div class="finding-recommend">Recommend: FIX — the freeze commit is the commit that first added prereg/FREEZE (git-derived, not chosen), certified like the other files; the tag is a label only.</div>
+    </div>
+
+    <div class="finding critical">
+      <div class="finding-id">R10-F16 · Critical · "Refuse a second freeze after a judged run" has nothing to check</div>
+      <div class="finding-text">Since unpublished runs leave no trace, re-freezing before a judged run is not refused at all. The mechanism described in the spec does not actually prevent the problematic scenario.</div>
+      <div class="finding-recommend">Recommend: FIX — FREEZE may be added exactly once, ever (a second add is refused by check_prereg from git history); disclose the remaining gap (informal fitting before the freeze) as a named limit.</div>
+    </div>
+
+    <div class="finding important">
+      <div class="finding-id">R10-F17 · Important · The verdict would record the wrong commit</div>
+      <div class="finding-text">check_prereg returns the first-added commit; wiring at P6-C01 would happen before the freeze exists.</div>
+      <div class="finding-recommend">Recommend: FIX — return the freeze commit; build R10-5 before P6-C01.</div>
+    </div>
+
+    <div class="finding important">
+      <div class="finding-id">R10-F18 · Important · The tests describe the old lock</div>
+      <div class="finding-text">TC-MU6-01/04 name first-added commits; no test covers the freeze mechanism itself.</div>
+      <div class="finding-recommend">Recommend: FIX — rewrite both; add freeze tests (one freeze ever; freeze precedes judging; certified FREEZE).</div>
+    </div>
+
+    <div class="finding minor">
+      <div class="finding-id">R10-F19 · Minor · Option (a)'s weight hashing is unspecified</div>
+      <div class="finding-text">Only matters if cached weights are chosen.</div>
+      <div class="finding-recommend">Recommend: DEFER — specify only if (a) is chosen.</div>
+    </div>
+
+    <h2 id="owner-decisions">Owner Decisions Required</h2>
+    <ol>
+      <li>NF-2: purpose sentence; keep "whole run in minutes" with batching (recommended) or loosen to ~20 min.</li>
+      <li>F01: add a batched prediction path to the model interface.</li>
+      <li>F07: LV kick size/rate change vs per-run redraw.</li>
+      <li>F13: the prediction's reasoning.</li>
+      <li>Disposition (fix / defer / dismiss) of all 20.</li>
+    </ol>
+
+    <h2 id="honest-gaps">Honest Gaps in This Review</h2>
+    <div class="honesty-section">
+      <div class="honesty-section-header">Limits of This Review</div>
+      <ul>
+        <li>Timings are from this container, single-threaded, not the reference laptop.</li>
+        <li>direct/ensemble/fixtures do not exist yet; all runtime numbers are projections from the shared MLP core.</li>
+        <li>One verifier, same model family as the panels.</li>
+      </ul>
+    </div>
+
+    <p class="gvm-attribution">Developed using the Grounded Vibe Methodology</p>
+  </main>
+
+  <script>
+    (function () {
+      var toc = document.getElementById('toc');
+      if (!toc) return;
+      var heads = document.querySelectorAll('main h2[id]');
+      heads.forEach(function (h) {
+        var a = document.createElement('a');
+        a.href = '#' + h.id;
+        a.textContent = h.textContent;
+        a.className = 'toc-link';
+        toc.appendChild(a);
+      });
+      function onScroll() {
+        var y = window.scrollY + 120, cur = null;
+        heads.forEach(function (h) { if (h.offsetTop <= y) cur = h.id; });
+        document.querySelectorAll('.toc-link').forEach(function (l) {
+          l.classList.toggle('active', l.getAttribute('href') === '#' + cur);
+        });
+      }
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    })();
+  </script>
+</body>
+</html>
