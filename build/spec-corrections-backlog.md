@@ -482,3 +482,28 @@ generator should serve training and evaluation so train and test actions
 are alike. **Recommendation:** piecewise-constant, resampled from the
 training interval every fixed span of world time, pinned per world in the
 recipe; ratify at design review.
+
+**A15 correction and measurement (same day).** The first version of A15
+guessed that a fresh random push every step would "average out to noise".
+Measured on 20 random training-region starts per world, that guess was
+**wrong** — the truth is the opposite. Each action is an impulse applied
+at every step (worlds ADR-W2), and at the declared training magnitude
+(±0.5 prey units; ±0.5 rad/s on the first joint) a kick every step
+overwhelms the worlds:
+
+| Style | LV (10 s) | Pendulum (5 s) |
+|---|---|---|
+| Kick every step (i.i.d.) | 16/20 runs crash through the prey floor | state driven ~13× the world's scale |
+| Kick every step, held 0.2 s | 20/20 crash | ~118× scale |
+| Occasional kick (~1 per second of world time) | 0 crash; ~0.19× scale effect by 10 s | 0 crash; ~0.16× scale by 5 s |
+
+Only occasional discrete kicks are safe and meaningful — and that is what
+worlds ADR-W2 already intends ("a discrete intervention: 'remove rabbits
+now', 'kick the pivot now'"); the spec just never said how often. The
+recommendation is therefore **sparse discrete kicks** at a pinned rate,
+drawn from the training action interval, one generator for training and
+evaluation. Consequence to design for: kicks are rare, so the training
+sample must deliberately include enough kick transitions for the models to
+learn the lever. Also found: `lv.transition` given a batch of states
+silently returns a wrong-shaped array instead of refusing (a fail-loud gap;
+it is only ever called one state at a time today).
