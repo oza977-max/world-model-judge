@@ -1,5 +1,7 @@
 # Handover
 
+> **Historical record — last updated 2026-08-31.** The build has moved on a lot since. For the current state, open decisions and everything deferred, read `REMEMBER.md`; for each built chunk, `build/handovers/`. Kept unedited below as the record of how the design phase went.
+
 ## CURRENT STATE
 
 **Phase:** Technical specification complete, **four times design-reviewed**, and

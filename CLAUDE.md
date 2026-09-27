@@ -17,11 +17,23 @@ not a chatbot, and not an attempt to advance simulation.
 
 ---
 
+## Read `REMEMBER.md` next — before doing anything
+
+**`REMEMBER.md` is this project's memory.** It holds every standing rule, every
+decision waiting on the owner, everything deferred to a later stage (by
+chunk), and every promise made to the owner. Read it at the start of every
+session. When an item closes, move it to its *Closed* section; when anything
+new is deferred, add it the same day. A deferral that is not in that file will
+be forgotten.
+
 ## Standing gates — read before doing anything
 
-- **No build until the user explicitly approves the requirements.** Set
-  2026-08-19 and still in force. `requirements/requirements.md` is written but
-  NOT approved. Do not write source code, tests, or scaffolding until told.
+- **The build is approved and under way.** The requirements were approved on
+  2026-08-25 (the old "no build until approved" gate is satisfied). Build
+  with `/gvm-build`, one chunk at a time, independent review loop to zero
+  Critical/Important on every chunk.
+- **This judge can have no margin of error** (the owner's words). Verify by
+  running things, not by reasoning about them.
 - **Every step must be explained in plain English, inside the artefacts.** The
   user must be able to narrate what was built to other people; a working thing
   they cannot explain has failed its purpose. This is a functional requirement
@@ -31,8 +43,11 @@ not a chatbot, and not an attempt to advance simulation.
 - **Confidentiality is absolute (NF-4).** The repo is public from its first
   commit. Nothing from the author's professional context — no internal figures,
   no employer name, no internal team or committee names. Banking practice is
-  described from published public sources only (SR 11-7, SS1/23). There is no
-  window in which a mistake could be quietly fixed.
+  described from published public sources only (SR 11-7 — since superseded by
+  SR 26-2 — and SS1/23). There is no window in which a mistake could be quietly
+  fixed.
+- **Never edit an already-reviewed spec to match code mid-build.** Record the
+  correction in `build/spec-corrections-backlog.md` for the next design review.
 
 ---
 
@@ -71,12 +86,23 @@ a toy world validates the harness, not the field (Derman).
 ## Layout
 
 ```
-requirements/requirements.md    45 requirements, four domains + non-functional
-requirements/requirements.html  same content, Tufte-styled
+REMEMBER.md                     the project's memory — read every session
+requirements/requirements.md    requirements (v1.3, approved)
+requirements/wordsareamenu.html the essay, draft v2.7 (the build must keep its promises)
 risks/risk-assessment.md        four product risks, written before requirements
+test-cases/test-cases.md        test cases (v1.6)
+specs/                          the technical spec suite + implementation guide
+design-review/, code-review/    review reports; reviews/calibration.md tracks them
+build/prompts/, build/handovers/  one prompt + one handover per built chunk
+build/spec-corrections-backlog.md  spec fixes found while building (for Round 10)
+prereg/                         committed pre-registration (recipe, prediction, thresholds)
+src/wmj/                        the code: worlds, models, judge, harness, reporting
+tests/                          unit tests and gates
 ```
 
-Nothing else exists yet. No source code has been written.
+Build state (2026-09-27): Phases 1–2 done; Phase 3 in progress — P3-C01 (MLP
+core), P3-C02 (registry), P3-C07 (pre-registration tooling) done; P3-C06
+(training data) next. `HANDOVER.md` is a historical record up to 2026-08-31.
 
 The dominant risk is not technical: it is that on a clean toy world every model
 passes and the judge never says anything surprising. Requirements MU-5 and MU-6
@@ -88,13 +114,11 @@ exist specifically to give that risk a chance to resolve honestly.
 
 Built with the Grounded Vibe Methodology (`/gvm-*` skills, committed at
 `.claude/skills/` — project-scoped, so any session on this repo has them).
-Pipeline so far: risk assessment → requirements (v1.2, approved) → test
-cases (v1.0, 70 cases, independently verified) → tech spec (all 7 documents
-at v1.1) → design review (round 1: 10 Critical + 16 Important findings,
-all fixed same-session — see `design-review/design-review-001.html` and
-`reviews/calibration.md`, which also names the honest gap that those
-fixes were self-verified, not independently re-checked). Next stage is
-either a Round 2 design review or `/gvm-build` starting at P1-C01.
+Pipeline so far: risk assessment → requirements (v1.3, approved) → test
+cases → tech spec → nine design-review rounds (Round 9, 2026-09-04: "Build
+with caveats", the first verdict that cleared the build) → build (Phases 1–2
+done, Phase 3 in progress) with code-review round 1 closed. Round 10 is owed
+(see `REMEMBER.md` §2 and §3).
 
 The five project-specific expert-scoring files (`model-risk-world-model-judge.md`,
 `forecast-verification.md`, `ai-evaluation.md`, `world-models.md`,

@@ -2,7 +2,7 @@
 
 **A checker that decides how far ahead a learned simulator can be believed.**
 
-> **Status: requirements only. No code has been written yet.**
+> **Status: being built.** The worlds, baselines, first chart and pre-registration tooling exist; the two models under test are not built yet, and the judge is only partly built. No verdict has been produced — nothing here is a result yet.
 
 ---
 
