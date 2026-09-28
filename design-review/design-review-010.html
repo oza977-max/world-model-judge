@@ -426,10 +426,10 @@
     <p class="subtitle">Before the two practice models are trained, twelve independent reviewers checked the plan for how they will be trained. They found twenty real problems. None of them is a result — nothing has been trained. They are holes in the plan that would have forced a builder to guess, or that would have let the pre-registered recipe be quietly changed. Several were confirmed by running code, not by argument.</p>
 
     <h2 id="verdict">Verdict</h2>
-    <div class="verdict pending">
-      <div class="verdict-label">Verdict</div>
-      <div class="verdict-text">PENDING OWNER TRIAGE</div>
-      <p class="verdict-basis">The owner decides each finding first; the verdict follows (shared rule 28).</p>
+    <div class="verdict not-ready">
+      <div class="verdict-label">Verdict (after owner triage, 2026-09-28)</div>
+      <div class="verdict-text">Do not build from the proposal as written</div>
+      <p class="verdict-basis">Nine Critical findings, every one accepted for fixing by the owner. P3-C06 and everything trained from the recipe stays blocked until the accepted fixes are written into the specs, test cases and one open, dated revision of <code>prereg/recipe.md</code>, and an independent fix-check confirms each one. In plain words: the plan was nearly right but had holes a builder would have had to guess through; fill the holes, have someone else check the fills, then build.</p>
     </div>
 
     <h2 id="method">Method</h2>
@@ -744,6 +744,19 @@
       <li>F13: the prediction's reasoning.</li>
       <li>Disposition (fix / defer / dismiss) of all 20.</li>
     </ol>
+
+    <h2 id="triage">Owner Triage (2026-09-28)</h2>
+    <p><strong>In plain words:</strong> the owner read every finding and chose what to do with each. The verdict above was written only after this.</p>
+    <table>
+      <thead><tr><th>Decision</th><th>Owner's choice</th></tr></thead>
+      <tbody>
+        <tr><td>NF-2 (the 10-minute rule)</td><td>Keep "the whole run finishes in minutes"; write its purpose into NF-2 (anyone can re-run the judge and check the verdict); 600 s becomes a revisable target in ADR-J6 with a measured envelope. The 200 test runs step forward together (batched), which must give exactly the same numbers.</td></tr>
+        <tr><td>R10-F07 (kicks crash predator–prey)</td><td>Smaller and/or rarer kicks: re-measure and pick a kick size and rate that never crashes in any region, rather than redrawing crashed runs (which would quietly favour "safe" runs).</td></tr>
+        <tr><td>R10-F13 (the prediction's reasoning)</td><td>Keep the prediction (ensemble better calibrated); rewrite its "why" so it does not rely on the plain-loss flaw β-NLL removes. Done before any training.</td></tr>
+        <tr><td>All other findings</td><td>Accept every recommendation: FIX R10-F01–F18 and F20; DEFER R10-F19 (weight hashing only matters if cached weights are ever chosen; they were not).</td></tr>
+      </tbody>
+    </table>
+    <p>Dispositions: 19 fix, 1 defer, 0 dismiss. Nothing was filtered or deferred without the owner's decision.</p>
 
     <h2 id="honest-gaps">Honest Gaps in This Review</h2>
     <div class="honesty-section">

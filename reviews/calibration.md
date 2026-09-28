@@ -18,7 +18,10 @@ Project-level calibration layer for GVM review skills (`/gvm-design-review`, `/g
 | 5 | 2026-08-31 | design (dual/blind, post-repair) | — (see per-panel) | 6 | 4 | 4 | 4 | 2 | 5 | 3 |
 | 6 | 2026-08-31 | design (dual/blind, post-v1.5-fix-all) | — (see per-panel) | 8 | 6 | 5 | 6 | 3 | 5 | 5 |
 | 9 | 2026-09-04 | design (dual/blind, backlog reconciliation) | — (see per-panel) | 7 | 7 | 7 | 6 | 7 | 5 | n/a |
+| 10 | 2026-09-28 | design (dual/blind, recipe-revision quick check) | — (see per-panel) | 6 | 5 | 5 | 4 | 3 | 3² | n/a |
 | 1 | 2026-09-05 | code | — (see per-panel) | 9¹ | 7¹ | 6¹ | 6¹ | 7¹ | n/a¹ | n/a¹ |
+
+² Round 10's Panel F was a runtime/re-runnability quality-attribute panel (ATAM utility tree: NF-2's whole-run-in-minutes leaf rated H,H), recorded in the F1 column for a single history.
 
 ¹ Code review's six panels (A References, B Contracts, C Logic & Completeness, D Naming & Spec Compliance, E Concurrency & Ordering, F Stub Detection) are a different defect-class partition than design review's seven — mapped positionally into this table's existing columns (A→A, B→B, C→C, D→D, E→E) for a single shared history; Panel F (Stub Detection) has no design-review analogue and is recorded in prose only, not a column.
 
@@ -321,3 +324,19 @@ Genuinely verified sound: NF-4's `--batch` mechanism (three independent executio
 **No recurring-finding table entry yet** — this is Round 1 for code review; recurrence tracking begins at Round 2.
 
 **Disposition (same day, user-authorised "close them"):** all eight Important findings fixed, all ten Minor/Observation items adopted, Panel F's five stub-detection findings dismissed as heuristic false positives. Verified: 223 fast tests (18 new phantom-gate, read-only, and guard tests), the full gates suite including separate-process byte-identity, and the full-scale slow gate for both worlds — all green. Two consequences beyond the findings themselves: the pytest process is now single-threaded by construction (`tests/conftest.py`, ADR-002 rule 1 applied to the test runner), and **the reporting import gate added in Round 9 caught a defect in this fix pass** — the first draft of the atomic-write fix used `import os` in `wmj.reporting`, the exact ambient-capability import the gate exists to block; `Path.replace()` was the sanctioned atomic rename. A gate one commit old earning its keep is the cleanest evidence yet that the mechanical controls are load-bearing, not ceremony. Full per-finding table: `build/spec-corrections-backlog.md`, "Disposition (code-review-001)".
+
+---
+
+## Round 10 (2026-09-28) — recipe-revision quick check (design review)
+
+**Verdict (after owner triage): Do not build from the proposal as written.** Scope was `build/round-10-proposal.md`: the training budget (A12/A14), the owner's challenge to NF-2's 600-second figure, how kicks are chosen (A15), Model A's loss, the pre-registration freeze point, owed ratifications. Twelve reviewers — six defect-class panels (A coverage, B contracts, C structural, D implementability, E integrity/anti-gaming, F runtime quality attribute), each calibrated and blind. ~70 raw findings merged to 20; **all 20 confirmed by one fresh-context verifier told to refute them (0 partial, 0 refuted)**. Severity: 9 Critical, 10 Important, 1 Minor. Report: `design-review/design-review-010.html`.
+
+**The round's defining feature: claims were checked by running code, and running code changed severities.** Measured in-session: one-at-a-time network calls ~11–14 µs (the evaluation loop ADR-J6 called "well under a minute" is ~5 min); the one-time gradient check on 50,000 examples ~7–10 min; kicks over the *full* horizon crash predator–prey (4/2,000 training runs; 68/300 from out-region starts, 0/300 there without kicks) — which upgraded R10-F07 from Important to Critical; a batched world step through the same `rk4_step` is bit-identical and 25–100× faster, which is what makes "whole run in minutes" achievable (~4–5 min batched vs ~10–11 min not).
+
+**The recurring pattern this round: the runtime envelope estimated instead of measured — a third time.** ADR-J6 was corrected at Round 5 (per-region multiplier), falsified at A14 (network count), and now again (evaluation cost). Each time the estimate was a FLOP count; each time the real cost was interpreter overhead. Standing lesson: an envelope figure without a measurement behind it is not a figure. Second pattern: the proposal left several questions "for the review to check" (out-of-range actions, the M-adequacy test, freeze re-opening) — every one came back as a Critical; a proposal that names an open question should answer it, not delegate it.
+
+**Calibrated vs blind:** high overlap on every Critical cluster (freeze, subsample ownership, out-of-range actions, β-NLL gradient, evaluation runtime). Blind-only: re-freezing *before* a judged run is not refused (Cb-1); unnamed reference machine (Db-9). Calibrated-only: FREEZE cannot contain its own SHA (C-5); gradient-check cost (D-8); β-NLL's calibration effect (C-3).
+
+**Owner triage (2026-09-28):** NF-2 — keep "whole run in minutes", state its purpose (re-runnability), 600 s a revisable measured target, batch the evaluation; R10-F07 — smaller/rarer kicks chosen so nothing crashes in any region (no redraw filtering); R10-F13 — keep the prediction, rewrite its reasoning; all other recommendations accepted — 19 fix, 1 defer (F19, cached-weight hashing, moot), 0 dismiss.
+
+**Honest gap carried forward:** the fixes will be applied by the same session that proposed the revision — the BC-2 pattern (Round 6: a "fix all" pass planted 5 of 10 Criticals). The accepted mitigation is an independent fix-check of every accepted finding before P3-C06 starts.
