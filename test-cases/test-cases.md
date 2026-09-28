@@ -36,9 +36,9 @@ itself left as `<spec-value>` — filled in once the technical spec sets it,
 never guessed here.
 
 **Coverage discipline (no silent caps):** every Must requirement gets at
-least one case below. 104 case IDs total, of which two (TC-NF6-05, TC-NF1-06) are
-superseded tombstones, leaving 102 live cases — count verified by
-`grep -c '^\*\*TC-'`, not carried forward by arithmetic (the previous "100"/"97"/"89"/"85"/"79"/"69"
+least one case below. 115 case IDs total, of which two (TC-NF6-05, TC-NF1-06) are
+superseded tombstones, leaving 113 live cases — count verified by
+`grep -c '^\*\*TC-'`, not carried forward by arithmetic (re-run at design-review-010; the previous "104"/"100"/"97"/"89"/"85"/"79"/"69"
 here were exactly such carried-forward numbers, stale by later additions; design-review-009
 added three — TC-MU2-03, TC-NF6-10, TC-NF6-11 — closing two orphan fail-loud
 mechanisms with no phantom-gate case and reporting's missing import gate).
