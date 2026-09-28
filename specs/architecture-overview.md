@@ -1,6 +1,6 @@
 # World Model Judge — Architecture Overview
 
-Version 1.8 · 31 August 2026 · Synthesises: cross-cutting v1.8, worlds v1.4, models v1.8, judge v1.8, reporting v1.8
+Version 1.9 · 28 September 2026 · Synthesises: cross-cutting v2.0, worlds v1.6, models v2.0, judge v1.9, reporting v1.8 (only the NF-2 line, the models summary row and this banner changed at design-review-010; the rest of this overview predates it)
 
 > **Change note (v1.8 — design-review-008 repair, execution-verified).** Version references updated to the v1.8 suite. The §2 judge-isolation note is updated: the purity harness's guards now generalize to every reachable binding of each guarded object (Round 8 found the v1.7 hardening had itself only patched the first binding found for `os.environ` and `numpy.random`, the same class of bug BC-4 names, recurring in different objects across three rounds), and the disclosed residual narrows to `ctypes` and pre-capture-before-install only — the `getrandom()`-via-unseeded-`Generator(PCG64())` route Round 7 disclosed is now closed. No conceptual-integrity claim in §6 changed; the container diagram (§2) needed no change — it already showed `[reporting]───▶[out/]` as the only write path, which design-review-008's `out/` ownership decision (cross-cutting ADR-002 rule 4) now makes true in the prose too. See design-review-008.html.
 
@@ -93,7 +93,7 @@ The judge's isolation is the load-bearing wall: everything else may know about t
 - **Credibility (NF-4, NF-5, MU-4, JU-10):** fixture labels burned into images; limitations as fixed constants in the judge; the forbidden-terms scan (a gitignored local terms file, enforced at exactly two local layers — the pre-commit hook and the `wmj run` startup gates, which also verify the hook is actually activated — with the residual gaps — including web-UI/no-pre-push bypasses — named rather than hidden, cross-cutting v1.6); the agreement-case caption that declines to manufacture a punchline.
 - **Separability (NF-6, JU-12, JU-1):** enforced by import-graph AST test, purity-under-blocked-environment test, and identity-free types.
 - **Adaptability (MU-9):** registry + one-interface rule; the zero-diff-outside-own-file test is the contract Mor checks.
-- **Performance (NF-2):** 600-second budget with envelope math (judge spec ADR-J6); single-threaded by design and still two orders of magnitude inside budget.
+- **Performance (NF-2):** the whole run — training, rollouts, judging, charts — finishes in minutes so anyone can re-run it and check the verdict (NF-2's purpose, requirements v1.4). Target 600 s on a 4-core laptop, a revisable engineering target; judge spec ADR-J6 carries the envelope assembled from measured per-call costs (≈ 5–6 min, with evaluation batched across trials). Single-threaded by design. *(The earlier "two orders of magnitude inside budget" claim was withdrawn at design-review-010: it rested on a FLOP count that ignored per-call cost.)*
 - **Comprehensibility (RP-5, NF-5):** captions specified as content; plain-words docstrings; the ten-minute reader is a named quality attribute, not a hope.
 
 ## 5. Domain Spec Index
@@ -102,7 +102,7 @@ The judge's isolation is the load-bearing wall: everything else may know about t
 |---|---|---|
 | `cross-cutting.md` | stack, determinism, structure, errors, deps | The rulebook: NumPy-only, four determinism rules, judge-imports-nothing. |
 | `worlds.md` | WD-1..8 | Two pinned worlds, one integrator, measured divergence, declared regions and tasks. |
-| `models.md` | MU-1..10 | Baselines with honest spreads, three one-corruption fixtures, the direct-vs-ensemble experiment, prereg mechanics. |
+| `models.md` | MU-1..10 | Baselines with honest spreads, four one-corruption fixtures (`fx-action-blind` added design-review-009), the training recipe revised at design-review-010 (batched prediction, β-NLL, harness-drawn subsample, one-time freeze), the direct-vs-ensemble experiment, prereg mechanics. |
 | `judge.md` | JU-1..13 | The arithmetic of the verdict: CRPS, coverage, sharpness, derived bands, climate switch, trust horizons, full schema. |
 | `reporting.md` | RP-1..8 | Four charts with authored captions, fixture marking, machine-readable verdicts, one-command reproduction. |
 
@@ -135,6 +135,7 @@ Verdict: the system reads as one mind's design. The single idea it expresses eve
 | 1.6 | 2026-08-31 | Design-review-006 repair: version references → v1.6 suite; §2 purity-harness note updated to mutate-in-place (Round 6 executed the `sys.modules`-swap failing). (Changelog row added in v1.7 — design-review-007 found v1.6 stamped the banner and change note but never added this table row.) |
 | 1.7 | 2026-08-31 | Design-review-007 repair (execution-verified): version references → v1.7 suite; §2 judge-isolation note corrected to tripwire-plus-byte-identity-backstop (BC-4 — Round 7 executed `ctypes`/`getrandom` escapes the in-process harness cannot catch, so the "complete" claim is dropped); the missing v1.6 changelog row added (I1). |
 | 1.8 | 2026-08-31 | Design-review-008 repair (execution-verified): version references → v1.8 suite; §2 updated for the generalized purity guards (every reachable binding, not just the first) and the narrowed residual (`getrandom()` route now closed); the `out/`-ownership decision made the container diagram's existing `[reporting]───▶[out/]` path true in the prose too, no diagram change needed. |
+| 1.9 | 2026-09-28 | Design-review-010 fix-check: NF-2 line restated with its purpose and the measured envelope (the "two orders of magnitude" claim withdrawn); models row counts four fixtures and names the recipe revision; banner versions refreshed. |
 
 ---
 
