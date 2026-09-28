@@ -559,10 +559,10 @@ Measured components (this environment): training 12 networks at M = 50,000,
 batch 256, 100 epochs ≈ 196 s (LV ≈ 13.8 s, pendulum ≈ 18.9 s per network);
 batched evaluation ≈ 1–1.5 min (3 regions × 200 trials × (700 + 5000) steps,
 ~10 network forwards per step via `forward_invariant`, plus `linear`'s
-per-trial loop); batched true-world rollouts ≈ 4 s; gradient checks ≈ 1 s.
+per-trial loop); batched true-world rollouts ≈ 4 s; gradient checks ≈ 11 s (12 networks).
 Whole run ≈ 5–6 min here. Unbatched it would be ≈ 12–14 min (≈ 34M one-at-a-time network calls ≈ 6–8 min, plus unbatched truth and benchmark rollouts — corrected by the fix-check; the first figure, 10–11 min, reused the proposal's two-region count). **These
 evaluation and whole-run figures are estimates built from measured
-per-call costs, not an end-to-end measurement** — the pipeline does not
+per-call costs, not an end-to-end measurement** (the gradient checks are ≈ 11 s for 12 networks — corrected by fix-check pass 2) — the pipeline does not
 exist yet; TC-NF2-01 is the first end-to-end measurement (P6-C02). The target
 stays 600 s **on the reference 4-core laptop** (TC-NF2-01 measures it there;
 this environment is not that machine). Revisable; any revision is recorded
@@ -576,7 +576,7 @@ Runs once per training run on a fixed **64-pair** batch (`gradcheck_pairs:
 Gaussian NLL, each ensemble member under the MSE loss. **A10 ratified:**
 relative-error denominator floored at `GRADIENT_SCALE_FLOOR = 1e-3` × the
 largest gradient magnitude; tolerance **1e-5** (spec's 1e-6 superseded); the
-near-dead-unit blind spot is disclosed. Measured: 0.4 s at 32 pairs vs
+near-dead-unit blind spot is disclosed. Measured: ≈ 0.8–0.9 s per network at 64 pairs (≈ 11 s for all 12) vs
 ≈ 400–700 s at 50,000 — the "full-batch" wording is retired.
 
 ### R10-P5 — Training data (F03, F04, F08, F10, F14) — models ADR-M1 `TrainingData`, cross-cutting ADR-002
