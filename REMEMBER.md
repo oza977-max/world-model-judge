@@ -58,8 +58,7 @@ Ordered by when they bite. *(D1–D6, D12 and D14 were settled at Round 10 on
 
 ## 3. Owed work, by stage
 
-**Now — before P3-C06**
-- **Independent fix-check of the Round 10 edits** (the owner's rule: never a single self-review; the BC-2 pattern — a "fix all" pass planted 5 of 10 Criticals at Round 6). One fresh reviewer checks every pinned decision in the backlog's "Disposition (Round 10)" against the edited specs, test cases and recipe. **P3-C06 stays blocked until it is clean.**
+**Now — next build step: P3-C09**
 - **Independent re-check of the v1.8 purity guards and the rewritten ADR-004 orchestration loop** — owed by BC-2 since `calibration.md:249`; Rounds 9 and 10 were scoped elsewhere. Neither is built yet (P4-C06, P6-C01).
 - Fold the remaining spec text corrections listed in §5 into the specs at the next review.
 
@@ -173,4 +172,5 @@ hardcoded, not auto-discovered.
 | D5 A13 disposition | 2026-09-28 | Confirmed "disclose, don't fake a check"; ADR-M5 residual #4. |
 | D6 B1 design review | 2026-09-28 | Reviewed in Round 10; no finding against it. |
 | D12 When to run Round 10 | 2026-09-28 | Run 2026-09-27/28; `design-review/design-review-010.html`. |
+| Independent fix-check of the Round 10 edits | 2026-09-28 | Five fresh checkers until clean: passes [(1,5),(2,2),(3,6),(4,2),(final,0)]; commits 1ccf8ce, 3426161, 8d34120, 913231f. `reviews/calibration.md`. |
 | D14 How action sequences are drawn | 2026-09-28 | Sparse seeded kicks from one generator; LV kicks shrunk after crash measurements (worlds ADR-W2, §4.1). |
