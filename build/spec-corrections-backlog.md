@@ -560,7 +560,7 @@ batch 256, 100 epochs ≈ 196 s (LV ≈ 13.8 s, pendulum ≈ 18.9 s per network)
 batched evaluation ≈ 1–1.5 min (3 regions × 200 trials × (700 + 5000) steps,
 ~10 network forwards per step via `forward_invariant`, plus `linear`'s
 per-trial loop); batched true-world rollouts ≈ 4 s; gradient checks ≈ 1 s.
-Whole run ≈ 5–6 min here. Unbatched it would be ≈ 10–11 min. **These
+Whole run ≈ 5–6 min here. Unbatched it would be ≈ 12–14 min (≈ 34M one-at-a-time network calls ≈ 6–8 min, plus unbatched truth and benchmark rollouts — corrected by the fix-check; the first figure, 10–11 min, reused the proposal's two-region count). **These
 evaluation and whole-run figures are estimates built from measured
 per-call costs, not an end-to-end measurement** — the pipeline does not
 exist yet; TC-NF2-01 is the first end-to-end measurement (P6-C02). The target
