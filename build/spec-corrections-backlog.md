@@ -507,3 +507,290 @@ sample must deliberately include enough kick transitions for the models to
 learn the lever. Also found: `lv.transition` given a batch of states
 silently returns a wrong-shaped array instead of refusing (a fail-loud gap;
 it is only ever called one state at a time today).
+
+---
+
+## Disposition (Round 10, 2026-09-28) — the recipe revision, pinned
+
+**In plain words:** Round 10 (`design-review/design-review-010.html`) found
+twenty holes in the plan for training the two practice models. The owner
+decided every one on 2026-09-28: fix nineteen, defer one. This section is
+the single authoritative statement of *what was decided*, with every
+number, name and formula pinned, so that the spec edits below, the one
+open revision of `prereg/recipe.md`, and the independent fix-check all
+read from one place. Where a spec says "per design-review-010", this is
+what it means. Every measured figure here was run on 2026-09-28 in this
+environment (single-threaded; not the 4-core reference laptop).
+
+**Owner decisions:** NF-2 keeps "whole run in minutes" and states its
+purpose (re-runnability), 600 s a revisable measured target, evaluation
+batched; kicks made smaller/rarer so nothing crashes (no redraw
+filtering); the prediction kept, its reasoning rewritten; all other
+recommendations accepted. 19 fix, 1 defer (R10-F19), 0 dismiss.
+
+### R10-P1 — NF-2 (F01 context) — requirements v1.4
+NF-2 now names its purpose: anyone can re-run the whole judge on a laptop
+and check the verdict. The number lives in judge ADR-J6 as a revisable
+target backed by measurement.
+
+### R10-P2 — Batched evaluation (F01) — models ADR-M1, judge ADR-J6, cross-cutting ADR-004
+- The `Model` protocol gains `stateless: bool` (True iff `predict` depends
+  only on `(state, action)` — no rollout-local memory) and, for stateless
+  models, `predict_batch(states: float64[n,d], actions: float64[n,a]) ->
+  (means float64[n,d], spreads float64[n,d])`. **Row `i` must be
+  bit-identical to `predict(states[i], actions[i])`** (new TC-MU1-04, every
+  registered stateless model, batch sizes {1, 2, 7, 64, 200}).
+- Stateless: `persistence`, `direct`, `ensemble`, all four fixtures.
+  Stateful: `linear` (keeps the previous state) — rolled out per trial with
+  `reset()` as before. The harness rolls all N trials of a region forward
+  together, one `predict_batch` per step, for stateless models.
+- **Why the prediction path needs its own forward (measured):** NumPy's
+  BLAS matrix multiply is *not* batch-size invariant on this platform —
+  odd batch sizes differ from one-at-a-time in the last bit (~2e-16;
+  even sizes matched). `np.einsum('bi,io->bo', A, W, optimize=False)` was
+  row-invariant at every size tested and ~1.7× slower than BLAS. So the
+  MLP gains a prediction forward (`forward_invariant`: per-layer einsum +
+  bias, tanh hidden, linear output) used by every `predict` and
+  `predict_batch`; training keeps the BLAS `forward`. TC-MU1-04 is the
+  guard — the invariance is tested, not assumed.
+
+### R10-P3 — Runtime envelope (F01, F02, F20) — judge ADR-J6
+Measured components (this environment): training 12 networks at M = 50,000,
+batch 256, 100 epochs ≈ 196 s (LV ≈ 13.8 s, pendulum ≈ 18.9 s per network);
+batched evaluation ≈ 1–1.5 min (3 regions × 200 trials × (700 + 5000) steps,
+~10 network forwards per step via `forward_invariant`, plus `linear`'s
+per-trial loop); batched true-world rollouts ≈ 4 s; gradient checks ≈ 1 s.
+Whole run ≈ 5–6 min here. Unbatched it would be ≈ 10–11 min. **These
+evaluation and whole-run figures are estimates built from measured
+per-call costs, not an end-to-end measurement** — the pipeline does not
+exist yet; TC-NF2-01 is the first end-to-end measurement (P6-C02). The target
+stays 600 s **on the reference 4-core laptop** (TC-NF2-01 measures it there;
+this environment is not that machine). Revisable; any revision is recorded
+with a measurement.
+
+### R10-P4 — Gradient check (F02, A10 ratified) — models ADR-M3 / §8
+Runs once per training run on a fixed **64-pair** batch (`gradcheck_pairs:
+64`), the first 64 of a permutation of the M training pairs drawn with
+`seeds.rng_for(world, "training", "gradcheck-batch")`. It validates
+**backprop**, not the loss: `direct`'s net is checked under the plain
+Gaussian NLL, each ensemble member under the MSE loss. **A10 ratified:**
+relative-error denominator floored at `GRADIENT_SCALE_FLOOR = 1e-3` × the
+largest gradient magnitude; tolerance **1e-5** (spec's 1e-6 superseded); the
+near-dead-unit blind spot is disclosed. Measured: 0.4 s at 32 pairs vs
+≈ 400–700 s at 50,000 — the "full-batch" wording is retired.
+
+### R10-P5 — Training data (F03, F04, F08, F10, F14) — models ADR-M1 `TrainingData`, cross-cutting ADR-002
+Built **once per world by the harness** (P3-C06) and handed identically to
+every factory (ensemble members, fixtures rebuilding `direct` — TC-MU4-02).
+- 2,000 full-horizon trajectories from training-region starts
+  (`"train-starts"`), actions from the kick generator (R10-P6), trajectory
+  `i` drawing kicks from `seeds.rng_for(world, "training", "train-kicks",
+  str(i))`, generated with the batched world step (R10-P7).
+- A **pair** is `(state_t, action_t, state_{t+1})`; a **kick pair** has
+  `action_t ≠ 0`.
+- **Kick pairs:** a fixed count **`kick_pairs: 12500`**, the first 12,500
+  of a permutation of all kick-pair indices drawn with
+  `seeds.rng_for(world, "training", "subsample-kick")`. If fewer than 12,500
+  kick pairs exist, refuse loudly (`TrainingDataError`) — never shrink the
+  count silently. (Expected available: LV ≈ 14,000, pendulum ≈ 20,000.)
+- **Non-kick pairs:** `subsample_pairs − kick_pairs` = 37,500, the first of
+  a permutation drawn with `"subsample-nonkick"`. Training set = kick pairs
+  then non-kick pairs, each in permutation order (epochs shuffle it anyway).
+- **Held-out pairs:** 10,000 (`heldout_pairs: 10000`) from the pairs *not*
+  selected, first of a permutation drawn with `"heldout"` — a natural mix.
+  Used only by the sufficiency check and the kick/non-kick report; never
+  for early stopping or tuning.
+- `TrainingData` gains: `train_pairs` (state[M,d], action[M,a],
+  next[M,d], is_kick[M]), `heldout_pairs` (same shape, 10,000),
+  `gradcheck_index` int[64]; the raw `states`/`actions` trajectories stay
+  (the baselines fit from them).
+- **Disclosed (F10):** training pairs are 25% kicks; evaluation steps are
+  ~1% (LV) / ~0.2% (pendulum) kicks. Identical for both unrigged models.
+  P3-C03/C04 report each model's held-out one-step error split by
+  kick/non-kick pairs.
+
+### R10-P6 — Kicks (F06, F07, F09) — worlds ADR-W2/W3/W4, §4, §7
+- **One generator,** `wmj.worlds.actions.kick_sequence(rng, horizon,
+  p_step, band, umax)` (pure; the harness passes a seeded `Generator`).
+  Draw: `r = rng.random((horizon, 3))`; a kick at step t iff `r[t,0] <
+  p_step`; `band="in"`: `u = umax·(2·r[t,1] − 1)`; `band="out"`: `u =
+  s·umax·(2 − r[t,1])`, `s = +1` if `r[t,2] < 0.5` else `−1` (so
+  `|u| ∈ (umax, 2·umax]`); non-kick steps `u = 0.0`. Returns
+  `float64[horizon, 1]`. Draws are unconditional (three per step) so the
+  stream is layout-stable.
+- `p_step = kick_rate_per_s × dt`: **LV 0.5 /s × 0.02 = 0.01; pendulum
+  1.0 /s × 0.002 = 0.002.**
+- **LV action intervals shrink (owner: smaller/rarer kicks, measured):**
+  trained `[−0.1, 0.1]` (was `[−0.5, 0.5]`), out-of-range `|u| ∈ (0.1, 0.2]`
+  (was `(0.5, 1.0]`); declared full range `ACTION_RANGE` stays `(−1, 1)`.
+  Pendulum unchanged: trained `[−1, 1]`, out-of-range `(1, 2]`.
+  Measured over the full 700-step horizon, 2,000 runs each: LV
+  training/in-range, LV out-high-amplitude/in-range, LV training/out-of-range
+  — **0 floor crashes in all three** at 0.1 max, 0.5 /s (the proposal's 0.5
+  max at 1 /s crashed 7, 477 and 337 respectively). The cost: the LV lever is
+  smaller — mean horizon effect 0.12 state units (training region) vs 0.93.
+- **New action-axis out-region per world, `"out-large-action"`:** state box
+  = the training box, action band = the out-of-range band, `axis="action"`.
+  This is what makes WD-5/TC-WD5-02's action axis producible (no world
+  declared one before). Each world now has 3 regions.
+- **Evaluation trials:** 200 per region; trial `i` of region `r` draws kicks
+  from `seeds.rng_for(world, r, "eval-kicks", str(i))` with that region's
+  band (`"in"` for training and state-axis regions, `"out"` for
+  `out-large-action`).
+- **Benchmarks (F09):** 64 starts per region; start `i` draws kicks from
+  `seeds.rng_for(world, r, "benchmark-kicks", str(i))` with the region's
+  band, applied **identically to the trajectory and its perturbed twin** —
+  so the reference line is the world's own drift under the same kind of
+  kicks. The TC-WD3-03 conserved-quantity drift check stays **null-action**
+  (the quantity is only conserved without kicks). Measured with kicks: LV
+  final/initial ratio 0.92 (gate 0.1–10), pendulum inverted/training at
+  half-horizon 3,466× (gate ≥ 5×) — both sanity gates still hold.
+- **§7 unchanged:** any floor breach aborts the run loudly. Because every
+  kick sequence is seeded, the real job either always passes or always fails
+  at build time; new **TC-WD2-02** runs the pinned generator at full scale
+  in every region and asserts no clamp.
+
+### R10-P7 — Batched world step (F11) — worlds ADR-W1, §4.3
+One batch-aware `_deriv` per world (indexes `S[..., i]`, uses `np.sin`/
+`np.cos`), used by both `transition` (1-D) and new
+`transition_batch(states[n,d], actions[n,a])`; both call the **same
+`rk4_step` function object** (TC-WD3-01's identity check is unchanged).
+`transition` refuses non-1-D input (`WorldInputShapeError`) — closing the
+silent wrong-shape bug. New **TC-WD3-04**: `np.array_equal` of every row of
+`transition_batch` against `transition`, n ∈ {1, 2, 7, 64, 200}, both
+worlds, including kicked actions. Measured: bit-identical here; `np.sin`/
+`np.cos` equalled `math.sin`/`math.cos` on 2,000,000 values (so TC-WD1-01's
+pinned reference values should be unaffected — the test re-confirms).
+
+### R10-P8 — Model A's loss: β-NLL (F12) — models ADR-M3
+β = 0.5 (`beta_nll: 0.5`). Per dimension, per example, with `r = y − μ`,
+`s = log σ` and weight `w = σ^(2β)` **computed from the current forward
+pass and treated as a constant** (stop-gradient):
+`L = w · [0.5·log(2π) + s + r²/(2σ²)]`, summed over dimensions, averaged
+over the batch. Gradients handed to backprop (`d_output`):
+`∂L/∂μ = −w·r/σ²`, `∂L/∂s = w·(1 − r²/σ²)`, each divided by the batch
+size. New **TC-MU5-04**: the `d_output` closure matches central finite
+differences taken over the network *outputs* with `w` held fixed. The
+backprop gradient check (R10-P4) uses plain NLL, because finite differences
+of β-NLL through the weights would also differentiate `w`.
+
+### R10-P9 — The prediction's reasoning (F13) — `prereg/prediction.md`
+Prediction kept (ensemble better calibrated, longer trust horizon); its
+"why" rewritten to not rely on plain NLL's overconfidence: a single
+network's self-predicted error bar learns the noise it saw in training and
+has no signal for its own ignorance away from the data, while disagreement
+among independently initialised members grows where data is thin — most
+visibly out of region and at longer horizons, where errors compound.
+Changed before any training, so it is still a prediction.
+
+### R10-P10 — Is M enough? (F14) — models ADR-M3, recipe
+Outcome-independent, pre-registered, checked once at build time (P3-C03
+for `direct`, P3-C04 for `ensemble`), before the freeze, and never against
+the MU-5 margin. Train at M = 50,000 and at 2M = 100,000 (the 2M set = the
+same 12,500 kick pairs plus the first 87,500 non-kick pairs of the same
+permutation; everything else identical). Held-out error = mean over
+held-out pairs of mean over dimensions of `((mean − y)/scale)²`. **M is
+sufficient iff `err(M) ≤ 1.10 × err(2M)`** (`sufficiency_tolerance: 0.10`)
+for **both** models. If either fails, `subsample_pairs` becomes **100,000**
+(`subsample_pairs_fallback: 100000`, the only pre-registered fallback), for
+both models, recorded in the recipe's revision log; no further iteration.
+Runtime at 100,000: ≈ 8.5 min here — still inside the target.
+
+### R10-P11 — The freeze (F15–F18) — models ADR-M5, TC-MU6-*
+- `prereg/FREEZE` is a short human-readable declaration (date, statement);
+  it contains no commit id.
+- **The freeze commit is the commit that added `prereg/FREEZE`** — resolved
+  from git history, never chosen. `check_prereg` refuses if `prereg/FREEZE`
+  has ever been added more than once or ever deleted
+  (`git log --diff-filter=AD -- prereg/FREEZE` must show exactly one `A`
+  and no `D`) — **one freeze, ever** — or if it is absent ("not frozen
+  yet").
+- Every certified file (`recipe.md`, `prediction.md`, `thresholds.json`,
+  `FREEZE`) must equal its blob **at the freeze commit** and be clean in the
+  working tree; the freeze commit's timestamp must precede the run.
+- `check_prereg` returns the **freeze commit SHA**, recorded as
+  `meta.prereg_commit` (P6-C01). The freeze mechanism (P3-C10) is built
+  **before** P6-C01.
+- The git tag `prereg-freeze` is an optional human label; `check_prereg`
+  never reads it.
+- Before the freeze, `recipe.md`/`prediction.md` may be revised openly (each
+  revision dated in the recipe's revision log); their earlier versions stay
+  in history.
+- **Procedural rule + disclosed residual (F16):** no evaluation-trial metric
+  of either unrigged model may be computed before the freeze. That cannot be
+  enforced mechanically (an unrecorded informal run leaves no trace — the
+  same family as ADR-M5's non-publication residual); it is disclosed, not
+  claimed. The build-time sufficiency check (R10-P10) uses held-out
+  *training-region* pairs only, never evaluation trials or the margin.
+- Tests: TC-MU6-01 and TC-MU6-04 rewritten to the freeze commit; new
+  TC-MU6-06 (second add or a delete refused), TC-MU6-07 (the returned SHA is
+  the freeze commit and reaches `meta.prereg_commit`), TC-MU6-08 (no FREEZE
+  → refused), TC-MU6-09 (the recipe's kick/interval keys equal the world
+  modules' constants — the frozen recipe pins them and the code cannot drift
+  silently).
+
+### R10-P12 — Recipe keys (F05) — `prereg/recipe.md`
+```
+training_trajectories: 2000
+epochs: 100
+batch_size: 256
+subsample_pairs: 50000
+subsample_pairs_fallback: 100000
+kick_pairs: 12500
+heldout_pairs: 10000
+gradcheck_pairs: 64
+sufficiency_tolerance: 0.10
+beta_nll: 0.5
+matching_margin: 0.05
+ensemble_members: 5
+lv_kick_rate_per_s: 0.5
+lv_action_max: 0.1
+pendulum_kick_rate_per_s: 1.0
+pendulum_action_max: 1.0
+```
+`p_step = kick_rate_per_s × dt` (stated beside the keys). `batch_size`
+moves 32 → 256 (measured 2.5× cheaper per example); models ADR-M3's "batch
+size 32" is superseded.
+
+### R10-P13 — Seed purpose keys (F04) — cross-cutting ADR-002 rule 2
+New purposes, all distinct from `"train-starts"`/`"eval-starts"`/
+`"benchmark-starts"`: world-scoped `("training", "train-kicks", i)`,
+`("training", "subsample-kick")`, `("training", "subsample-nonkick")`,
+`("training", "heldout")`, `("training", "gradcheck-batch")`;
+region-scoped `(region, "eval-kicks", i)`, `(region, "benchmark-kicks", i)`.
+New **TC-NF1-10**: all are pairwise distinct and none collides with an
+existing purpose.
+
+### R10-P14 — Chunks (wiring) — implementation guide v2.0
+- **New P3-C09 · Batched world step + kick generator + action-axis region +
+  kicked benchmark.** Needs P2-C01..C04. Enables P3-C06. Updates `lv.py`,
+  `pendulum.py`, `regions.py` as needed, `benchmarks.py`; adds
+  `wmj/worlds/actions.py`. Tests: TC-WD2-02, TC-WD3-04, TC-WD5-02 (action
+  axis now producible), TC-WD4-01/02 (re-run with kicks), TC-WD1-01
+  (re-confirmed after the `_deriv` rewrite).
+- **New P3-C10 · The freeze mechanism.** `check_prereg` rewrite per R10-P11.
+  Needs P3-C07. Enables P6-C01 and P6-C03. Tests: TC-MU6-01, -04, -06, -07
+  (return value half), -08, -09.
+- **P3-C01 amendment (inside P3-C03):** `forward_invariant`.
+- P3-C06: R10-P5. P3-C03: β-NLL, gradient check, sufficiency, kick report,
+  `predict_batch`. P3-C04: batch 256, sufficiency, kick report,
+  `predict_batch`. P3-C05/C08: `predict_batch` on fixtures. P3-C02:
+  `persistence.predict_batch`, `stateless` flags on both baselines.
+- **Wiring gaps closed:** TC-MU6-05(b) → **P4-C02**; recording the freeze SHA
+  in `meta.prereg_commit` → **P6-C01** (TC-MU6-07 metadata half); the
+  Round-9 climatology/drift note → P4-C05's text; batched rollouts → P6-C01.
+- Roster, chunk total: 8 contestants; 31 chunks.
+
+### R10-P15 — Ratifications (R10-6)
+- **A10** ratified (R10-P4).
+- **A12** ratified: `epochs: 100`; `sharpness_hedge_threshold = scale` per
+  world (not per region).
+- **A13** ratified: ADR-M5 gains the fourth disclosed residual — entry
+  substance is not verifiable (a hollow mention of a model's name passes).
+- **B1** text (MU-3's fourth fixture, TC-MU3-04, P3-C08) reviewed in this
+  round with no finding against it.
+
+### Deferred
+- **R10-F19** (hashing cached weights): only needed if the judge ever ships
+  pre-trained weights instead of training from scratch. The owner chose
+  from-scratch runs, so it is moot; recorded in REMEMBER.md §6.

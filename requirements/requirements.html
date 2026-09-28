@@ -734,11 +734,11 @@ code {
 </div>
 <span class="sidenote"><strong>How this gets checked:</strong> serialise the entire verdict and compare it across ten consecutive runs, byte for byte. Comparing the whole record rather than selected fields means any new field is covered automatically, and anything non-deterministic added later fails loudly instead of quietly.<br><br>This is not tidiness. A checker whose answer wobbles between runs cannot be the basis of a decision, and everything this project claims about governance rests on it.</span>
 <div class="req"><div class="req-id">NF-2 <span class="priority must">Must</span></div>
-<p>The full result set shall run to completion on an ordinary laptop with no specialised hardware, in minutes rather than hours.</p>
+<p>The full result set — training the models under test, all rollouts, judging and charts — shall run to completion on an ordinary laptop with no specialised hardware, in minutes rather than hours, so that anyone can re-run the whole judge and check the verdict for themselves.</p>
 <div class="req-gloss"><span class="req-gloss-label">In plain words</span>
-<p>it runs on a normal laptop in a few minutes.</p></div>
+<p>it runs on a normal laptop in a few minutes, from scratch. That is the point of it: a sceptic does not have to take the author's word for any verdict — they can re-run everything and see the same result.</p></div>
 </div>
-<span class="sidenote">Exact runtime and sample-size numbers are pinned in the technical specification, not here, because the right runtime budget depends on the sample size Open Questions 1–2 settle (see below).</span>
+<span class="sidenote">Exact runtime and sample-size numbers are pinned in the technical specification, not here, because the right runtime budget depends on the sample size Open Questions 1–2 settle (see below). The number there is a revisable engineering target that serves this purpose, backed by a measurement, not an estimate (v1.4, design-review-010).</span>
 <div class="req"><div class="req-id">NF-3 <span class="priority must">Must</span></div>
 <p>The judge shall depend only on the standard library and a small, named set of well-established scientific packages.</p>
 <div class="req-gloss"><span class="req-gloss-label">In plain words</span>

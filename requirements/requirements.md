@@ -2,7 +2,9 @@
 
 **A governance harness for learned simulators, at toy scale.**
 
-Version 1.3 · 5 September 2026 · Derived from the essay *Words Are a Menu. The World Is Not.* (draft v2.7)
+Version 1.4 · 28 September 2026 · Derived from the essay *Words Are a Menu. The World Is Not.* (draft v2.7)
+
+> **Change note (v1.4, 28 September 2026 — design-review-010, owner-approved).** NF-2 now states its purpose. The owner challenged the "10-minute" figure; Round 10 traced it: NF-2 said only "minutes rather than hours" and never said why, and the 600-second number was chosen later by the tech spec (judge ADR-J6) on an estimate since shown wrong three times. NF-2's wording keeps "minutes" and adds the reason — **re-runnability**: anyone can re-run the whole judge on their own laptop and check the verdict without trusting the author. The exact number stays in the tech spec as a revisable, *measured* engineering target, not a requirement. Nothing else in this document changes.
 
 > **Change note (v1.3, 5 September 2026 — design-review-009, B1 acceptance).** MU-3 gains a fourth fixture failure mode — **action-blind** (a model that ignores its action input) — and, with it, an **action-response check** every model under test faces: given one start state and two different actions, identical predictions flag the model action-blind. The pass/fail rule is fixed here, before any model is built (MU-6/JU-11). This closes an asymmetry the project's own world-side discipline (WD-2/TC-WD2-01, the world's action lever) would otherwise leave open on the *model* side. Sourced from published external evidence (arXiv 2605.27589) and entered through requirements → test-case → design-review before any build, per the project's own anti-goalpost-moving rule. No other requirement changed.
 
@@ -393,11 +395,11 @@ These describe how the whole system must behave rather than what it must do.
 >
 > This is not tidiness. A checker whose answer wobbles between runs cannot be the basis of a decision, and everything this project claims about governance rests on it.
 
-**NF-2 (Must):** The full result set shall run to completion on an ordinary laptop with no specialised hardware, in minutes rather than hours.
+**NF-2 (Must):** The full result set — training the models under test, all rollouts, judging and charts — shall run to completion on an ordinary laptop with no specialised hardware, in minutes rather than hours, so that anyone can re-run the whole judge and check the verdict for themselves.
 
-**In plain words:** it runs on a normal laptop in a few minutes.
+**In plain words:** it runs on a normal laptop in a few minutes, from scratch. That is the point of it: a sceptic does not have to take the author's word for any verdict — they can re-run everything and see the same result.
 
-> Exact runtime and sample-size numbers are pinned in the technical specification, not here, because the right runtime budget depends on the sample size Open Questions 1–2 settle (see below).
+> Exact runtime and sample-size numbers are pinned in the technical specification, not here, because the right runtime budget depends on the sample size Open Questions 1–2 settle (see below). The number there is an engineering target that serves this purpose; it is revisable, and it must be backed by a measurement, not an estimate (design-review-010: 10 or 20 minutes serves re-runnability equally; hours does not).
 
 **NF-3 (Must):** The judge shall depend only on the standard library and a small, named set of well-established scientific packages.
 
