@@ -87,10 +87,10 @@ a toy world validates the harness, not the field (Derman).
 
 ```
 REMEMBER.md                     the project's memory — read every session
-requirements/requirements.md    requirements (v1.3, approved)
+requirements/requirements.md    requirements (v1.4, approved; NF-2 purpose added 2026-09-28)
 requirements/wordsareamenu.html the essay, draft v2.7 (the build must keep its promises)
 risks/risk-assessment.md        four product risks, written before requirements
-test-cases/test-cases.md        test cases (v1.6)
+test-cases/test-cases.md        test cases (v1.7)
 specs/                          the technical spec suite + implementation guide
 design-review/, code-review/    review reports; reviews/calibration.md tracks them
 build/prompts/, build/handovers/  one prompt + one handover per built chunk
@@ -100,9 +100,13 @@ src/wmj/                        the code: worlds, models, judge, harness, report
 tests/                          unit tests and gates
 ```
 
-Build state (2026-09-27): Phases 1–2 done; Phase 3 in progress — P3-C01 (MLP
-core), P3-C02 (registry), P3-C07 (pre-registration tooling) done; P3-C06
-(training data) next. `HANDOVER.md` is a historical record up to 2026-08-31.
+Build state (2026-09-28): Phases 1–2 done; Phase 3 in progress — P3-C01 (MLP
+core), P3-C02 (registry), P3-C07 (pre-registration tooling) done. Round 10
+design review (the training-recipe revision) closed 2026-09-28: 20 findings,
+owner-triaged, fixes written into requirements v1.4 and the specs; an
+independent fix-check of those edits is owed before building resumes at
+P3-C09 → P3-C06 (see `REMEMBER.md` §3). `HANDOVER.md` is a historical record
+up to 2026-08-31.
 
 The dominant risk is not technical: it is that on a clean toy world every model
 passes and the judge never says anything surprising. Requirements MU-5 and MU-6
@@ -117,8 +121,9 @@ Built with the Grounded Vibe Methodology (`/gvm-*` skills, committed at
 Pipeline so far: risk assessment → requirements (v1.3, approved) → test
 cases → tech spec → nine design-review rounds (Round 9, 2026-09-04: "Build
 with caveats", the first verdict that cleared the build) → build (Phases 1–2
-done, Phase 3 in progress) with code-review round 1 closed. Round 10 is owed
-(see `REMEMBER.md` §2 and §3).
+done, Phase 3 in progress) with code-review round 1 closed, and Round 10 (2026-09-28, the training-recipe
+revision: "Do not build from the proposal as written" until its accepted fixes
+pass an independent fix-check — see `REMEMBER.md` §3).
 
 The five project-specific expert-scoring files (`model-risk-world-model-judge.md`,
 `forecast-verification.md`, `ai-evaluation.md`, `world-models.md`,

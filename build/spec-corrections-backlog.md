@@ -702,8 +702,8 @@ Runtime at 100,000: ≈ 8.5 min here — still inside the target.
 - **The freeze commit is the commit that added `prereg/FREEZE`** — resolved
   from git history, never chosen. `check_prereg` refuses if `prereg/FREEZE`
   has ever been added more than once or ever deleted
-  (`git log --diff-filter=AD -- prereg/FREEZE` must show exactly one `A`
-  and no `D`) — **one freeze, ever** — or if it is absent ("not frozen
+  (`git log --diff-filter=A --format=%H -- prereg/FREEZE` must print exactly
+  one line and `git log --diff-filter=D --format=%H -- prereg/FREEZE` none) — **one freeze, ever** — or if it is absent ("not frozen
   yet").
 - Every certified file (`recipe.md`, `prediction.md`, `thresholds.json`,
   `FREEZE`) must equal its blob **at the freeze commit** and be clean in the
@@ -794,3 +794,27 @@ existing purpose.
 - **R10-F19** (hashing cached weights): only needed if the judge ever ships
   pre-trained weights instead of training from scratch. The owner chose
   from-scratch runs, so it is moot; recorded in REMEMBER.md §6.
+
+### A16 — found while applying Round 10: the climatology reference is still null-action (open, for the next review)
+
+**In plain words:** after the model's forecast stops being trustworthy, the
+judge compares it with "what the world usually looks like" — the
+climatology. That reference comes from one long *unkicked* run. The test
+runs now carry kicks, which nudge a trajectory between the reference's
+bins. With kicks this small and rare the effect should be modest, but
+nobody has measured it.
+
+**What the spec says.** Worlds §5: the conditioned climatology is built from
+"one continuous 200,000-step null-action reference trajectory per world",
+binned by the conserved quantity into 16 equal-population bins; judge
+ADR-J5/JU-6 grade post-switch predictions against it.
+
+**What changed.** Round 10 put seeded kicks into every evaluation trial
+(worlds ADR-W2) and into the divergence benchmark (ADR-W3), but did not
+touch the climatology — no panel raised it, and it was noticed only while
+writing the worlds edits. Recorded here rather than silently decided
+(owner decision D15 in `REMEMBER.md`).
+
+**Proposal.** Measure at P4-C05 how far kicked trials move across bins after
+the switch step, and disclose the figure; if it matters, route a design
+change (e.g. a kicked reference trajectory) through the next review.

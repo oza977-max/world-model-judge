@@ -43,61 +43,62 @@ Build state at compile time: P1-C01…P3-C02 and P3-C07 done; P3-C06 next.*
 
 ## 2. Decisions waiting on the owner
 
-Ordered by when they bite. **D3 and D14 block P3-C06 now; D1–D6 must be settled before P3-C03**
-(Model A). All of them fit one short Round 10 design review (D12).
+Ordered by when they bite. *(D1–D6, D12 and D14 were settled at Round 10 on
+2026-09-28 — see Closed.)*
 
 | # | Decision | Recommendation | Source |
 |---|---|---|---|
-| D1 | **Model A's loss.** The recipe trains Model A with plain Gaussian NLL, a setup the literature (Seitzer et al., ICLR 2022) documents as fitting poorly. If kept and the ensemble wins, the headline looks rigged. Switch to β-NLL, or keep NLL and report the fit? | Decide before P3-C03; β-NLL is the standard fix and keeps Model A a self-predicted-error-bar model. | backlog horizon addendum; 2026-09-27 |
-| D2 | **Freeze-point contradiction.** The spec's remedy is "revise the recipe openly", but `check_prereg` compares `recipe.md` to its *first* commit, so any revision — even an honest one before results — fails certification at P6-C03. Freeze at a declared pre-judging commit instead? | Yes; spec change via design review. | backlog A12; 2026-09-27 |
-| D3 | **The training recipe cannot run in budget (measured 2026-09-27).** 2,000 full-horizon trajectories × 100 epochs × 6 networks per world ≈ **13.7 hours** of training vs a 6-minute allowance (600 s whole run). Choose: train offline and cache (restate NF-2), or short training segments + measured epochs + larger batch + vectorised generation. Also: `sharpness_hedge_threshold = scale` (per world, not per region). **Blocks P3-C06.** | Short segments + measured epochs + vectorised generation; ratify at Round 10. | backlog A12, A14; DR-008 minor |
-| D14 | **How action sequences are drawn** (unspecified anywhere). A new random push every step averages to noise and would make the action lever — and P3-C08's action-blind check — nearly meaningless. **Blocks P3-C06.** | Piecewise-constant pushes held for a fixed span of world time, same generator for training and evaluation; ratify at Round 10. | backlog A15 |
-| D4 | **Gradient-check tolerance:** metric floor 1e-3 and tolerance 1e-5 (spec says 1e-6), including the disclosed near-dead-unit blind spot. | Ratify, or prefer an `allclose`-style check. | backlog A10 |
-| D5 | **A13 disposition:** `check_prereg` cannot verify an entry's substance — disclosed rather than "fixed". Confirm "disclose, don't fake a check", and add it to ADR-M5's residuals. Never confirmed by the owner. | Confirm. | backlog A13; P3-C07 handover |
-| D6 | **Does the new B1 text (MU-3's 4th fixture, TC-MU3-04, P3-C08) need its own design review?** Its route was "requirements → test cases → design review → build"; no design review of the new text has run. | Include in Round 10. | calibration:287 |
+| D15 | **New, found while applying Round 10 (not yet reviewed): the climatology reference is still null-action.** JU-6's conditioned climatology comes from one 200,000-step *unkicked* trajectory, binned by the conserved quantity; evaluation trials now carry kicks, which move a trajectory between bins after the switch step. With small, sparse kicks the effect should be modest, but it is unmeasured. Options: disclose it, measure it at P4-C05, or build the climatology from a kicked trajectory. | Measure at P4-C05 and disclose the figure; route any design change through review. | backlog A16; 2026-09-28 |
 | D7 | **Registry discovery carve-out:** allow only `wmj/models/registry.py` to import `importlib`/`pkgutil`. | Decide at P6-C01; ratify in review. | backlog A11 |
 | D8 | **BC-4 purity decision** (drop the completeness claim; byte-identity as backstop; no out-of-process sandbox) was delegated to the assistant and is "reversible in the spec text". | Owner ratifies or reverses. | calibration:228 |
 | D9 | **Essay: "No threshold forces a stop" is still unaddressed** — frontier AI labs publish risk policies where crossing a capability threshold triggers mandatory action. Mention it? | Owner's call. | `HANDOVER.md:296` |
 | D10 | **Essay: the AI-assistance transparency note.** Commits `71efc74` and `HANDOVER.md:198` say it was added "alongside the disclaimer"; **no committed version of the essay contains it** (checked 2026-09-27). Add it, or correct the record. | Add it — an undisclosed gap in a project about honest disclosure. | verified 2026-09-27 |
 | D11 | **Essay Sources:** Deborah Raji is in the requirements' expert panel but not in the essay's Sources table. | Owner's call. | essay:197–215 |
-| D12 | **When to run Round 10** (D1–D6, D8, plus the owed re-check in §3 "Now"). | Before P3-C03. | — |
 | D13 | **P1-C01 check-in** "has not yet been presented to the user" per its handover; later chunks proceeded. | Treat as superseded unless the owner wants it. | P1-C01 handover:136 |
 
 ## 3. Owed work, by stage
 
-**Now / Round 10**
-- **Independent re-check of the v1.8 purity guards and the rewritten ADR-004 orchestration loop** — owed by BC-2 since `calibration.md:249`; Round 9 was scoped to the backlog and never looked at them. Neither is built yet (P4-C06, P6-C01).
-- Fold the spec text corrections listed in §5 into the specs once ratified.
+**Now — before P3-C06**
+- **Independent fix-check of the Round 10 edits** (the owner's rule: never a single self-review; the BC-2 pattern — a "fix all" pass planted 5 of 10 Criticals at Round 6). One fresh reviewer checks every pinned decision in the backlog's "Disposition (Round 10)" against the edited specs, test cases and recipe. **P3-C06 stays blocked until it is clean.**
+- **Independent re-check of the v1.8 purity guards and the rewritten ADR-004 orchestration loop** — owed by BC-2 since `calibration.md:249`; Rounds 9 and 10 were scoped elsewhere. Neither is built yet (P4-C06, P6-C01).
+- Fold the remaining spec text corrections listed in §5 into the specs at the next review.
 
-**P3-C06 — training data (next)**
-- Full-horizon training trajectories (models §4: "trajectories of full horizon"), 2,000 per world.
-- **Real actions from the training action range** — not zero actions — or no model can learn to respond to its action and P3-C08 tests nothing.
-- **Measure runtime.** ADR-J6 budgets "training two small MLPs … ≤ 6 minutes combined", but the roster trains 6 MLPs per world (direct + 5 ensemble members) × 2 worlds = 12. Report measured numbers against the 600 s budget (feeds D3).
-- Start-disjointness (TC-MU7-01), purpose-keyed seeds (TC-MU7-02), train-twice-identical (TC-MU8-01).
+**P3-C09 — batched world step, kicks, `out-large-action`, kicked benchmark (new, Round 10)**
+- Re-opens built Phase-2 code (`lv.py`, `pendulum.py`, `benchmarks.py`, `divergence.py`); re-run their suites. TC-WD1-01's pinned values must still pass after the derivative rewrite.
+
+**P3-C10 — the one-time freeze (new, Round 10)** — must land before P6-C01.
+
+**P3-C06 — training data (after P3-C09 and the fix-check)**
+- 2,000 kicked full-horizon trajectories per world, then the harness's subsample (12,500 kick pairs + non-kick pairs to M), held-out and grad-check sets — models §4 as revised at Round 10.
+- **Measure runtime** for real and report it against judge ADR-J6's new measured envelope.
+- Start-disjointness (TC-MU7-01), purpose-keyed seeds (TC-MU7-02, TC-NF1-10), subsample (TC-MU7-03), train-twice-identical (TC-MU8-01).
 
 **P3-C03 / P3-C04 — Models A and B**
-- Report Model A's fit honestly against the MU-5 margin (Seitzer risk).
-- Report measured convergence + runtime at `epochs: 100`; any change is an open recipe revision, never silent (A12).
+- β-NLL with the written-out gradient (TC-MU5-04); `forward_invariant` + `predict_batch` (TC-MU1-04).
+- **Run the M-sufficiency test** (TC-MU5-05) and report the result, and the kick/non-kick held-out split, to the owner. The test never looks at the MU-5 margin.
+- Report measured convergence + runtime at `epochs: 100`; any change is an open recipe revision, never silent — and only before the freeze.
 - Per iteration: `forward` → `backward` → `Adam.step`, in that order (no runtime guard exists).
 - Gradient-check on real normalised training inputs before training; factories pass `seeds.rng("weights")` / per-member streams.
 - P3-C04: `sqrt(1+1/K)·std(ddof=1)` spread mapping (TC-MU5-03).
 
-**P3-C05, P3-C08 — fixtures, action-blind check** (TC-MU3-01..04, TC-MU4-01/02).
+**P3-C05, P3-C08 — fixtures, action-blind check** (TC-MU3-01..04, TC-MU4-01/02, TC-MU1-04). **P3-C08 must report whether the smaller LV lever (kicks ≤ 0.1, Round 10) is still enough for the action-blind fixture to be caught.**
 
 **Phase-3 end — Hard Gate 7 wiring audit.** Also explicitly re-run Phase 1's (no recorded run; Phase 2's inverse audit did cover all modules). Watch: the matrix says `harness.check_prereg` but the module is `harness/prereg.py`; include `harness.action_response`.
 
 **Phase 4**
-- **TC-MU6-05(b)** — the Verdict's skill block names exactly `vs_persistence` / `vs_linear` — has **no owning chunk** (wiring gap). Build it in P4-C02 (skill block).
+- **TC-MU6-05(b)** — now owned by P4-C02 (Round 10 closed the wiring gap).
 - Judge-side `wmj/judge/distance.py` (ADR-J5) — chunk not named; place it in P4.
-- **P4-C05 forward note:** reconcile the climatology reference trajectory's population with the drift benchmark's, or narrow the drift bound's rationale. Not recorded in the guide's P4-C05 text.
+- **P4-C05 forward note:** reconcile the climatology reference trajectory's population with the drift benchmark's, or narrow the drift bound's rationale (now in the guide's P4-C05 text). **Also measure D15** (kicked trials vs the unkicked climatology).
 - P4-C05 grows the climatology producer in `harness.benchmarks`; the P2-C05 stand-in block's producer swaps to the real `error_vs_horizon`.
 - P4-C06: runtime purity harness owns the lint's disclosed residual (`ctypes`, pre-capture).
 
 **Phase 5** — P5-C03: full Chart-2 caption and switch lines. P5-C04: TC-RP7-02 SVG identity, TC-JU12-04, model card, `writer.py` sole writer to `out/`.
 
-**P6-C01** — registry auto-discovery + D7 carve-out; `wmj run`, `wmj verify`, `wmj list-models` (output format unspecified — pin it); orchestration loop with baseline pre-pass; **record `check_prereg`'s commit-of-record SHA in verdict metadata**; TC-MU9-01/02/03, TC-MU2-02 full, TC-NF1-05/09, full TC-WD3-01, full TC-NF1-01/02; wire benchmarks, regions, action_response, fixtures into `wmj run`.
+**P6-C01** — registry auto-discovery + D7 carve-out; `wmj run`, `wmj verify`, `wmj list-models` (output format unspecified — pin it); orchestration loop with baseline pre-pass and **batched rollouts** (Round 10); **record the freeze SHA `check_prereg` returns as `meta.prereg_commit`** (TC-MU6-07); TC-MU9-01/02/03, TC-MU2-02 full, TC-NF1-05/09, full TC-WD3-01, full TC-NF1-01/02; wire benchmarks, regions, action_response, fixtures into `wmj run`.
 
 **P6-C02** — regenerate the stale `specs/*.html` twins with the parity hash; runtime/dependency/confidentiality gates; README must state the PNG byte-identity exclusion and the SVG reproducibility property.
+
+**Before P6-C03 — the freeze.** Commit `prereg/FREEZE` once (one freeze, ever — models ADR-M5). **No evaluation-trial metric of either unrigged model may be computed before it** (disclosed residual #5).
 
 **P6-C03 — the judged run** — `check_prereg` → full run → publish `out/` → **publish either way (TC-MU6-02) — the owner's job, not code**; human passes: TC-JU10-02 (a newcomer sees judge and models share an author), **TC-NF4-02 (a reader with banking knowledge checks every description is generic and publicly sourced)**, TC-NF5-01 (no overclaim), TC-RP5-01; answer OQ-3 honestly.
 
@@ -110,22 +111,25 @@ Ordered by when they bite. **D3 and D14 block P3-C06 now; D1–D6 must be settle
 | Flag the moment the pieces exist to run the **MU-5 separability test** — the thesis's moment of truth — and offer a clearly labelled throwaway spike if the owner wants certainty sooner. | 2026-09-11 |
 | Say when the build reaches **cosmetic work** (Phase 5/6 copy, README, changelog) so the owner can switch to Sonnet; keep Opus for the numerically delicate chunks. | 2026-09-11 |
 | Surface the **measured epoch/runtime numbers** at P3-C06/C03. | 2026-09-11 |
-| Report **Model A's fit openly** against the MU-5 margin. | 2026-09-27 |
+| Report **Model A's fit openly** — now via the pre-registered sufficiency test and the kick/non-kick held-out split (Round 10 replaced "fit vs the MU-5 margin", which would have tuned against the comparison). | 2026-09-27, revised 2026-09-28 |
+| Report whether the **smaller LV lever** still lets the action-blind fixture be caught (P3-C08). | 2026-09-28 |
+| Report the **first end-to-end runtime** (TC-NF2-01) against ADR-J6's measured envelope, and say plainly if it is over. | 2026-09-28 |
 | Keep the **verdict-sheet mock-up** (the picture of the finished product the owner asked for): https://claude.ai/code/artifact/75cc45a4-1164-4312-8299-9ff9297a78fa — illustrative placeholder numbers and fixture names only; regenerate from real output after the judged run. | 2026-09-05 |
 
 ## 5. Housekeeping debt (stale text)
 
-*Reviewed specs — change only via Round 10:* `judge.md` ADR-J6 still says
-"× 7 models" (now 8) and budgets training as "two small MLPs"; `worlds.md:257`
+*Reviewed specs — change only at the next review:* `worlds.md:257`
 example emits `-Infinity` (not valid JSON — encode or disclose); implementation
-guide says 28 chunks in one place and 29 in another, its P1-C03 row lists the
-old models allowlist, its P3-C01 tag says 1e-6; `requirements.md:192` MU-1
+guide's P1-C03 row lists the old models allowlist, and its ASCII dependency
+diagram predates P3-C09/P3-C10 (the text re-derivation is current); `requirements.md:192` MU-1
 cites JU-11 where MU-6 is meant, `:238` MU-9 lacks the unrigged-model
 carve-out, `:96` still says the expert panel was single-pass scored (later
 verified per `CLAUDE.md`); TC-MU2-03, TC-NF6-10, TC-NF6-11 appear in no guide
 `[Test:]` tag (tests exist); ADR-J6 lacks the MU-9-vs-runtime tradeoff sentence.
 
-*Other records:* `calibration.md` — BC-1/3/5 statuses never updated, Round 7–8
+*Other records:* `requirements/requirements.html` banner still reads v1.2
+(only NF-2 was synced to v1.4 on 2026-09-28 — regenerate at P6-C02 with the
+other twins); `calibration.md` — BC-1/3/5 statuses never updated, Round 7–8
 score rows missing, line 27 truncated, line 94 unclosed bold; code-review
 recurrence tracking starts at code-review Round 2; the backlog's B1 row still
 says "not decided" (it was accepted, `7fc4c59`); `HANDOVER.md` "What exists"
@@ -139,12 +143,17 @@ agreement; a "motion under zero action" check; a check that a model's rollout
 respects the world's conserved quantity; `importlib.reload` as an evasion
 shape in the TC-NF6-04 corpus; a WorldContext anti-drift check against WD-5's
 constants; an NF-4 check whenever logging is designed; per-region sharpness
-threshold; revisiting the Won'ts (WD-8, MU-10, JU-13) in a later round.
+threshold; revisiting the Won'ts (WD-8, MU-10, JU-13) in a later round; **hash-published
+cached weights** (Round 10 R10-F19, deferred: only needed if the judge ever
+ships pre-trained weights instead of training from scratch).
 
 ## 7. Disclosed limits — keep them disclosed, never quietly drop
 
-ADR-M5's three residuals (rewritable git history, undetectable
-non-publication, forgeable commit timestamps) plus A13 (entry substance);
+ADR-M5's five residuals (rewritable git history, undetectable
+non-publication, forgeable commit timestamps, entry substance (A13), no
+evaluation before the freeze — procedural, not enforceable); the gradient
+check's near-dead-unit blind spot (A10); the train/eval kick-share shift (25%
+vs ~1% / ~0.2%); the small LV lever (kicks ≤ 0.1);
 JU-10's seven limitation texts, verbatim, in every verdict; the not-tested
 list; TC-JU12-04 (`ctypes`, pre-capture); NF-4 gaps (no pre-push layer,
 web-UI merges, gc-pruned objects); cross-platform identity out of scope; PNGs
@@ -154,3 +163,14 @@ hardcoded, not auto-discovered.
 ## Closed
 
 *(Move items here with date and commit when done.)*
+
+| Item | Closed | How |
+|---|---|---|
+| D1 Model A's loss | 2026-09-28 | β-NLL, β = 0.5, gradient written out (models ADR-M3, recipe). Round 10. |
+| D2 Freeze-point contradiction | 2026-09-28 | One freeze, ever: the commit that adds `prereg/FREEZE` (models ADR-M5); build at P3-C10. |
+| D3 Training recipe over budget | 2026-09-28 | 50,000-pair harness subsample, batch 256, batched evaluation; NF-2 purpose stated (requirements v1.4); ADR-J6 measured envelope. `sharpness_hedge_threshold = scale` ratified. |
+| D4 Gradient-check tolerance | 2026-09-28 | A10 ratified: floor 1e-3, tolerance 1e-5, blind spot disclosed; check on 64 pairs. |
+| D5 A13 disposition | 2026-09-28 | Confirmed "disclose, don't fake a check"; ADR-M5 residual #4. |
+| D6 B1 design review | 2026-09-28 | Reviewed in Round 10; no finding against it. |
+| D12 When to run Round 10 | 2026-09-28 | Run 2026-09-27/28; `design-review/design-review-010.html`. |
+| D14 How action sequences are drawn | 2026-09-28 | Sparse seeded kicks from one generator; LV kicks shrunk after crash measurements (worlds ADR-W2, §4.1). |

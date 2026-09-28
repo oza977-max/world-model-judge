@@ -23,10 +23,21 @@ fall within, per task and region (TC-MU5-01).
 be ranked equal by the judge, because the judge grades calibration and
 sharpness, not just error. We predict that **ensemble's disagreement-based
 spread is better calibrated than direct's self-predicted error bar**, and so
-**ensemble earns the longer trust horizon** — most visibly on the predator–
-prey control task, where direct's variance head is expected to be
-overconfident (its intervals too narrow) while ensemble's spread more
-honestly covers the truth.
+**ensemble earns the longer trust horizon**.
+
+**Why we expect this (reasoning rewritten 2026-09-28, before any training —
+see the note at the end):** direct's error bar is something it *learned to
+say*: its variance head is trained on the training pairs, so it can only
+report the kind of error it saw there. Nothing in its training tells it
+when it is somewhere it has never been. The ensemble's spread is not
+learned — it is the disagreement between five networks that start from
+different random weights. Where the data pinned the answer down, they
+agree; where the data was thin, they drift apart. So we expect direct's
+intervals to be too narrow exactly where it matters — **out of region, and
+at longer horizons where one-step errors compound** — while the ensemble's
+widen there. We expect this to show most on the predator–prey control task
+(tight tolerance, where a too-narrow interval is punished fastest) and in
+the out-of-region trials of both worlds.
 
 We record this now, before any judged run, precisely so that a contrary
 result (direct better calibrated, or the two genuinely indistinguishable on
@@ -41,3 +52,15 @@ outcomes will be published.
   re-tuning either model.
 - If the judge ranks direct's calibration at or above ensemble's, the
   prediction is contradicted — and is published as contradicted.
+
+## Revision note (2026-09-28 — before any model was trained or judged)
+
+The prediction itself is unchanged: ensemble better calibrated, ensemble
+the longer trust horizon. Only its *reasoning* was rewritten. The first
+version leaned on a known weakness of plain Gaussian NLL training, which
+makes a variance head overconfident. The recipe now trains direct with
+β-NLL (design-review-010), which reduces that weakness, so the old reasoning
+no longer described the recipe it was written against. The owner chose to
+keep the prediction and restate why. No model had been trained, and no
+result of any kind existed, when this was written — which is what keeps it
+a prediction.

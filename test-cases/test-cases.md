@@ -1,6 +1,8 @@
 # World Model Judge — Test Cases
 
-Version 1.6 · Derived from Requirements v1.3 (5 September 2026, post-review-board, post-audit, post-construction fixes)
+Version 1.7 · Derived from Requirements v1.4 (28 September 2026 — design-review-010, the training-recipe revision)
+
+> **Change note (v1.7, 28 September 2026 — design-review-010, owner-triaged).** Eleven new cases and two rewrites, each for a mechanism Round 10 pinned (detail: `build/spec-corrections-backlog.md`, "Disposition (Round 10)"). New: **TC-WD2-02** (kicks never breach the floor, full scale, every region), **TC-WD3-04** (batched world step bit-identical to the single step), **TC-MU1-04** (`predict_batch` rows bit-identical to `predict`), **TC-MU5-04** (β-NLL gradient matches its written formula), **TC-MU5-05** (the M-sufficiency test is outcome-independent), **TC-MU6-06** (one freeze, ever), **TC-MU6-07** (the freeze commit is the commit-of-record, recorded in metadata), **TC-MU6-08** (not frozen → refused), **TC-MU6-09** (recipe kick/interval keys equal the world constants), **TC-MU7-03** (one harness-drawn training subsample, exact kick count, shortfall refused), **TC-NF1-10** (the seven new seed purposes are distinct). Rewritten: **TC-MU6-01** and **TC-MU6-04** now anchor to the freeze commit instead of each file's first-added commit. **In plain words:** every new rule from the recipe revision has a test that would fail if the rule were broken.
 
 > **Change note (v1.6, 5 September 2026 — post-construction: design-review-009 + code-review-001 + B1).** Three cases added by the executed build's own design review (TC-MU2-03 degenerate-spread phantom-gate; TC-NF6-10 reporting import gate; TC-NF6-11 metaclass structural-ban phantom-gate), and one accepted from outside the project (TC-MU3-04, the action-blind check + fixture, B1 — the one-layer-up analogue of TC-WD2-01, sourced from arXiv 2605.27589, routed through the front door before any build). The first code review (code-review-001) then wired every new case's requirement/case ID into its test's name, the convention this project relies on elsewhere. 104 IDs, 102 live (TC-NF6-05, TC-NF1-06 tombstones). See design-review-009.html and code-review-001.html.
 
@@ -66,6 +68,11 @@ Given any world,
 When its transition function is called with a state and an action,
 Then it returns a next state that differs from the no-action case whenever the action is non-null — proving the interface is genuinely `(state, action) → next_state`, not a disguised `(state) → next_state` forecaster.
 
+**TC-WD2-02 (kicks never breach the floor — full scale, every region)** (new, design-review-010) · scenario test · executable
+Given each world's pinned kick generator (worlds ADR-W2: rate, band, `umax`) and the run's real seeds,
+When the full-scale workloads are generated — 2,000 training trajectories, and per declared region 200 evaluation trials and 64 benchmark starts (both twins), each over the full horizon with its own seeded kick sequence —
+Then no LV state-floor check fires and every pendulum state stays finite. A failure here is a spec bug (tighten the band or rate, openly, before the freeze), never a run to filter out. Measured before pinning (2026-09-28): the rejected LV setting (`[−0.5, 0.5]` at 1/s) crashed 7, 477 and 337 of 2,000 runs in the training, high-amplitude and out-of-range cases; the pinned one (`[−0.1, 0.1]` at 0.5/s) crashed none.
+
 **TC-WD3-01** (rewritten design-review-005) · scenario test · executable
 Given the world's shared integrator `wmj.worlds.integrator.rk4_step` and every ground-truth generator that must use it — `wmj.harness.benchmarks` (WD-4), training-data generation (models §4), and evaluation-truth generation,
 When each generator's integrator call site is inspected and each is advanced one step from the same state,
@@ -80,6 +87,11 @@ Then the check must fail. (If it passes, WD-3's gate is a phantom — this case 
 Given the shared integrator advancing each world's conserved quantity (pendulum energy, LV orbit) over the rollout horizons JU-6 uses,
 When drift in that quantity is measured against a declared bound,
 Then the drift stays within bound, or the run fails loudly rather than silently producing an untrustworthy climatology reference.
+
+**TC-WD3-04 (the batched world step is bit-identical to the single step)** (new, design-review-010) · property-based test · executable
+Given each world's `transition` and `transition_batch` (worlds ADR-W1, §4.3),
+When a batch of `n` states with actions — including non-null kicks from both bands — is stepped with `transition_batch`, for n ∈ {1, 2, 7, 64, 200}, and each row is also stepped alone with `transition`,
+Then every row is equal under `np.array_equal` (exact, no tolerance), both calls go through the same `rk4_step` function object, and `transition` given a 2-D input raises `WorldInputShapeError` instead of returning a wrong-shaped array. (Executed before pinning: bit-identical in both worlds; `np.sin`/`np.cos` matched `math.sin`/`math.cos` on 2,000,000 values here — platform-dependent, which is why this is a test.)
 
 **TC-WD4-01** (reworded design-review-009 A6/D3 — executed evidence corrected the growth claim) · scenario test · executable
 Given two trajectories from the same world started a declared small distance apart,
@@ -139,6 +151,11 @@ Then both use identical units and dimensional structure, so JU-4/JU-8 can compar
 Given a model instance run through one rollout with a given action sequence, then `reset()`, then run through a second rollout with a different action sequence,
 When the second rollout's predictions are compared against a fresh instance of the same model run on the same second action sequence,
 Then the two match exactly — proving `reset()` actually clears rollout-local state rather than silently leaking it across rollouts, which would corrupt JU-8's independent-trials assumption undetected by any other case in this document.
+
+**TC-MU1-04 (batched prediction is bit-identical to one-at-a-time)** (new, design-review-010) · property-based test · executable
+Given every registered model with `stateless = True` (models ADR-M1),
+When `predict_batch` is called on n states and actions, for n ∈ {1, 2, 7, 64, 200}, and each row is also predicted alone with `predict`,
+Then means and spreads are equal under `np.array_equal`, row for row — and a stateful model (`linear`) declares `stateless = False` and is never batched. (Executed before pinning: NumPy's BLAS multiply changed the last bit for odd batch sizes; the `einsum` prediction path did not — this case is what keeps the prediction path honest on every machine.)
 
 **TC-MU2-01** · scenario test · executable
 Given a model's verdict computation,
@@ -200,10 +217,20 @@ Given the ensemble's raw member spread,
 When it is converted to a stated confidence range,
 Then the conversion includes the pre-registered small-ensemble underdispersion correction — proving JU-8's exception count for the ensemble isn't inflated by an uncorrected, artificially narrow range.
 
-**TC-MU6-01** · scenario test · executable
-Given the repository's commit history,
-When the commit timestamp of the MU-6 recipe-and-prediction document is compared to the commit timestamp of the first judged run against an unrigged model,
-Then the recipe/prediction commit strictly precedes the first judging run — mechanically enforced, not asserted in prose (the same fix pattern as WD-3/JU-11).
+**TC-MU5-04 (β-NLL's gradient matches its written formula)** (new, design-review-010) · scenario test · executable
+Given `direct`'s loss closure (models ADR-M3: `L = w·[0.5·log 2π + s + r²/(2σ²)]`, `w = σ^(2β)`, β = 0.5, held constant),
+When its returned `d_output` is compared with central finite differences of `L` taken over the network *outputs* (μ and `s = log σ`), with `w` computed once from the unperturbed outputs and held fixed,
+Then they agree to 1e-7 relative, per dimension — and a deliberately wrong closure (w differentiated, or a missing batch division) fails.
+
+**TC-MU5-05 (the sufficiency test never looks at the MU-5 margin)** (new, design-review-010) · scenario test · executable
+Given the build-time M-sufficiency check (models ADR-M3),
+When it runs for `direct` and for `ensemble`,
+Then its inputs are only each model's own held-out training-region pairs at M and 2M, its rule is `err(M) ≤ 1.10 × err(2M)` for both models, its only possible outcomes are "M = 50,000" or "M = 100,000", and it never reads evaluation trials, skill scores or `matching_margin` (checked by running it with those unavailable).
+
+**TC-MU6-01** (rewritten design-review-010) · scenario test · executable
+Given the repository's commit history with `prereg/FREEZE` added once,
+When the timestamp of the **freeze commit** (the commit that added `prereg/FREEZE` — models ADR-M5) is compared to the timestamp of the judged run against an unrigged model,
+Then the freeze commit strictly precedes the run — mechanically enforced, not asserted in prose (the same fix pattern as WD-3/JU-11). *(Previously anchored to each file's first-added commit; design-review-010 found that anchor made the spec's own "revise the recipe openly" remedy fail certification forever.)*
 
 **TC-MU6-02** · scenario test · judged
 Given the pre-registered prediction of which unrigged model ranks better,
@@ -215,15 +242,35 @@ Given a newly-registered unrigged model (`not is_baseline and not is_fixture`) w
 When `check_prereg` runs before a judged run,
 Then it refuses (the specific model has no pre-registration entry) — closing the gap Round 6 found where the v1.5 check was roster-agnostic (it asserted the `prereg/` files as a whole were committed and pre-dated the run, so a new unrigged model passed as "pre-registered" without any text about it ever being written into `prereg/`). This makes MU-6's "mechanically checkable" true per-model (models ADR-M5).
 
-**TC-MU6-04 (prereg content-invariance since first commit)** (new, design-review-007) · mutation test · executable
-Given a committed `prereg/recipe.md` whose *first-added* commit predates any judged run, and a working tree in which that file's content was later changed by an ordinary, honestly-dated second commit (no history rewrite, no `--amend`),
+**TC-MU6-04 (prereg content-invariance since the freeze)** (new design-review-007; rewritten design-review-010) · mutation test · executable
+Given a frozen pre-registration (the commit that added `prereg/FREEZE` predates any judged run), and a working tree in which `prereg/recipe.md` — or `prediction.md`, `thresholds.json`, or `FREEZE` itself — was changed *after* the freeze by an ordinary, honestly-dated commit (no history rewrite, no `--amend`),
 When `check_prereg` runs,
-Then it refuses — because `check_prereg` hashes the blob at the first-added commit (`git show <first-add-sha>:prereg/recipe.md`) and asserts it equals the working-tree file's hash (models ADR-M5). Round 7 executed the gap: the order-only check passes a day-1 placeholder → day-243 `matching_margin: 0.049` edit (clean tree, genuine dates), exactly the MU-6 gaming the mechanism exists to prevent; the content-hash turns it into a hard failure. (This does not close the deliberate first-commit-rewrite risk disclosed in ADR-M5 — it closes the un-rewritten drift, which is the likelier accident.)
+Then it refuses — because `check_prereg` compares each certified file to its blob **at the freeze commit** (`git show <freeze-sha>:prereg/<file>`) and requires byte equality and a clean working tree (models ADR-M5). Revisions made *before* the freeze are legitimate and pass. *(Anchored to the first-added commit until design-review-010.)* Round 7 executed the gap: the order-only check passes a day-1 placeholder → day-243 `matching_margin: 0.049` edit (clean tree, genuine dates), exactly the MU-6 gaming the mechanism exists to prevent; the content-hash turns it into a hard failure. (This does not close the deliberate first-commit-rewrite risk disclosed in ADR-M5 — it closes the un-rewritten drift, which is the likelier accident.)
 
 **TC-MU6-05 (is_baseline is prereg-exempt but not a comparator)** (new, design-review-007) · scenario test · executable
 Given a newly-registered model declaring `is_baseline=True` (models ADR-M1),
 When `check_prereg` runs and, separately, a judged run assembles the Verdict's `skill` block,
 Then (a) `check_prereg` skips it (the `not is_baseline and not is_fixture` classification exempts it, so "adding a baseline is one file" holds for provisioning) **and** (b) it does not appear as a third comparator — the `skill` block still names exactly `vs_persistence` and `vs_linear` (judge §5), the blind judge cannot add a `vs_<newbaseline>` field, and MU-2's two reference baselines are unchanged. This pins the scope of the `is_baseline` flag design-review-007 found overstated: the flag's only consumer is prereg-exemption, not the comparison set.
+
+**TC-MU6-06 (one freeze, ever)** (new, design-review-010) · mutation test · executable
+Given a repository where `prereg/FREEZE` was added, and then either (a) deleted and re-added, or (b) renamed away and back,
+When `check_prereg` runs,
+Then it refuses — `git log --diff-filter=A --format=%H -- prereg/FREEZE` must print exactly one line and `git log --diff-filter=D --format=%H -- prereg/FREEZE` none (models ADR-M5). Executed before pinning (2026-09-28): one freeze → 1 add, 0 deletes; delete + re-add → 2, 1; rename away and back → 3, 2. An in-place edit of `FREEZE` is caught by TC-MU6-04's content check instead. The git tag `prereg-freeze`, if present, is never read: moving it changes nothing.
+
+**TC-MU6-07 (the freeze commit is the commit-of-record)** (new, design-review-010) · scenario test · executable
+Given a frozen pre-registration whose `recipe.md` was revised openly *before* the freeze,
+When `check_prereg` certifies it and the harness writes the verdict envelope,
+Then `check_prereg` returns the freeze commit's SHA — not `recipe.md`'s first-added commit — and that SHA is the value of `meta.prereg_commit` (the check half at P3-C10, the metadata half at P6-C01).
+
+**TC-MU6-08 (not frozen → refused)** (new, design-review-010) · scenario test · executable
+Given a repository with committed `prereg/recipe.md`, `prediction.md` and `thresholds.json` but no `prereg/FREEZE`,
+When `check_prereg` runs before a judged run,
+Then it refuses with a "not frozen yet" error naming models ADR-M5.
+
+**TC-MU6-09 (the frozen recipe pins the world's kick constants)** (new, design-review-010) · scenario test · executable
+Given `prereg/recipe.md`'s keys `lv_kick_rate_per_s`, `lv_action_max`, `pendulum_kick_rate_per_s`, `pendulum_action_max`,
+When they are compared with the world modules' own constants (kick rate, trained action half-width),
+Then they are equal, or `check_prereg` refuses — so a kick setting cannot drift in code away from what was frozen.
 
 **TC-MU7-01** · scenario test · executable
 Given a model's training data and its evaluation rollouts,
@@ -234,6 +281,11 @@ Then no evaluation rollout starts from a state used in training, for either worl
 Given the content-addressed seeding with distinct `purpose` key parts (`seeds.rng_for(world, region, "train-starts" | "eval-starts" | "benchmark-starts")`, cross-cutting ADR-002 rule 2),
 When the first draws of the three streams for the same `(world, "training")` are compared,
 Then they differ — Round 6 executed this (`C4 purpose keys differ: True`), proving the `purpose` discriminator prevents the collision Round 6 found in the v1.5 key (which had only {model, world, region, index}, so training starts and evaluation starts keyed to the *same* seed and would coincide, silently defeating MU-7 disjointness and JU-8 independence by construction rather than only by the after-the-fact check TC-MU7-01 performs).
+
+**TC-MU7-03 (one harness-drawn training subsample, shared, exact kick count)** (new, design-review-010) · scenario test · executable
+Given the harness's `TrainingData` for a world (models §4, ADR-M1),
+When it is built twice from the same seeds, and handed to `direct`, each ensemble member, and a fixture,
+Then (a) both builds are byte-identical; (b) `train_pairs` has exactly `subsample_pairs` rows of which exactly `kick_pairs` (12,500) have `is_kick = True`; (c) `heldout_pairs` shares no pair with `train_pairs`; (d) every consumer receives the same object and no factory draws its own subsample; and (e) with the kick rate lowered so fewer than 12,500 kick pairs exist, building refuses with `TrainingDataError` rather than shrinking the count.
 
 **TC-MU8-01** · scenario test · executable
 Given a fixed training seed,
@@ -490,6 +542,11 @@ Given `component_key`'s pinned construction (cross-cutting ADR-002 rule 2, updat
 When it is called with a part that is not already a `str` — e.g. `component_key(1, "a")` or `component_key("ensemble", 3)`,
 Then it raises `SeedKeyError` — Round 8 executed the collision the colon-rejection fix (TC-NF1-07) left open: the old `str(p)` coercion inside `component_key` collapsed `component_key(1, "a")` and `component_key("1", "a")` to the identical joined text and therefore the identical seed stream. Rejecting any non-`str` part at construction closes it the same way TC-NF1-07 closes the colon case; the `str()` conversion, where needed, is now the caller's job (models spec's `seeds.rng("member", str(k), ...)` call sites).
 
+**TC-NF1-10 (the design-review-010 seed purposes are distinct)** (new, design-review-010) · property-based test · executable
+Given the seven purposes design-review-010 added (`train-kicks`, `subsample-kick`, `subsample-nonkick`, `heldout`, `gradcheck-batch`, `eval-kicks`, `benchmark-kicks` — cross-cutting ADR-002 rule 2) and the three existing ones (`train-starts`, `eval-starts`, `benchmark-starts`),
+When the first draws of every stream are compared for the same world and region (and, for indexed kick streams, the same index),
+Then all ten differ pairwise — the collision class Round 6 found for the start streams cannot recur for the new ones.
+
 **TC-NF1-09 (each JudgeInput carries every one of its world's regions, n_trials = N × region count)** (new, design-review-008 — replaces TC-NF1-06) · scenario test · executable
 Given the rewritten orchestration loop (cross-cutting ADR-004) calling the judge once per (model, world),
 When any assembled `JudgeInput` is inspected,
@@ -595,32 +652,32 @@ Then the colon-bearing call raises `SeedKeyError` (the join is not injective acr
 | Requirement | Test Cases | Requirement | Test Cases |
 |---|---|---|---|
 | WD-1 | TC-WD1-01 | JU-2 | TC-JU2-01 |
-| WD-2 | TC-WD2-01 | JU-3 | TC-JU3-01 |
-| WD-3 | TC-WD3-01, -02, -03 | JU-4 | TC-JU4-01, -02 |
+| WD-2 | TC-WD2-01, -02 | JU-3 | TC-JU3-01 |
+| WD-3 | TC-WD3-01, -02, -03, -04 | JU-4 | TC-JU4-01, -02 |
 | WD-4 | TC-WD4-01, -02 | JU-5 | TC-JU5-01, -02 |
 | WD-5 | TC-WD5-01, -02 | JU-6 | TC-JU6-01, -02 |
 | WD-6 | TC-WD6-01, -02 | JU-7 | TC-JU7-01, -02 |
 | WD-7 | TC-WD7-01, -02 | JU-8 | TC-JU8-01, -02, -03; NF1-05/-06 (paired starts, per-region partitioning — ADR-004) |
 | WD-8 | — (Won't; nothing to verify) | JU-9 | TC-JU9-01, -02, -03 |
-| MU-1 | TC-MU1-01, -02, -03 | JU-10 | TC-JU10-01, -02 |
+| MU-1 | TC-MU1-01, -02, -03, -04 | JU-10 | TC-JU10-01, -02 |
 | MU-2 | TC-MU2-01, -02, -03; -MU6-05 (baseline-scope) | JU-11 | TC-JU11-01, -02 |
 | MU-3 | TC-MU3-01, -02, -03, -04 | JU-12 | TC-JU12-01, -02, -03, -04 |
 | MU-4 | TC-MU4-01, -02 | JU-13 | TC-JU13-01 |
-| MU-5 | TC-MU5-01, -02, -03 | RP-1 | TC-RP1-01 |
-| MU-6 | TC-MU6-01, -02, -03, -04, -05 | RP-2 | TC-RP2-01 |
-| MU-7 | TC-MU7-01, -02 | RP-3 | TC-RP3-01 |
+| MU-5 | TC-MU5-01, -02, -03, -04, -05 | RP-1 | TC-RP1-01 |
+| MU-6 | TC-MU6-01, -02, -03, -04, -05, -06, -07, -08, -09 | RP-2 | TC-RP2-01 |
+| MU-7 | TC-MU7-01, -02, -03 | RP-3 | TC-RP3-01 |
 | MU-8 | TC-MU8-01 | RP-4 | TC-RP4-01, -02 |
 | MU-9 | TC-MU9-01, -02, -03 | RP-5 | TC-RP5-01 |
 | MU-10 | — (Won't; nothing to verify) | RP-6 | TC-RP6-01, RP-CARD-01 |
 | JU-1 | TC-JU1-01, -02 | RP-7 | TC-RP7-01, -02 |
 | | | RP-8 | TC-RP8-01 |
-| NF-1 | TC-NF1-01, -02, -03, -04, -05, -07, -08, -09 (-06 superseded tombstone) | NF-4 | TC-NF4-01, -02, -03 |
+| NF-1 | TC-NF1-01, -02, -03, -04, -05, -07, -08, -09, -10 (-06 superseded tombstone) | NF-4 | TC-NF4-01, -02, -03 |
 | NF-2 | TC-NF2-01 | NF-5 | TC-NF5-01, -02 |
 | NF-3 | TC-NF3-01 | NF-6 | TC-NF6-01, -02, -03, -04, -06, -07, -08, -09, -10, -11 (-05 superseded tombstone) |
 
 **Every Must and the one mechanically-testable Won't (JU-13) has at least one case. Zero orphan requirements, zero orphan cases.** WD-8 and MU-10 are the two Won'ts with nothing to verify by design (they describe absence, not behaviour).
 
-**Totals:** 104 case IDs (102 live) across 45 requirements — grown round by round (70 after design-review-001/002; +9 after `/gvm-design-review` design-review-003 — Round 3, dual/blind — found: TC-MU9-02, a phantom-gate pairing TC-MU9-01 could not previously have, since its prior git-diff mechanism was structurally incapable of failing; TC-JU9-03, a property test enforcing the `exceptions.observed`/`trials.is_exception` invariant judge.md's prose only asserted; TC-NF6-02 through -06, splitting the single `TC-NF6-01` into one ID per AST-gate check plus a phantom-gate pairing, after the gate grew from one check to five across two rounds with no corresponding test-ID growth; TC-NF4-03, proving the run-time confidentiality scan is a real safety net independent of whether the pre-commit hook was ever installed; TC-NF5-02, covering the previously-orphaned `.md`/`.html` spec-parity hash check. Count independently verified via `grep -c '^\*\*TC-'` = **104**, not carried forward by arithmetic; **design-review-006 (v1.3) added four cases (TC-JU12-03, TC-NF1-04, TC-MU6-03, TC-MU7-02) to the 85; design-review-007 (v1.4) added eight (TC-NF6-08, TC-NF1-07, TC-NF1-05, TC-NF1-06, TC-MU6-04, TC-MU6-05, TC-JU12-04, TC-RP7-02); design-review-008 (v1.5) added three (TC-NF6-09, TC-NF1-08, TC-NF1-09) to the 97; design-review-009 (v1.6) added three (TC-MU2-03, TC-NF6-10, TC-NF6-11) to the 100 — the executed build's own review closing two orphan fail-loud mechanisms (the metaclass structural ban, the baseline spreads' `DegenerateSpreadError` guard) that had no phantom-gate case, plus reporting's previously-ungated outward imports — then accepted **TC-MU3-04** (the action-blind check + fixture, B1) into MU-3's fixture family, sourced from external evidence and routed through the front door before any build; two IDs, TC-NF6-05 and TC-NF1-06, are superseded tombstones, so 102 cases are live**). 13 negative/phantom-gate cases (TC-WD3-02, TC-WD7-02, TC-NF1-02, TC-JU9-02, TC-JU11-02, TC-MU9-02, TC-NF6-04, TC-JU12-02, TC-JU12-03, TC-NF1-07, TC-MU6-04, TC-MU2-03, and TC-NF6-11 — the seed-key colon, prereg-content-drift, degenerate-spread, and metaclass can-fail proofs; TC-NF6-06 is the complementary clean-pass guard, not counted here). 17 property-based cases (TC-JU1-02, TC-JU4-02, TC-JU5-02, TC-JU12-01, TC-NF6-01, TC-NF6-02, TC-NF6-03, TC-NF6-07, TC-NF6-08, TC-NF6-09, TC-NF6-10, TC-JU9-03, TC-NF1-03, TC-NF1-04, TC-NF1-05, TC-NF1-08, TC-MU7-02). 7 cases marked *judged* rather than *executable* (TC-MU6-02, TC-JU10-02, TC-RP5-01, TC-NF4-02, TC-NF5-01, TC-RP-CARD-01, TC-JU12-04 — plain-language and human-comprehension checks that genuinely need a reader, not a script). **All three former `<spec-value>` placeholders are now filled** from the settled specs (TC-JU8-02 → N=200, TC-NF2-01 → 600 s, TC-NF3-01 → `{numpy, matplotlib}`+dev `{pytest}`; design-review-005 — no case now carries an unresolved `<spec-value>`). 2 cases marked *(supporting)* — they validate wiring between two requirements rather than being the primary coverage of either (TC-MU2-02, TC-JU8-03).
+**Totals:** 115 case IDs (113 live) across 45 requirements (design-review-010 (v1.7) added eleven — TC-WD2-02, TC-WD3-04, TC-MU1-04, TC-MU5-04, TC-MU5-05, TC-MU6-06, TC-MU6-07, TC-MU6-08, TC-MU6-09, TC-MU7-03, TC-NF1-10 — and rewrote TC-MU6-01/-04 to the freeze commit) — grown round by round (70 after design-review-001/002; +9 after `/gvm-design-review` design-review-003 — Round 3, dual/blind — found: TC-MU9-02, a phantom-gate pairing TC-MU9-01 could not previously have, since its prior git-diff mechanism was structurally incapable of failing; TC-JU9-03, a property test enforcing the `exceptions.observed`/`trials.is_exception` invariant judge.md's prose only asserted; TC-NF6-02 through -06, splitting the single `TC-NF6-01` into one ID per AST-gate check plus a phantom-gate pairing, after the gate grew from one check to five across two rounds with no corresponding test-ID growth; TC-NF4-03, proving the run-time confidentiality scan is a real safety net independent of whether the pre-commit hook was ever installed; TC-NF5-02, covering the previously-orphaned `.md`/`.html` spec-parity hash check. Count independently verified via `grep -c '^\*\*TC-'` = **104**, not carried forward by arithmetic; **design-review-006 (v1.3) added four cases (TC-JU12-03, TC-NF1-04, TC-MU6-03, TC-MU7-02) to the 85; design-review-007 (v1.4) added eight (TC-NF6-08, TC-NF1-07, TC-NF1-05, TC-NF1-06, TC-MU6-04, TC-MU6-05, TC-JU12-04, TC-RP7-02); design-review-008 (v1.5) added three (TC-NF6-09, TC-NF1-08, TC-NF1-09) to the 97; design-review-009 (v1.6) added three (TC-MU2-03, TC-NF6-10, TC-NF6-11) to the 100 — the executed build's own review closing two orphan fail-loud mechanisms (the metaclass structural ban, the baseline spreads' `DegenerateSpreadError` guard) that had no phantom-gate case, plus reporting's previously-ungated outward imports — then accepted **TC-MU3-04** (the action-blind check + fixture, B1) into MU-3's fixture family, sourced from external evidence and routed through the front door before any build; two IDs, TC-NF6-05 and TC-NF1-06, are superseded tombstones, so 102 cases are live**). 13 negative/phantom-gate cases (TC-WD3-02, TC-WD7-02, TC-NF1-02, TC-JU9-02, TC-JU11-02, TC-MU9-02, TC-NF6-04, TC-JU12-02, TC-JU12-03, TC-NF1-07, TC-MU6-04, TC-MU2-03, and TC-NF6-11 — the seed-key colon, prereg-content-drift, degenerate-spread, and metaclass can-fail proofs; TC-NF6-06 is the complementary clean-pass guard, not counted here). 17 property-based cases (TC-JU1-02, TC-JU4-02, TC-JU5-02, TC-JU12-01, TC-NF6-01, TC-NF6-02, TC-NF6-03, TC-NF6-07, TC-NF6-08, TC-NF6-09, TC-NF6-10, TC-JU9-03, TC-NF1-03, TC-NF1-04, TC-NF1-05, TC-NF1-08, TC-MU7-02). 7 cases marked *judged* rather than *executable* (TC-MU6-02, TC-JU10-02, TC-RP5-01, TC-NF4-02, TC-NF5-01, TC-RP-CARD-01, TC-JU12-04 — plain-language and human-comprehension checks that genuinely need a reader, not a script). **All three former `<spec-value>` placeholders are now filled** from the settled specs (TC-JU8-02 → N=200, TC-NF2-01 → 600 s, TC-NF3-01 → `{numpy, matplotlib}`+dev `{pytest}`; design-review-005 — no case now carries an unresolved `<spec-value>`). 2 cases marked *(supporting)* — they validate wiring between two requirements rather than being the primary coverage of either (TC-MU2-02, TC-JU8-03).
 
 ---
 
