@@ -120,3 +120,17 @@ def test_tc_wd4_02_pendulum_regime_difference_survives_kicks():
         )
 
     assert med(inverted_box, 2)[half] / med(spec.training_state_box, 3)[half] >= 5.0
+
+
+@pytest.mark.parametrize(("module", "n"), [(lv, 1), (lv, 7), (pendulum, 7)])
+def test_batched_conserved_drift_equals_the_per_start_drift_exactly(module, n):
+    from wmj.worlds.divergence import conserved_drift, conserved_drift_batch
+
+    spec = module.regions()
+    rng = np.random.default_rng(40 + n)
+    starts = rng.uniform(spec.training_state_box[:, 0], spec.training_state_box[:, 1],
+                         size=(n, spec.training_state_box.shape[0]))
+    worst, initial = conserved_drift_batch(module.transition_batch, module.conserved, starts, 60)
+    for i in range(n):
+        w, init = conserved_drift(module.transition, module.conserved, starts[i], 60)
+        assert worst[i] == w and initial[i] == init

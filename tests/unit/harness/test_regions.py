@@ -67,13 +67,15 @@ def test_state_in_training_box_is_deterministic_on_repeat():
 
 
 def test_actions_all_inside_the_trained_interval_are_in():
-    actions = np.full((10, 1), 0.5)  # exactly on the edge, every step
+    # exactly on the edge, every step (LV's trained interval is [-0.1, 0.1]
+    # since design-review-010; it was [-0.5, 0.5])
+    actions = np.full((10, 1), 0.1)
     assert actions_in_trained_interval(actions, LV_SPEC.training_action_interval)
 
 
 def test_a_single_out_of_range_action_anywhere_in_the_rollout_is_out():
     actions = np.zeros((10, 1))
-    actions[7, 0] = 0.5 + 1e-9
+    actions[7, 0] = 0.1 + 1e-9
     assert not actions_in_trained_interval(actions, LV_SPEC.training_action_interval)
 
 

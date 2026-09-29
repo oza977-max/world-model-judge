@@ -115,8 +115,8 @@ def test_artefact_drift_block_matches_contract_and_is_within_bound(lv_artefact):
 def test_drift_normaliser_is_never_pooled_across_regions():
     """A wider out-region span must not dilute the training region's
     own drift figure (design-review-009 I1, executed evidence)."""
-    from wmj.worlds.divergence import conserved_quantity_range
     from wmj.worlds import lv as lv_module
+    from wmj.worlds.divergence import conserved_quantity_range
 
     spec = lv_module.regions()
     training_range = conserved_quantity_range(lv_module.conserved, spec.training_state_box)
@@ -163,10 +163,15 @@ def test_tc_wd3_03_degenerate_invariant_range_fails_loudly_not_silently():
     class ConstantInvariantWorld:
         d = lv.WORLD.d
         a = lv.WORLD.a
+        dt = lv.WORLD.dt
         scale = lv.WORLD.scale
+        kick_rate_per_s = lv.WORLD.kick_rate_per_s
 
         def transition(self, state, action):
             return lv.transition(state, action)
+
+        def transition_batch(self, states, actions):
+            return lv.transition_batch(states, actions)
 
         def conserved(self, state):
             return 1.0  # no range anywhere

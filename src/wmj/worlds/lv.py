@@ -14,8 +14,14 @@ import math
 import numpy as np
 
 from wmj.worlds.base import OutRegion, RegionSpec, Task
-from wmj.worlds.errors import ActionRangeError, RegionSpecError, StateFloorClampError
+from wmj.worlds.errors import (
+    ActionRangeError,
+    RegionSpecError,
+    StateFloorClampError,
+    WorldInputShapeError,
+)
 from wmj.worlds.integrator import rk4_step
+from wmj.worlds.regionspec import validate_out_regions
 
 ALPHA = 1.0
 BETA = 0.4
@@ -29,23 +35,79 @@ SCALE = np.array([4.0, 2.5])
 STATE_FLOOR = 0.05
 ACTION_RANGE = (-1.0, 1.0)  # the world's full declared action range, worlds §4.1
 
+# How often the lever is pulled: 0.5 kicks per second of world time, so a
+# kick on any given step with chance 0.5 × 0.02 = 0.01 (worlds §4.1, ADR-W2;
+# design-review-010 — larger or more frequent kicks were measured to crash
+# the prey population through its floor on full-length runs).
+KICK_RATE_PER_S = 0.5
+TRAINED_ACTION_MAX = 0.1  # trained kicks are in [-0.1, 0.1]; out-of-range kicks (0.1, 0.2]
+
 
 def _deriv(state: np.ndarray) -> np.ndarray:
-    x, y = state
+    """The predator–prey equations, for one state `[2]` or a batch `[n, 2]`.
+
+    The one derivative both `transition` and `transition_batch` use —
+    element-wise arithmetic only, so each row's result is the same bits
+    whether it is computed alone or in a batch (worlds ADR-W1, TC-WD3-04).
+    """
+    x = state[..., 0]
+    y = state[..., 1]
     dx = ALPHA * x - BETA * x * y
     dy = DELTA * x * y - GAMMA * y
-    return np.array([dx, dy])
+    return np.stack([dx, dy], axis=-1)
 
 
 def _apply_action(state: np.ndarray, action: np.ndarray) -> np.ndarray:
     """The lever: an instantaneous prey impulse (worlds ADR-W2).
 
-    Does not clamp — a floor violation here is caught by transition()'s
-    own check, which aborts loudly per worlds §7 rather than silently
-    keeping an unphysical excursion.
+    Works for one state `[2]` with action `[1]`, or a batch `[n, 2]` with
+    actions `[n, 1]`. Does not clamp — a floor violation is caught by the
+    caller's own check, which aborts loudly per worlds §7 rather than
+    silently keeping an unphysical excursion.
     """
-    u = action[0]
-    return np.array([state[0] + u, state[1]])
+    perturbed = np.array(state, dtype=float, copy=True)
+    perturbed[..., 0] = perturbed[..., 0] + action[..., 0]
+    return perturbed
+
+
+def _check_action_range(actions: np.ndarray) -> None:
+    if np.any(actions < ACTION_RANGE[0]) or np.any(actions > ACTION_RANGE[1]):
+        bad = actions[(actions < ACTION_RANGE[0]) | (actions > ACTION_RANGE[1])]
+        raise ActionRangeError(
+            f"lv action {float(bad.flat[0])!r} outside the world's declared range "
+            f"{ACTION_RANGE} (worlds spec §7)"
+        )
+
+
+def _check_floor(states: np.ndarray, what: str) -> None:
+    if np.any(states < STATE_FLOOR):
+        raise StateFloorClampError(
+            f"lv {what} drove state to {states!r}, below the floor {STATE_FLOOR} "
+            f"(worlds spec §7)"
+        )
+
+
+def transition_batch(states: np.ndarray, actions: np.ndarray) -> np.ndarray:
+    """Advance `n` states one step at once: `[n, 2]` states, `[n, 1]` actions.
+
+    Row `i` is bit-identical to `transition(states[i], actions[i])` — the
+    same derivative and the same `rk4_step`, only fed a batch (worlds
+    ADR-W1, TC-WD3-04). The same checks apply row by row; any failing row
+    aborts the whole call (worlds §7 — never a silently dropped row).
+    """
+    states = np.asarray(states, dtype=float)
+    actions = np.asarray(actions, dtype=float)
+    if states.ndim != 2 or states.shape[1] != 2 or actions.shape != (states.shape[0], 1):
+        raise WorldInputShapeError(
+            f"lv transition_batch expects states [n, 2] and actions [n, 1]; got "
+            f"{states.shape} and {actions.shape} (WD-2, worlds §4.3)"
+        )
+    _check_action_range(actions)
+    perturbed = _apply_action(states, actions)
+    _check_floor(perturbed, "prey impulse")
+    next_states = rk4_step(_deriv, perturbed, DT)
+    _check_floor(next_states, "RK4 step")
+    return next_states
 
 
 def transition(state: np.ndarray, action: np.ndarray) -> np.ndarray:
@@ -61,25 +123,24 @@ def transition(state: np.ndarray, action: np.ndarray) -> np.ndarray:
     an unphysical excursion, which is a spec bug to fix, never data to
     train on or grade against (StateFloorClampError) — both abort the
     run loudly rather than being silently clamped.
+
+    One state `[2]` and one action `[1]` only — a batch goes through
+    `transition_batch` (design-review-010: a batch passed here used to
+    come back as a wrong-shaped array with no error).
     """
-    u = float(action[0])
-    if not (ACTION_RANGE[0] <= u <= ACTION_RANGE[1]):
-        raise ActionRangeError(
-            f"lv action {u!r} outside the world's declared range "
-            f"{ACTION_RANGE} (worlds spec §7)"
+    state = np.asarray(state, dtype=float)
+    action = np.asarray(action, dtype=float)
+    if state.shape != (2,) or action.shape != (1,):
+        raise WorldInputShapeError(
+            f"lv transition expects one state [2] and one action [1]; got "
+            f"{state.shape} and {action.shape} — use transition_batch for many "
+            f"(WD-2, worlds §4.3)"
         )
+    _check_action_range(action)
     perturbed = _apply_action(state, action)
-    if np.any(perturbed < STATE_FLOOR):
-        raise StateFloorClampError(
-            f"lv prey impulse drove state to {perturbed!r}, below the "
-            f"floor {STATE_FLOOR} (worlds spec §7)"
-        )
+    _check_floor(perturbed, "prey impulse")
     next_state = rk4_step(_deriv, perturbed, DT)
-    if np.any(next_state < STATE_FLOOR):
-        raise StateFloorClampError(
-            f"lv RK4 step drove state to {next_state!r}, below the "
-            f"floor {STATE_FLOOR} (worlds spec §7)"
-        )
+    _check_floor(next_state, "RK4 step")
     return next_state
 
 
@@ -92,13 +153,21 @@ def conserved(state: np.ndarray) -> float:
 def _build_region_spec() -> RegionSpec:
     return RegionSpec(
         training_state_box=np.array([[2.0, 6.0], [1.0, 4.0]]),
-        training_action_interval=np.array([[-0.5, 0.5]]),
+        training_action_interval=np.array([[-TRAINED_ACTION_MAX, TRAINED_ACTION_MAX]]),
         out_regions=(
             OutRegion(
                 region_name="out-high-amplitude",
                 axis="state",
                 state_box=np.array([[8.0, 12.0], [4.0, 6.0]]),
-                action_box=np.array([[-0.5, 0.5]]),
+                action_box=np.array([[-TRAINED_ACTION_MAX, TRAINED_ACTION_MAX]]),
+            ),
+            # design-review-010: familiar starts, kicks bigger than any seen
+            # in training — the action axis of WD-5 (worlds ADR-W4).
+            OutRegion(
+                region_name="out-large-action",
+                axis="action",
+                state_box=np.array([[2.0, 6.0], [1.0, 4.0]]),
+                action_box=np.array([[-2 * TRAINED_ACTION_MAX, 2 * TRAINED_ACTION_MAX]]),
             ),
         ),
     )
@@ -107,24 +176,16 @@ def _build_region_spec() -> RegionSpec:
 def _validate_region_spec(region_spec: RegionSpec) -> None:
     """Worlds spec §7: regions are validated at construction.
 
-    Training box strictly inside the state-floor-safe domain;
-    out-region disjoint from training box on at least one axis.
+    Training box strictly inside the state-floor-safe domain; every
+    out-region leaves the training territory on the axis it declares
+    (`wmj.worlds.regionspec.validate_out_regions`).
     """
     if np.any(region_spec.training_state_box[:, 0] <= STATE_FLOOR):
         raise RegionSpecError(
             f"lv training_state_box {region_spec.training_state_box!r} is not "
             f"strictly above the state floor {STATE_FLOOR} (worlds spec §7)"
         )
-    for out_region in region_spec.out_regions:
-        disjoint = np.any(
-            (out_region.state_box[:, 0] > region_spec.training_state_box[:, 1])
-            | (out_region.state_box[:, 1] < region_spec.training_state_box[:, 0])
-        )
-        if not disjoint:
-            raise RegionSpecError(
-                f"lv out-region {out_region.region_name!r} is not disjoint "
-                f"from the training box on any axis (worlds spec §7)"
-            )
+    validate_out_regions("lv", region_spec)
 
 
 _REGION_SPEC = _build_region_spec()
@@ -149,9 +210,13 @@ class LVWorld:
     a = 1
     dt = DT
     scale = SCALE
+    kick_rate_per_s = KICK_RATE_PER_S
 
     def transition(self, state: np.ndarray, action: np.ndarray) -> np.ndarray:
         return transition(state, action)
+
+    def transition_batch(self, states: np.ndarray, actions: np.ndarray) -> np.ndarray:
+        return transition_batch(states, actions)
 
     def conserved(self, state: np.ndarray) -> float:
         return conserved(state)

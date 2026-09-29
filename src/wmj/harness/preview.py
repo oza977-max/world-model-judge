@@ -9,7 +9,8 @@ trajectories. When the judge's block exists, the renderer does not
 change — only the producer is swapped out.
 
 What it does, per declared region of the LV world: draw seeded start
-states, roll the truth forward under null actions, hold the start
+states, roll the truth forward under each trial's seeded kicks (the same
+kind of kicks the divergence reference uses — design-review-010), hold the start
 constant as persistence's forecast ("nothing changes"), measure the
 normalised distance between them at every step (the shared metric,
 worlds ADR-W3), and take the median across trials. The world's own
@@ -38,6 +39,7 @@ from wmj.harness.benchmarks import (
     declared_regions,
     sample_region_starts,
 )
+from wmj.harness.kicks import seeded_kick_sequences
 from wmj.judge.skill import crps_gaussian, skill_score
 from wmj.models.base import SeedSource, TrainingData, WorldContext
 from wmj.models.baselines import linear_factory, persistence_factory
@@ -95,6 +97,20 @@ def _rollout_truth(start: np.ndarray, horizon: int) -> np.ndarray:
     return states
 
 
+def _rollout_truth_batch(starts: np.ndarray, kicks: np.ndarray) -> np.ndarray:
+    """`float64[n, H+1, d]`: every trial's true trajectory under its own kicks.
+
+    Stepped together through `lv.transition_batch`, bit-identical to
+    stepping each trial alone (worlds ADR-W1, TC-WD3-04).
+    """
+    n, horizon = kicks.shape[0], kicks.shape[1]
+    states = np.zeros((n, horizon + 1, lv.WORLD.d))
+    states[:, 0] = starts
+    for step in range(horizon):
+        states[:, step + 1] = lv.transition_batch(states[:, step], kicks[:, step])
+    return states
+
+
 def _generate_training_data(seeds: SeedSource) -> TrainingData:
     """Seeded in-training-region null-action trajectories (ADR-002 "train-starts")."""
     rng = seeds.rng_for("lv", "training", "train-starts")
@@ -118,13 +134,18 @@ def build_lv_persistence_error_vs_horizon(
     _require_positive("horizon", horizon)
     artefact = build_divergence_artefact("lv", lv.WORLD, seeds, n_starts=n_starts, horizon=horizon)
     per_region = []
-    for region_name, box in declared_regions(lv.WORLD):
+    for region_name, box, band in declared_regions(lv.WORLD):
         rng = seeds.rng_for("lv", region_name, "eval-starts")
         starts = sample_region_starts(rng, box, n_trials)
+        kicks = seeded_kick_sequences(
+            seeds, "lv", lv.WORLD, region_name, band, "eval-kicks", n_trials, horizon
+        )
+        truth = _rollout_truth_batch(starts, kicks)
         errors = np.zeros((n_trials, horizon + 1))
         for trial, start in enumerate(starts):
-            truth = _rollout_truth(start, horizon)
-            errors[trial] = [distance(truth[step], start, lv.SCALE) for step in range(horizon + 1)]
+            errors[trial] = [
+                distance(truth[trial, step], start, lv.SCALE) for step in range(horizon + 1)
+            ]
         per_region.append(
             {
                 "region": region_name,

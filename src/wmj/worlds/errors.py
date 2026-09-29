@@ -40,3 +40,14 @@ class RegionSpecError(WmjError):
     state-floor-safe domain, and every out-region must be disjoint
     from the training box on at least one axis.
     """
+
+
+class WorldInputShapeError(WmjError):
+    """Raised when a world is handed arrays of the wrong shape.
+
+    `transition` takes exactly one state `[d]` and one action `[a]`;
+    `transition_batch` takes `[n, d]` states and `[n, a]` actions. Anything
+    else used to slip through and come back as a wrong-shaped array with
+    no error (design-review-010) — a silent failure in the one function
+    every truth, training and benchmark rollout depends on (WD-2).
+    """

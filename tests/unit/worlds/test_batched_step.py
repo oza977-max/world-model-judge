@@ -17,7 +17,11 @@ import pytest
 
 from wmj.worlds import lv, pendulum
 from wmj.worlds.actions import kick_sequence
-from wmj.worlds.errors import ActionRangeError, StateFloorClampError, WorldInputShapeError
+from wmj.worlds.errors import (
+    ActionRangeError,
+    StateFloorClampError,
+    WorldInputShapeError,
+)
 from wmj.worlds.integrator import rk4_step
 
 WORLDS = [("lv", lv), ("pendulum", pendulum)]

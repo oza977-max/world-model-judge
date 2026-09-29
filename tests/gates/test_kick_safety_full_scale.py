@@ -28,7 +28,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from wmj.harness.benchmarks import benchmark_kicks, declared_regions, sample_region_starts
+from wmj.harness.benchmarks import (
+    benchmark_kicks,
+    declared_regions,
+    sample_region_starts,
+)
 from wmj.models.base import SeedSource
 from wmj.worlds import lv, pendulum
 from wmj.worlds.actions import kick_sequence, step_probability
