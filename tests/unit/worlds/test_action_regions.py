@@ -134,3 +134,52 @@ def test_a_training_trial_with_in_band_kicks_stays_fully_in_region(module):
 @pytest.mark.parametrize("module", [lv, pendulum])
 def test_world_object_exposes_its_kick_rate(module):
     assert module.WORLD.kick_rate_per_s == module.KICK_RATE_PER_S
+
+
+def _spec_with(module, out_region):
+    spec = module.regions()
+    return RegionSpec(
+        training_state_box=spec.training_state_box.copy(),
+        training_action_interval=spec.training_action_interval.copy(),
+        out_regions=(out_region,),
+    )
+
+
+@pytest.mark.parametrize("module", [lv, pendulum])
+def test_validator_rejects_a_state_region_declaring_kicks_it_never_gets(module):
+    # Its trials get the trained "in" kicks, so a wider declared action
+    # box would misdescribe them (independent review, P3-C09 pass 1).
+    real = module.regions().out_regions[0]
+    bad = OutRegion(real.region_name, "state", real.state_box.copy(), 2.0 * real.action_box)
+    with pytest.raises(RegionSpecError, match="ADR-W4"):
+        module._validate_region_spec(_spec_with(module, bad))
+
+
+@pytest.mark.parametrize("module", [lv, pendulum])
+def test_validator_rejects_an_action_region_whose_box_is_not_the_out_kick_hull(module):
+    spec = module.regions()
+    bad = OutRegion("out-large-action", "action", spec.training_state_box.copy(),
+                    1.5 * spec.training_action_interval)
+    with pytest.raises(RegionSpecError, match="ADR-W4"):
+        module._validate_region_spec(_spec_with(module, bad))
+
+
+@pytest.mark.parametrize("module", [lv, pendulum])
+def test_validator_rejects_an_action_only_region_that_starts_off_the_training_box(module):
+    spec = module.regions()
+    shifted = spec.training_state_box.copy()
+    shifted[0] += 0.05  # overlaps, but is not the training box
+    bad = OutRegion("out-large-action", "action", shifted, 2.0 * spec.training_action_interval)
+    with pytest.raises(RegionSpecError, match="ADR-W4"):
+        module._validate_region_spec(_spec_with(module, bad))
+
+
+@pytest.mark.parametrize("module", [lv, pendulum])
+def test_validator_accepts_a_both_axis_region_and_rejects_one_with_trained_kicks(module):
+    real = module.regions().out_regions[0]  # the state-axis region: a disjoint box
+    trained = module.regions().training_action_interval
+    good = OutRegion("out-both", "both", real.state_box.copy(), 2.0 * trained)
+    module._validate_region_spec(_spec_with(module, good))
+    bad = OutRegion("out-both", "both", real.state_box.copy(), trained.copy())
+    with pytest.raises(RegionSpecError, match="§7"):
+        module._validate_region_spec(_spec_with(module, bad))

@@ -162,3 +162,10 @@ def test_band_for_axis_uses_the_out_band_only_where_the_action_axis_is_out(axis,
 def test_band_for_axis_refuses_an_unknown_axis():
     with pytest.raises(KickSpecError, match="ADR-W4"):
         band_for_axis("diagonal")
+
+
+def test_numpy_integer_horizons_are_accepted_and_bool_is_refused():
+    # A caller may pass kicks.shape[1] or a NumPy task horizon.
+    assert kick_sequence(_rng(), horizon=np.int64(4), p_step=0.5, band="in", umax=0.1).shape == (4, 1)
+    with pytest.raises(KickSpecError, match="ADR-W2"):
+        kick_sequence(_rng(), horizon=True, p_step=0.5, band="in", umax=0.1)

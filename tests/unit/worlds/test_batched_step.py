@@ -69,10 +69,28 @@ def test_tc_wd3_04_multi_step_batched_rollout_equals_single_rollouts(name, modul
 
 
 @pytest.mark.parametrize(("name", "module"), WORLDS)
-def test_both_paths_use_the_one_shared_integrator(name, module):
-    # WD-3 / TC-WD3-01's identity half: the world module reaches exactly
-    # the shared rk4_step object — no second integrator was introduced.
+def test_both_paths_call_the_one_shared_integrator_with_the_world_dt(name, module, monkeypatch):
+    # WD-3 / TC-WD3-01's identity half, checked by behaviour: replace the
+    # module's rk4_step with a recording wrapper around the real one, then
+    # step once each way. If either path stopped calling the shared
+    # integrator (say, a second vectorised copy inside transition_batch),
+    # its call would be missing here (independent review, P3-C09 pass 1).
     assert module.rk4_step is rk4_step
+    calls = []
+
+    def recording_rk4(deriv, state, dt):
+        calls.append((deriv, np.shape(state), dt))
+        return rk4_step(deriv, state, dt)
+
+    monkeypatch.setattr(module, "rk4_step", recording_rk4)
+    box = module.regions().training_state_box
+    state = box.mean(axis=1)
+    module.transition(state, np.array([0.0]))
+    module.transition_batch(np.tile(state, (3, 1)), np.zeros((3, 1)))
+    assert calls == [
+        (module._deriv, state.shape, module.DT),
+        (module._deriv, (3, state.shape[0]), module.DT),
+    ]
 
 
 @pytest.mark.parametrize(("name", "module"), WORLDS)
@@ -138,3 +156,27 @@ def test_world_object_exposes_transition_batch(name, module):
     assert np.array_equal(
         module.WORLD.transition_batch(states, actions), module.transition_batch(states, actions)
     )
+
+
+@pytest.mark.parametrize(("name", "module"), WORLDS)
+@pytest.mark.parametrize("bad", [float("nan"), float("inf")])
+def test_non_finite_states_or_actions_are_refused_not_propagated(name, module, bad):
+    # A NaN compares False against every bound, so without this check it
+    # would pass the range and floor guards and spread silently.
+    state = module.regions().training_state_box.mean(axis=1)
+    with pytest.raises(WorldInputShapeError, match="finite"):
+        module.transition(state, np.array([bad]))
+    states = np.tile(state, (4, 1))
+    states[2, 0] = bad
+    with pytest.raises(WorldInputShapeError, match="row 2"):
+        module.transition_batch(states, np.zeros((4, 1)))
+
+
+def test_abort_messages_name_the_failing_row():
+    states = np.array([[4.0, 2.0], [4.0, 2.0], [0.12, 2.0]])
+    actions = np.array([[0.0], [0.0], [-0.1]])
+    with pytest.raises(StateFloorClampError, match="row 2"):
+        lv.transition_batch(states, actions)
+    actions = np.array([[0.0], [5.0], [0.0]])
+    with pytest.raises(ActionRangeError, match="row 1"):
+        lv.transition_batch(np.tile([4.0, 2.0], (3, 1)), actions)

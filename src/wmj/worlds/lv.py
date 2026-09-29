@@ -70,20 +70,43 @@ def _apply_action(state: np.ndarray, action: np.ndarray) -> np.ndarray:
     return perturbed
 
 
+def _first_bad_row(mask: np.ndarray) -> int:
+    """Index of the first failing row (0 for a single state)."""
+    rows = np.atleast_2d(mask).any(axis=-1)
+    return int(np.argmax(rows))
+
+
+def _check_inputs_finite(states: np.ndarray, actions: np.ndarray) -> None:
+    # A NaN compares False against every bound, so it would slip past the
+    # range and floor checks below and spread silently (independent
+    # review, P3-C09 pass 1). Refuse it here.
+    for what, values in (("state", states), ("action", actions)):
+        bad = ~np.isfinite(values)
+        if np.any(bad):
+            row = _first_bad_row(bad)
+            raise WorldInputShapeError(
+                f"lv {what} in row {row} is not a finite number: "
+                f"{np.atleast_2d(values)[row].tolist()} (WD-2, worlds §7)"
+            )
+
+
 def _check_action_range(actions: np.ndarray) -> None:
-    if np.any(actions < ACTION_RANGE[0]) or np.any(actions > ACTION_RANGE[1]):
-        bad = actions[(actions < ACTION_RANGE[0]) | (actions > ACTION_RANGE[1])]
+    bad = (actions < ACTION_RANGE[0]) | (actions > ACTION_RANGE[1])
+    if np.any(bad):
+        row = _first_bad_row(bad)
         raise ActionRangeError(
-            f"lv action {float(bad.flat[0])!r} outside the world's declared range "
-            f"{ACTION_RANGE} (worlds spec §7)"
+            f"lv action {np.atleast_2d(actions)[row].tolist()} in row {row} is outside "
+            f"the world's declared range {ACTION_RANGE} (worlds spec §7)"
         )
 
 
 def _check_floor(states: np.ndarray, what: str) -> None:
-    if np.any(states < STATE_FLOOR):
+    bad = states < STATE_FLOOR
+    if np.any(bad):
+        row = _first_bad_row(bad)
         raise StateFloorClampError(
-            f"lv {what} drove state to {states!r}, below the floor {STATE_FLOOR} "
-            f"(worlds spec §7)"
+            f"lv {what} drove row {row} to {np.atleast_2d(states)[row].tolist()}, "
+            f"below the floor {STATE_FLOOR} (worlds spec §7)"
         )
 
 
@@ -102,6 +125,7 @@ def transition_batch(states: np.ndarray, actions: np.ndarray) -> np.ndarray:
             f"lv transition_batch expects states [n, 2] and actions [n, 1]; got "
             f"{states.shape} and {actions.shape} (WD-2, worlds §4.3)"
         )
+    _check_inputs_finite(states, actions)
     _check_action_range(actions)
     perturbed = _apply_action(states, actions)
     _check_floor(perturbed, "prey impulse")
@@ -136,6 +160,7 @@ def transition(state: np.ndarray, action: np.ndarray) -> np.ndarray:
             f"{state.shape} and {action.shape} — use transition_batch for many "
             f"(WD-2, worlds §4.3)"
         )
+    _check_inputs_finite(state, action)
     _check_action_range(action)
     perturbed = _apply_action(state, action)
     _check_floor(perturbed, "prey impulse")

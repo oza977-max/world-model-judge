@@ -45,19 +45,36 @@ def test_step_zero_error_is_zero_and_later_errors_positive():
         assert all(e > 0.0 for e in entry["median_error"][1:])
 
 
-def test_persistence_error_is_the_distance_from_the_held_start():
-    """With one trial the median IS that trial: recompute it independently."""
+def test_persistence_error_is_the_distance_from_the_held_start_under_the_trials_own_kicks():
+    """With one trial the median IS that trial: recompute it independently.
+
+    The truth is rolled out under that trial's own seeded kicks — purpose
+    "eval-kicks", the same kind the divergence reference uses
+    (design-review-010). The horizon is long enough that the trial is
+    actually kicked, so reverting to kick-free truth, or drawing from the
+    wrong purpose, fails here (independent review, P3-C09 pass 1).
+    """
     from wmj.harness.benchmarks import sample_region_starts
+    from wmj.worlds.actions import kick_sequence, step_probability
     from wmj.worlds.base import distance
 
+    horizon = 400
     start = sample_region_starts(
         _seeds().rng_for("lv", "training", "eval-starts"), lv.regions().training_state_box, 1
     )[0]
+    kicks = kick_sequence(
+        _seeds().rng_for("lv", "training", "eval-kicks", "0"),
+        horizon=horizon,
+        p_step=step_probability(lv.KICK_RATE_PER_S, lv.DT),
+        band="in",
+        umax=0.1,
+    )
+    assert np.any(kicks != 0.0), "choose a horizon that includes at least one kick"
     state, expected = start, [0.0]
-    for _ in range(10):
-        state = lv.transition(state, np.zeros(1))
+    for t in range(horizon):
+        state = lv.transition(state, kicks[t])
         expected.append(distance(state, start, lv.SCALE))
-    block = build_lv_persistence_error_vs_horizon(_seeds(), n_starts=4, n_trials=1, horizon=10)
+    block = build_lv_persistence_error_vs_horizon(_seeds(), n_starts=4, n_trials=1, horizon=horizon)
     assert block["per_region"][0]["median_error"] == expected
 
 

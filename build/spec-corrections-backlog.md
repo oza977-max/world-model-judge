@@ -818,3 +818,39 @@ writing the worlds edits. Recorded here rather than silently decided
 **Proposal.** Measure at P4-C05 how far kicked trials move across bins after
 the switch step, and disclose the figure; if it matters, route a design
 change (e.g. a kicked reference trajectory) through the next review.
+
+### A17 — found building P3-C09: three small additions the specs do not yet name (for the next review)
+
+**In plain words:** building the batched worlds and the kick generator
+needed three things the specs don't mention by name. They are small and
+follow the pinned decisions, but a later builder reading only the specs
+would not know about them.
+
+1. **The World interface gained `kick_rate_per_s`** (worlds §4.3 lists
+   `transition_batch` but not this). Each world declares its own kick
+   rate (LV 0.5, pendulum 1.0 per second), and the harness reads it to
+   compute `p_step = kick_rate_per_s × dt`. Every future world must
+   declare it.
+2. **Two helper modules:** `wmj/worlds/regionspec.py`
+   (`validate_out_regions`, the one region check both worlds call — it
+   now also ties each region's declared action box to the kicks its
+   trials really get: the trained interval for state-axis regions,
+   exactly twice it for action-axis regions, and the training box as the
+   state box of an action-only region) and `wmj/harness/kicks.py`
+   (`seeded_kick_sequences`, the one place a seeded kick sequence is
+   drawn for a world, region and purpose). Neither is in the
+   implementation guide's wiring matrix; the next guide revision should
+   list them (consumers: both worlds; `harness.benchmarks`,
+   `harness.preview`, P3-C06's training data, P6-C01's trials).
+3. **An `out-large-action` trial could, in principle, carry no kick.**
+   Its kicks come only from the out band, so a trial with zero kicks
+   would be labelled fully in-region (`axis` null) despite its region
+   name. At the pinned rates this is rare (LV ≈ 0.09% of trials, the
+   pendulum far less), and with the pinned seed it does not happen —
+   `tests/gates/test_kick_safety_full_scale.py` now asserts every such
+   trial is kicked at least once, so a seed that broke it would fail
+   loudly. The next review should decide whether to guarantee it by
+   construction (e.g. force at least one kick per action-axis trial).
+
+*Where recorded:* `build/handovers/P3-C09.md`; independent review of
+P3-C09, pass 1 (findings 2, 7, 8).

@@ -18,7 +18,7 @@ harness (`wmj.harness.benchmarks`), which is this module's consumer.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from typing import Callable
 
 import numpy as np
 

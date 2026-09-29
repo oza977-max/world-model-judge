@@ -51,6 +51,8 @@ def seeded_kick_sequences(
         )
     p_step = step_probability(world.kick_rate_per_s, world.dt)
     umax = float(world.regions().training_action_interval[0, 1])
+    if n == 0:
+        return np.zeros((0, horizon, 1))
     return np.stack(
         [
             kick_sequence(

@@ -83,12 +83,33 @@ def _apply_action(state: np.ndarray, action: np.ndarray) -> np.ndarray:
     return kicked
 
 
+def _first_bad_row(mask: np.ndarray) -> int:
+    """Index of the first failing row (0 for a single state)."""
+    rows = np.atleast_2d(mask).any(axis=-1)
+    return int(np.argmax(rows))
+
+
+def _check_inputs_finite(states: np.ndarray, actions: np.ndarray) -> None:
+    # A NaN compares False against every bound, so it would slip past the
+    # range check and spread silently; the pendulum has no floor to catch
+    # it later (independent review, P3-C09 pass 1). Refuse it here.
+    for what, values in (("state", states), ("action", actions)):
+        bad = ~np.isfinite(values)
+        if np.any(bad):
+            row = _first_bad_row(bad)
+            raise WorldInputShapeError(
+                f"pendulum {what} in row {row} is not a finite number: "
+                f"{np.atleast_2d(values)[row].tolist()} (WD-2, worlds §7)"
+            )
+
+
 def _check_action_range(actions: np.ndarray) -> None:
-    if np.any(actions < ACTION_RANGE[0]) or np.any(actions > ACTION_RANGE[1]):
-        bad = actions[(actions < ACTION_RANGE[0]) | (actions > ACTION_RANGE[1])]
+    bad = (actions < ACTION_RANGE[0]) | (actions > ACTION_RANGE[1])
+    if np.any(bad):
+        row = _first_bad_row(bad)
         raise ActionRangeError(
-            f"pendulum action {float(bad.flat[0])!r} outside the world's declared range "
-            f"{ACTION_RANGE} (worlds spec §7)"
+            f"pendulum action {np.atleast_2d(actions)[row].tolist()} in row {row} is "
+            f"outside the world's declared range {ACTION_RANGE} (worlds spec §7)"
         )
 
 
@@ -107,6 +128,7 @@ def transition_batch(states: np.ndarray, actions: np.ndarray) -> np.ndarray:
             f"pendulum transition_batch expects states [n, 4] and actions [n, 1]; got "
             f"{states.shape} and {actions.shape} (WD-2, worlds §4.3)"
         )
+    _check_inputs_finite(states, actions)
     _check_action_range(actions)
     return rk4_step(_deriv, _apply_action(states, actions), DT)
 
@@ -125,6 +147,7 @@ def transition(state: np.ndarray, action: np.ndarray) -> np.ndarray:
             f"{state.shape} and {action.shape} — use transition_batch for many "
             f"(WD-2, worlds §4.3)"
         )
+    _check_inputs_finite(state, action)
     _check_action_range(action)
     return rk4_step(_deriv, _apply_action(state, action), DT)
 

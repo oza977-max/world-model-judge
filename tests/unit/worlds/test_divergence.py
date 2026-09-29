@@ -25,7 +25,6 @@ from wmj.worlds.divergence import (
     separation_curve,
 )
 
-
 # --- perturb (ADR-W3: relative, sign-alternating per dimension) ---
 
 

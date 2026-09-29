@@ -33,6 +33,7 @@ from wmj.harness.benchmarks import (
     declared_regions,
     sample_region_starts,
 )
+from wmj.harness.kicks import seeded_kick_sequences
 from wmj.models.base import SeedSource
 from wmj.worlds import lv, pendulum
 from wmj.worlds.actions import kick_sequence, step_probability
@@ -79,11 +80,30 @@ def test_tc_wd2_02_training_trajectories_never_breach_the_floor(name, module):
 
 @pytest.mark.parametrize(("name", "module"), WORLDS)
 def test_tc_wd2_02_evaluation_trials_never_breach_the_floor_in_any_region(name, module):
+    # Uses the harness's own kick helper (not a copy), so this checks the
+    # code the pipeline runs (independent review, P3-C09 pass 1).
     seeds = SeedSource(SEED, None)
     for region, box, band in declared_regions(module.WORLD):
         starts = sample_region_starts(seeds.rng_for(name, region, "eval-starts"), box, N_EVAL)
-        kicks = _kicks(seeds, name, region, "eval-kicks", N_EVAL, module, band)
+        kicks = seeded_kick_sequences(
+            seeds, name, module.WORLD, region, band, "eval-kicks", N_EVAL, module.HORIZON
+        )
         _roll(module, starts, kicks)
+
+
+@pytest.mark.parametrize(("name", "module"), WORLDS)
+def test_every_out_large_action_trial_is_kicked_at_least_once(name, module):
+    # A trial in the action-axis region with no kick at all would be
+    # labelled fully in-region (axis None) despite its region name. At the
+    # pinned rates that is rare (LV ~0.09% per trial), and with the pinned
+    # seed it does not happen; this asserts it rather than assuming it
+    # (independent review, P3-C09 pass 1; backlog A17).
+    seeds = SeedSource(SEED, None)
+    kicks = seeded_kick_sequences(
+        seeds, name, module.WORLD, "out-large-action", "out", "eval-kicks", N_EVAL, module.HORIZON
+    )
+    per_trial = np.count_nonzero(kicks[:, :, 0], axis=1)
+    assert per_trial.min() >= 1, f"{name}: trials {np.flatnonzero(per_trial == 0)} carry no kick"
 
 
 @pytest.mark.parametrize(("name", "module"), WORLDS)

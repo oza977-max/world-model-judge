@@ -23,6 +23,7 @@ never creates one (cross-cutting ADR-002 rule 2 — the harness owns seeds).
 from __future__ import annotations
 
 import math
+import numbers
 from typing import Any
 
 import numpy as np
@@ -88,7 +89,9 @@ def kick_sequence(rng: Any, horizon: int, p_step: float, band: str, umax: float)
     """
     if band not in _BANDS:
         raise KickSpecError(f"kick band {band!r} is not one of {list(_BANDS)} (worlds ADR-W2)")
-    if not (isinstance(horizon, int) and horizon >= 0):
+    if not (
+        isinstance(horizon, numbers.Integral) and not isinstance(horizon, bool) and horizon >= 0
+    ):
         raise KickSpecError(f"horizon {horizon!r} must be a non-negative int (worlds ADR-W2)")
     if not (math.isfinite(p_step) and 0.0 <= p_step <= 1.0):
         raise KickSpecError(f"per-step kick chance {p_step!r} is outside [0, 1] (worlds ADR-W2)")
