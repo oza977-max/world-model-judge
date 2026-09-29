@@ -1,0 +1,136 @@
+"""TC-WD3-04 — the batched world step is bit-identical to the single step.
+
+In plain words: to make 2,000 training runs and 200 test runs per region
+in seconds, the worlds can now advance many states at once
+(`transition_batch`). That is only acceptable if it gives *exactly* the
+same numbers as advancing each state on its own — not "close", the same
+bits — because otherwise the training data and the truth the models are
+graded against would quietly come from two slightly different physics
+engines, the very trap WD-3 exists to close. Equality here is
+`np.array_equal`, never a tolerance (worlds ADR-W1, design-review-010).
+"""
+
+from __future__ import annotations
+
+import numpy as np
+import pytest
+
+from wmj.worlds import lv, pendulum
+from wmj.worlds.actions import kick_sequence
+from wmj.worlds.errors import ActionRangeError, StateFloorClampError, WorldInputShapeError
+from wmj.worlds.integrator import rk4_step
+
+WORLDS = [("lv", lv), ("pendulum", pendulum)]
+BATCH_SIZES = [1, 2, 7, 64, 200]
+
+
+def _starts_and_actions(module, n: int, band: str, seed: int):
+    rng = np.random.default_rng(seed)
+    box = module.regions().training_state_box
+    states = rng.uniform(box[:, 0], box[:, 1], size=(n, box.shape[0]))
+    umax = float(module.regions().training_action_interval[0, 1])
+    # Kick every step so every row carries a non-null action.
+    actions = kick_sequence(rng, horizon=n, p_step=1.0, band=band, umax=umax)
+    return states, actions
+
+
+@pytest.mark.parametrize(("name", "module"), WORLDS)
+@pytest.mark.parametrize("n", BATCH_SIZES)
+@pytest.mark.parametrize("band", ["in", "out"])
+def test_tc_wd3_04_every_batched_row_equals_the_single_step_exactly(name, module, n, band):
+    states, actions = _starts_and_actions(module, n, band, seed=1000 + n)
+    batched = module.transition_batch(states, actions)
+    assert batched.shape == states.shape
+    for i in range(n):
+        single = module.transition(states[i], actions[i])
+        assert np.array_equal(batched[i], single), f"{name} row {i} of {n} ({band}) differs"
+
+
+@pytest.mark.parametrize(("name", "module"), WORLDS)
+def test_tc_wd3_04_multi_step_batched_rollout_equals_single_rollouts(name, module):
+    # Bit-identity must survive compounding: 50 steps, 7 rows, kicked.
+    rng = np.random.default_rng(77)
+    box = module.regions().training_state_box
+    states = rng.uniform(box[:, 0], box[:, 1], size=(7, box.shape[0]))
+    umax = float(module.regions().training_action_interval[0, 1])
+    kicks = np.stack(
+        [kick_sequence(rng, horizon=50, p_step=0.3, band="in", umax=umax) for _ in range(7)]
+    )  # [7, 50, 1]
+    batch = states.copy()
+    singles = [s.copy() for s in states]
+    for t in range(50):
+        batch = module.transition_batch(batch, kicks[:, t, :])
+        singles = [module.transition(singles[i], kicks[i, t, :]) for i in range(7)]
+    assert np.array_equal(batch, np.stack(singles))
+
+
+@pytest.mark.parametrize(("name", "module"), WORLDS)
+def test_both_paths_use_the_one_shared_integrator(name, module):
+    # WD-3 / TC-WD3-01's identity half: the world module reaches exactly
+    # the shared rk4_step object — no second integrator was introduced.
+    assert module.rk4_step is rk4_step
+
+
+@pytest.mark.parametrize(("name", "module"), WORLDS)
+def test_transition_refuses_a_batched_state_instead_of_returning_a_wrong_shape(name, module):
+    # design-review-010: lv.transition given a batch used to return a
+    # wrong-shaped array silently.
+    box = module.regions().training_state_box
+    states = np.tile(box.mean(axis=1), (3, 1))
+    with pytest.raises(WorldInputShapeError, match="WD-2"):
+        module.transition(states, np.array([0.0]))
+
+
+@pytest.mark.parametrize(("name", "module"), WORLDS)
+def test_transition_refuses_a_wrong_length_state(name, module):
+    with pytest.raises(WorldInputShapeError, match="WD-2"):
+        module.transition(np.zeros(module.WORLD.d + 1), np.array([0.0]))
+
+
+@pytest.mark.parametrize(("name", "module"), WORLDS)
+def test_transition_batch_refuses_mismatched_shapes(name, module):
+    box = module.regions().training_state_box
+    states = np.tile(box.mean(axis=1), (4, 1))
+    with pytest.raises(WorldInputShapeError, match="WD-2"):
+        module.transition_batch(states, np.zeros((3, 1)))  # row count mismatch
+    with pytest.raises(WorldInputShapeError, match="WD-2"):
+        module.transition_batch(states[0], np.zeros((1, 1)))  # 1-D states
+    with pytest.raises(WorldInputShapeError, match="WD-2"):
+        module.transition_batch(states, np.zeros((4, 2)))  # wrong action width
+
+
+@pytest.mark.parametrize(("name", "module"), WORLDS)
+def test_transition_batch_refuses_any_row_outside_the_declared_action_range(name, module):
+    box = module.regions().training_state_box
+    states = np.tile(box.mean(axis=1), (5, 1))
+    actions = np.zeros((5, 1))
+    actions[3, 0] = module.ACTION_RANGE[1] + 0.5
+    with pytest.raises(ActionRangeError, match="§7"):
+        module.transition_batch(states, actions)
+
+
+def test_lv_batch_with_one_row_breaching_the_floor_aborts_the_whole_call():
+    # TDD-3 realistic fixture: one bad row among good ones. Worlds §7's
+    # one rule — the whole call aborts, never a silently dropped row.
+    states = np.array([[4.0, 2.0], [0.12, 2.0], [5.0, 3.0]])
+    actions = np.array([[0.05], [-0.1], [0.0]])  # row 1: 0.12 - 0.1 = 0.02 < floor
+    with pytest.raises(StateFloorClampError, match="§7"):
+        lv.transition_batch(states, actions)
+
+
+def test_transition_batch_does_not_mutate_its_inputs():
+    states = np.array([[4.0, 2.0], [3.0, 1.5]])
+    actions = np.array([[0.05], [-0.05]])
+    s0, a0 = states.copy(), actions.copy()
+    lv.transition_batch(states, actions)
+    pendulum.transition_batch(np.zeros((2, 4)), np.array([[0.5], [-0.5]]))
+    assert np.array_equal(states, s0) and np.array_equal(actions, a0)
+
+
+@pytest.mark.parametrize(("name", "module"), WORLDS)
+def test_world_object_exposes_transition_batch(name, module):
+    states = np.tile(module.regions().training_state_box.mean(axis=1), (2, 1))
+    actions = np.zeros((2, 1))
+    assert np.array_equal(
+        module.WORLD.transition_batch(states, actions), module.transition_batch(states, actions)
+    )

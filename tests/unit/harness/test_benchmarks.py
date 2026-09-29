@@ -79,7 +79,7 @@ def test_artefact_has_exactly_the_contracted_top_level_keys(lv_artefact):
 
 
 def test_artefact_regions_cover_training_and_every_declared_out_region(lv_artefact):
-    assert set(lv_artefact["regions"]) == {"training", "out-high-amplitude"}
+    assert set(lv_artefact["regions"]) == {"training", "out-high-amplitude", "out-large-action"}
 
 
 def test_artefact_steps_run_zero_to_horizon_inclusive(lv_artefact):

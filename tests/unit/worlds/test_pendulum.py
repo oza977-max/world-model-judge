@@ -101,8 +101,11 @@ def test_regions_declares_training_and_out_region():
     region_spec = pendulum.regions()
     assert region_spec.training_state_box.shape == (4, 2)
     assert region_spec.training_action_interval.shape == (1, 2)
-    assert len(region_spec.out_regions) == 1
-    assert region_spec.out_regions[0].region_name == "out-near-inverted"
+    # design-review-010: a third region, the action-axis "out-large-action".
+    assert [r.region_name for r in region_spec.out_regions] == [
+        "out-near-inverted",
+        "out-large-action",
+    ]
 
 
 def test_tasks_declares_control_and_planning_with_different_tolerances():
