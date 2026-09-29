@@ -86,6 +86,9 @@ def validate_out_regions(world_name: str, region_spec: RegionSpec) -> None:
                 f"axis only, so its state box must be the training box "
                 f"{region_spec.training_state_box.tolist()} (worlds spec §7, ADR-W4)"
             )
+        # Defence in depth: after the equality check above this can only
+        # fire for a degenerate trained interval (e.g. [0, 0], whose double
+        # is itself) — a region that would then test no new kicks at all.
         if needs_action and not _action_wider(out_region, trained):
             raise RegionSpecError(
                 f"{world_name} out-region {out_region.region_name!r} declares the action "

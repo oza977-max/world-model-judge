@@ -180,3 +180,45 @@ def test_abort_messages_name_the_failing_row():
     actions = np.array([[0.0], [5.0], [0.0]])
     with pytest.raises(ActionRangeError, match="row 1"):
         lv.transition_batch(np.tile([4.0, 2.0], (3, 1)), actions)
+
+
+# --- independent review, P3-C09 pass 3: properties no earlier test pinned ---
+
+
+def test_lv_floor_is_enforced_after_the_rk4_step_not_only_after_the_kick():
+    # A null action (no impulse) from a state whose predator decays below
+    # the floor during the step itself: §7's one rule must still abort.
+    state = np.array([1.0, 0.0501])
+    with pytest.raises(StateFloorClampError, match="RK4 step"):
+        lv.transition(state, np.array([0.0]))
+    batch = np.array([[4.0, 2.0], [1.0, 0.0501], [5.0, 3.0]])
+    with pytest.raises(StateFloorClampError, match="RK4 step"):
+        lv.transition_batch(batch, np.zeros((3, 1)))
+
+
+@pytest.mark.parametrize("u", [0.07, -0.04])
+def test_lv_kick_adds_u_to_prey_only(u):
+    # worlds §4.1: x <- x + u, then one RK4 step of the bare equations.
+    state = np.array([4.0, 2.0])
+    expected = rk4_step(lv._deriv, state + np.array([u, 0.0]), lv.DT)
+    assert np.array_equal(lv.transition(state, np.array([u])), expected)
+    assert np.array_equal(lv.transition_batch(state[None, :], np.array([[u]]))[0], expected)
+
+
+@pytest.mark.parametrize("u", [0.8, -1.5])
+def test_pendulum_kick_adds_u_to_the_first_joints_angular_velocity_only(u):
+    # worlds §4.2: omega1 <- omega1 + u, then one RK4 step.
+    state = np.array([0.1, -0.2, 0.3, -0.4])
+    expected = rk4_step(pendulum._deriv, state + np.array([0.0, 0.0, u, 0.0]), pendulum.DT)
+    assert np.array_equal(pendulum.transition(state, np.array([u])), expected)
+    assert np.array_equal(
+        pendulum.transition_batch(state[None, :], np.array([[u]]))[0], expected
+    )
+
+
+@pytest.mark.parametrize(("name", "module"), WORLDS)
+@pytest.mark.parametrize("action", [np.zeros(2), np.zeros((1, 1)), np.float64(0.0)])
+def test_transition_refuses_a_wrongly_shaped_action(name, module, action):
+    state = module.regions().training_state_box.mean(axis=1)
+    with pytest.raises(WorldInputShapeError, match="WD-2"):
+        module.transition(state, action)
