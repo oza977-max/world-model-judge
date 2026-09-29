@@ -25,7 +25,8 @@ KICK_PURPOSES = ("train-kicks", "eval-kicks", "benchmark-kicks")
 
 
 class KickPurposeError(WmjError):
-    """Raised for a kick purpose outside the three pinned ones.
+    """Raised for a kick purpose outside the three pinned ones, or an
+    impossible rollout count or horizon.
 
     A new purpose string would open a new seed stream no test knows
     about — the collision class cross-cutting ADR-002 rule 2 exists to
@@ -44,6 +45,10 @@ def seeded_kick_sequences(
     horizon: int,
 ) -> np.ndarray:
     """`float64[n, horizon, 1]`: rollout `i` from `seeds.rng_for(world, region, purpose, str(i))`."""
+    if not (isinstance(n, int) and not isinstance(n, bool) and n >= 0):
+        raise KickPurposeError(f"rollout count {n!r} must be a non-negative int (worlds ADR-W2)")
+    if not (isinstance(horizon, int) and not isinstance(horizon, bool) and horizon >= 0):
+        raise KickPurposeError(f"horizon {horizon!r} must be a non-negative int (worlds ADR-W2)")
     if purpose not in KICK_PURPOSES:
         raise KickPurposeError(
             f"kick purpose {purpose!r} is not one of {list(KICK_PURPOSES)} "

@@ -49,3 +49,9 @@ def test_an_unknown_purpose_is_refused():
 
 def test_zero_rollouts_give_an_empty_array_of_the_right_shape():
     assert seeded_kick_sequences(SEEDS, "lv", lv.WORLD, "training", "in", "eval-kicks", 0, 10).shape == (0, 10, 1)
+
+
+@pytest.mark.parametrize(("n", "horizon"), [(-1, 10), (2, -1), (True, 10), (0, -5)])
+def test_impossible_counts_or_horizons_are_refused(n, horizon):
+    with pytest.raises(KickPurposeError, match="ADR-W2"):
+        seeded_kick_sequences(SEEDS, "lv", lv.WORLD, "training", "in", "eval-kicks", n, horizon)

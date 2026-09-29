@@ -106,3 +106,34 @@ def test_chart_preview_refuses_non_positive_sizes_loudly():
         build_lv_persistence_error_vs_horizon(_seeds(), n_starts=2, n_trials=2, horizon=0)
     with pytest.raises(PreviewArgumentError):
         one_step_skill_persistence_vs_linear(_seeds(), n_trials=0)
+
+
+def test_the_out_large_action_region_uses_out_band_kicks_under_its_own_seed_key():
+    """The action-axis region's truth must use the bigger "out" kicks,
+    keyed on its own region name — the same kind as its divergence
+    reference (independent review, P3-C09 pass 2: a hardcoded "in" band
+    here passed every earlier test)."""
+    from wmj.harness.benchmarks import sample_region_starts
+    from wmj.worlds.actions import kick_sequence, step_probability
+    from wmj.worlds.base import distance
+
+    horizon, region = 400, "out-large-action"
+    start = sample_region_starts(
+        _seeds().rng_for("lv", region, "eval-starts"), lv.regions().training_state_box, 1
+    )[0]
+    kicks = kick_sequence(
+        _seeds().rng_for("lv", region, "eval-kicks", "0"),
+        horizon=horizon,
+        p_step=step_probability(lv.KICK_RATE_PER_S, lv.DT),
+        band="out",
+        umax=0.1,
+    )
+    assert np.any(np.abs(kicks) > 0.1), "choose a horizon that includes an out-band kick"
+    state, expected = start, [0.0]
+    for t in range(horizon):
+        state = lv.transition(state, kicks[t])
+        expected.append(distance(state, start, lv.SCALE))
+    block = build_lv_persistence_error_vs_horizon(_seeds(), n_starts=4, n_trials=1, horizon=horizon)
+    entry = block["per_region"][2]
+    assert entry["region"] == region
+    assert entry["median_error"] == expected

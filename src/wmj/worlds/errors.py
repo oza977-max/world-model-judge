@@ -43,7 +43,9 @@ class RegionSpecError(WmjError):
 
 
 class WorldInputShapeError(WmjError):
-    """Raised when a world is handed arrays of the wrong shape.
+    """Raised when a world is handed arrays of the wrong shape, or values
+    that are not finite numbers (NaN or infinity would otherwise slip past
+    every range and floor check, since they compare False).
 
     `transition` takes exactly one state `[d]` and one action `[a]`;
     `transition_batch` takes `[n, d]` states and `[n, a]` actions. Anything
