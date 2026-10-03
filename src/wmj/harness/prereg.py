@@ -157,25 +157,40 @@ def _git_env() -> dict[str, str]:
     return env
 
 
+# Repo-local config is under the author's control, so each of these is pinned
+# on the command line (which outranks the repo's .git/config):
+#   core.commitGraph=false    a tampered commit-graph file can rewrite parentage
+#                             without touching a commit, a ref or a grafts file
+#   core.useReplaceRefs=false replace refs ignored. Redundant with the
+#                             GIT_NO_REPLACE_OBJECTS env var above: removing either one
+#                             alone changes nothing, removing both fails the test.
+#   log.showSignature=false   gpg chatter must not appear in parsed output
+#   core.fsmonitor=false, core.hooksPath=<null>   no repo-supplied program runs
+_PINNED_CONFIG = (
+    "core.commitGraph=false",
+    "core.useReplaceRefs=false",
+    "log.showSignature=false",
+    "core.fsmonitor=false",
+    f"core.hooksPath={os.devnull}",
+)
+
+
 def _git_argv(repo: Path, *args: str) -> list[str]:
-    # log.follow=false: a user's `git config log.follow true` would turn a
-    # rename-away-and-back into a single history and hide the second add.
-    return ["git", "-C", str(repo), "-c", "log.follow=false", *args]
+    pinned = [part for setting in _PINNED_CONFIG for part in ("-c", setting)]
+    return ["git", "-C", str(repo), *pinned, *args]
 
 
-def _git(repo: Path, *args: str) -> str:
-    """Run `git -C repo <args>` and return stdout (text).
-
-    A git failure (not a repo, git absent) is wrapped in `PreregError` with a
-    clear message naming the gate — never a bare `CalledProcessError` /
-    `FileNotFoundError` (errors.py convention: every wmj failure says what
-    failed and which gate caught it)."""
+def _run_git(
+    repo: Path, *args: str, stdin: str | None = None, binary: bool = False
+) -> subprocess.CompletedProcess:
+    """Run git under the hardened environment; never raises on a non-zero exit."""
     try:
-        result = subprocess.run(
+        return subprocess.run(
             _git_argv(repo, *args),
-            check=True,
+            check=False,
             capture_output=True,
-            text=True,
+            text=not binary,
+            input=stdin,
             env=_git_env(),
         )
     except FileNotFoundError as exc:
@@ -183,12 +198,29 @@ def _git(repo: Path, *args: str) -> str:
             "git executable not found — cannot certify pre-registration "
             "(the prereg gate needs git to read commit history)"
         ) from exc
-    except subprocess.CalledProcessError as exc:
+
+
+def _stderr_text(result: subprocess.CompletedProcess) -> str:
+    err = result.stderr
+    if isinstance(err, bytes):
+        err = err.decode("utf-8", "replace")
+    return (err or "").strip()
+
+
+def _git(repo: Path, *args: str, stdin: str | None = None) -> str:
+    """Run `git -C repo <args>` and return stdout (text).
+
+    A git failure (not a repo, git absent) is wrapped in `PreregError` with a
+    clear message naming the gate — never a bare `CalledProcessError` /
+    `FileNotFoundError` (errors.py convention: every wmj failure says what
+    failed and which gate caught it)."""
+    result = _run_git(repo, *args, stdin=stdin)
+    if result.returncode != 0:
         raise PreregError(
-            f"`git {' '.join(args)}` failed (exit {exc.returncode}) in {repo} — "
+            f"`git {' '.join(args)}` failed (exit {result.returncode}) in {repo} — "
             f"cannot certify pre-registration (is this a git repository?): "
-            f"{(exc.stderr or '').strip()}"
-        ) from exc
+            f"{_stderr_text(result)}"
+        )
     return result.stdout
 
 
@@ -216,33 +248,58 @@ def _require_trustworthy_history(repo: Path) -> None:
             f"changing any commit, so the pre-registration cannot be certified "
             f"against it (models ADR-M5)"
         )
+    # Object integrity: `git show` serves whatever bytes a loose object file
+    # holds, even if they do not hash to its name, so a forged object would make
+    # every later comparison look clean. fsck re-hashes every object and checks
+    # pack checksums (cheap at this project's size).
+    fsck = _run_git(repo, "fsck", "--no-dangling", "--no-progress")
+    if fsck.returncode != 0:
+        raise PreregHistoryError(
+            f"`git fsck` reports a damaged or forged object store in {repo} — the "
+            f"pre-registration cannot be certified against objects git cannot verify: "
+            f"{(_stderr_text(fsck) or fsck.stdout or '').strip()[:300]}"
+        )
 
 
-def _commit_lines(repo: Path, diff_filter: str, relpath: str) -> list[str]:
-    """Commits that added (`A`) or deleted (`D`) exactly `relpath`, among all
-    commits reachable from HEAD (any branch that was merged in).
+def _freeze_history(repo: Path, relpath: str) -> tuple[list[str], list[str]]:
+    """`(adds, deletes)`: commits where `relpath` came into or went out of existence.
 
-    `--full-history` is load-bearing: without it, git's history
-    simplification can hide an add or delete made on a side branch whose
-    merge resolved the file away (executed, design-review-010).
-    `log.follow=false` (set for every call in `_git_argv`) is what stops a
-    user's config turning a rename-away-and-back into one history.
-    `--no-renames` is belt and braces: executed with `diff.renames` set to
-    each of true, false and copies, and with a tiny `diff.renameLimit`, it
-    changed no count — git cannot pair renames while limited to one path —
-    so no test can distinguish it.
+    Decided by *presence in each commit's tree*, not by diff output. A merge
+    commit has no diff for `git log --diff-filter` to show (even with
+    `--full-history`), so a freeze added or lifted inside a merge — with an
+    honest date and no history rewrite — would be invisible to a diff-based
+    count (executed, design-review-010 review pass 2). Instead: every commit
+    reachable from HEAD is asked whether the path exists as a file; an *add* is
+    a commit that has it while none of its parents do (or a root), a *delete*
+    is a commit without it while some parent has it. A rename away and back is
+    a delete plus an add at the path.
     """
-    out = _git(
-        repo,
-        "log",
-        "--full-history",
-        "--no-renames",
-        f"--diff-filter={diff_filter}",
-        "--format=%H",
-        "--",
-        relpath,
-    )
-    return [line for line in out.splitlines() if line.strip()]
+    parents: dict[str, list[str]] = {}
+    for row in _git(repo, "rev-list", "--parents", "HEAD").splitlines():
+        shas = row.split()
+        if shas:
+            parents[shas[0]] = shas[1:]
+    queries = "".join(f"{sha}:{relpath}\n" for sha in parents)
+    answers = _git(repo, "cat-file", "--batch-check", stdin=queries).splitlines()
+    if len(answers) != len(parents):
+        raise PreregError(
+            f"git answered {len(answers)} object queries for {len(parents)} commits — "
+            f"cannot establish the history of {relpath!r}"
+        )
+    present: dict[str, bool] = {}
+    for sha, answer in zip(parents, answers):
+        tokens = answer.split()
+        present[sha] = len(tokens) == 3 and tokens[1] == "blob"
+    for sha, its_parents in parents.items():
+        for parent in its_parents:
+            if parent not in present:
+                raise PreregHistoryError(
+                    f"commit {sha[:10]} names a parent {parent[:10]} that history does not "
+                    f"contain — the history is incomplete (models ADR-M5)"
+                )
+    adds = [c for c in parents if present[c] and not any(present[p] for p in parents[c])]
+    deletes = [c for c in parents if not present[c] and any(present[p] for p in parents[c])]
+    return adds, deletes
 
 
 def freeze_commit(repo: Path) -> str:
@@ -255,8 +312,7 @@ def freeze_commit(repo: Path) -> str:
     repo = Path(repo)
     _require_trustworthy_history(repo)
     relpath = f"{PREREG_DIR}/{FREEZE_FILE}"
-    adds = _commit_lines(repo, "A", relpath)
-    deletes = _commit_lines(repo, "D", relpath)
+    adds, deletes = _freeze_history(repo, relpath)
     if not adds:
         raise PreregNotFrozenError(
             f"{relpath!r} has never been committed — the pre-registration is not frozen "
@@ -272,50 +328,36 @@ def freeze_commit(repo: Path) -> str:
     return adds[0]
 
 
-def _exists_at(repo: Path, sha: str, relpath: str) -> bool:
-    """True iff `relpath` is part of the tree at commit `sha`."""
-    try:
-        result = subprocess.run(
-            _git_argv(repo, "cat-file", "-e", f"{sha}:{relpath}"),
-            check=False,
-            capture_output=True,
-            env=_git_env(),
-        )
-    except FileNotFoundError as exc:
-        raise PreregError(
-            "git executable not found — cannot certify pre-registration"
-        ) from exc
-    return result.returncode == 0
+def _exists_at(repo: Path, rev: str, relpath: str) -> bool:
+    """True iff `relpath` is part of the tree at `rev` (a commit sha or HEAD)."""
+    return _run_git(repo, "cat-file", "-e", f"{rev}:{relpath}").returncode == 0
 
 
 def _commit_timestamp(repo: Path, sha: str) -> int:
     """The committer unix timestamp of `sha`."""
-    return int(_git(repo, "show", "-s", "--format=%ct", sha).strip())
-
-
-def _blob_at(repo: Path, sha: str, relpath: str) -> bytes:
-    """The bytes of `relpath` as it stood at commit `sha` (wrapped errors)."""
+    text = _git(repo, "show", "-s", "--format=%ct", sha).strip()
     try:
-        result = subprocess.run(
-            _git_argv(repo, "show", f"{sha}:{relpath}"),
-            check=True,
-            capture_output=True,
-            env=_git_env(),
+        return int(text)
+    except ValueError as exc:
+        raise PreregError(
+            f"git gave {text!r} as the committer time of {sha[:10]}, not a unix timestamp "
+            f"— cannot order the freeze against the run"
+        ) from exc
+
+
+def _blob_at(repo: Path, rev: str, relpath: str) -> bytes:
+    """The bytes of `relpath` as it stood at `rev` (wrapped errors)."""
+    result = _run_git(repo, "show", f"{rev}:{relpath}", binary=True)
+    if result.returncode != 0:
+        raise PreregError(
+            f"cannot read {relpath!r} at {rev[:10]} — cannot certify pre-registration: "
+            f"{_stderr_text(result)}"
         )
-    except FileNotFoundError as exc:
-        raise PreregError(
-            "git executable not found — cannot certify pre-registration"
-        ) from exc
-    except subprocess.CalledProcessError as exc:
-        raise PreregError(
-            f"cannot read {relpath!r} at commit {sha[:10]} — cannot certify "
-            f"pre-registration: {(exc.stderr or b'').decode('utf-8', 'replace').strip()}"
-        ) from exc
     return result.stdout
 
 
-def _has_uncommitted_changes(repo: Path, relpath: str) -> bool:
-    return bool(_git(repo, "status", "--porcelain", "--", relpath).strip())
+def _line_endings_only(a: bytes, b: bytes) -> bool:
+    return a.replace(b"\r\n", b"\n") == b.replace(b"\r\n", b"\n")
 
 
 def _declares(text: str, name: str) -> bool:
@@ -436,20 +478,31 @@ def check_prereg(
                 f"{freeze_sha[:10]} — a file added after the freeze was never locked "
                 f"(models ADR-M5)"
             )
-        if _has_uncommitted_changes(repo, relpath):
+        if worktree.is_symlink() or not worktree.is_file():
+            what = "is a symlink" if worktree.is_symlink() else "has no working-tree copy (deleted?)"
+            raise PreregNotCommittedError(
+                f"prereg file {relpath!r} {what} — there is no present file content to "
+                f"certify (MU-6)"
+            )
+        if not _exists_at(repo, "HEAD", relpath):
+            raise PreregNotCommittedError(
+                f"prereg file {relpath!r} is not at HEAD (deleted in a later commit, or "
+                f"re-created uncommitted) — the judged-against content must be committed "
+                f"(MU-6)"
+            )
+        # Compare bytes with the committed blobs directly — never `git status`,
+        # which would run any clean filter or fsmonitor program the repo's own
+        # config names, and can be told a modified file is unchanged.
+        actual_bytes = worktree.read_bytes()
+        head_bytes = _blob_at(repo, "HEAD", relpath)
+        frozen_bytes = _blob_at(repo, freeze_sha, relpath)
+        if actual_bytes != head_bytes and not _line_endings_only(actual_bytes, head_bytes):
             raise PreregNotCommittedError(
                 f"prereg file {relpath!r} has uncommitted working-tree changes — "
                 f"the judged-against content must be the committed, frozen content (MU-6)"
             )
-        if not worktree.is_file():
-            raise PreregNotCommittedError(
-                f"prereg file {relpath!r} is frozen but has no working-tree copy "
-                f"(deleted?) — there is no present content to certify (MU-6)"
-            )
-        frozen_bytes = _blob_at(repo, freeze_sha, relpath)
-        actual_bytes = worktree.read_bytes()
-        if frozen_bytes != actual_bytes:
-            if frozen_bytes.replace(b"\r\n", b"\n") == actual_bytes.replace(b"\r\n", b"\n"):
+        if actual_bytes != frozen_bytes:
+            if _line_endings_only(actual_bytes, frozen_bytes):
                 raise PreregLineEndingError(
                     f"prereg file {relpath!r} differs from the freeze commit "
                     f"{freeze_sha[:10]} only in line endings (CRLF vs LF) — if this is a "

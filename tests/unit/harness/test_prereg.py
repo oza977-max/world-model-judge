@@ -18,7 +18,9 @@ Every test uses real git as the external boundary; nothing owned is mocked.
 from __future__ import annotations
 
 import os
+import struct
 import subprocess
+import zlib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -471,6 +473,262 @@ def test_the_repo_argument_must_be_the_top_level_of_the_repository(tmp_path):
     repo, _ = _frozen_repo(tmp_path)
     with pytest.raises(PreregError, match="top level"):
         check_prereg(repo / "prereg", PREREG_FILES, MODELS, run_timestamp=2_000_000)
+
+
+# --- independent review, P3-C10 pass 2: history that `git log` cannot show ---
+
+
+def _evil_merge(repo, branch, *, at, edit):
+    """Merge `branch` with --no-commit, apply `edit()`, commit: a merge whose
+    own change to prereg/ is invisible to `git log --diff-filter` (git shows
+    no diff for a merge commit)."""
+    _git(repo, "merge", "--no-ff", "--no-commit", "-q", branch)
+    edit()
+    _commit(repo, f"merge {branch}", at=at)
+
+
+def _side_branch_commit(repo, name, main, *, at):
+    _git(repo, "checkout", "-qb", name, main)
+    (repo / f"{name}.txt").write_text(name)
+    _commit(repo, name, at=at)
+    _git(repo, "checkout", "-q", main)
+
+
+def test_tc_mu6_06_refuses_a_freeze_lifted_and_redone_inside_merge_commits(tmp_path):
+    """The pass-2 attack: freeze, run, dislike the result, lift the freeze and
+    tune the recipe — both inside merge commits (git log shows no diff for a
+    merge, so add/delete counts from `log --diff-filter` stay at 1 and 0) —
+    then freeze again with an ordinary commit. Honestly dated, no rewrite."""
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    _commit_prereg(repo, recipe=RECIPE, prediction=PREDICTION, at=1_000)
+    main = _git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    _side_branch_commit(repo, "x", main, at=1_010)
+    (repo / "m.txt").write_text("m")
+    _commit(repo, "m1", at=1_020)
+    freeze = repo / "prereg" / "FREEZE"
+    _evil_merge(repo, "x", at=1_100, edit=lambda: freeze.write_text("frozen v1\n"))
+    _side_branch_commit(repo, "y", main, at=1_300)
+    (repo / "m2.txt").write_text("m2")
+    _commit(repo, "m2", at=1_310)
+
+    def lift_and_tune():
+        freeze.unlink()
+        (repo / "prereg" / "recipe.md").write_text(RECIPE.replace("0.05", "0.09"))
+
+    _evil_merge(repo, "y", at=1_400, edit=lift_and_tune)
+    freeze.write_text("frozen v2\n")
+    _commit(repo, "freeze again", at=1_500)
+    with pytest.raises(PreregRefrozenError, match="2 time"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000)
+
+
+def test_a_freeze_lifted_inside_a_merge_commit_and_never_restored_is_refused_as_refrozen(tmp_path):
+    """The delete half on its own: freeze, then a merge that quietly removes
+    FREEZE. The refusal must name the lifted freeze, not just a missing file."""
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    _commit_prereg(repo, recipe=RECIPE, prediction=PREDICTION, at=1_000)
+    main = _git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    freeze = repo / "prereg" / "FREEZE"
+    freeze.write_text("Frozen.\n")
+    _commit(repo, "freeze", at=1_100)
+    _side_branch_commit(repo, "y", main, at=1_200)
+    (repo / "m.txt").write_text("m")
+    _commit(repo, "m", at=1_210)
+    _evil_merge(repo, "y", at=1_300, edit=freeze.unlink)
+    with pytest.raises(PreregRefrozenError, match="deleted 1"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000)
+
+
+def test_a_directory_named_freeze_is_not_a_freeze(tmp_path):
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    _commit_prereg(repo, recipe=RECIPE, prediction=PREDICTION, at=1_000)
+    (repo / "prereg" / "FREEZE").mkdir()
+    (repo / "prereg" / "FREEZE" / "note.txt").write_text("not a file\n")
+    _commit(repo, "a directory called FREEZE", at=1_100)
+    with pytest.raises(PreregNotFrozenError, match="not frozen yet"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000)
+
+
+def test_a_freeze_made_inside_a_merge_commit_is_recognised_as_the_freeze(tmp_path):
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    _commit_prereg(repo, recipe=RECIPE, prediction=PREDICTION, at=1_000)
+    main = _git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    _side_branch_commit(repo, "x", main, at=1_010)
+    (repo / "m.txt").write_text("m")
+    _commit(repo, "m1", at=1_020)
+    _evil_merge(
+        repo, "x", at=1_100, edit=lambda: (repo / "prereg" / "FREEZE").write_text("Frozen.\n")
+    )
+    merge_sha = _git(repo, "rev-parse", "HEAD").strip()
+    assert check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000) == merge_sha
+
+
+def test_a_root_commit_freeze_is_found_even_if_log_hides_root_diffs(tmp_path):
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    _git(repo, "config", "log.showRoot", "false")
+    _write_prereg(repo, recipe=RECIPE, prediction=PREDICTION)
+    (repo / "prereg" / "FREEZE").write_text("Frozen at the root.\n")
+    _commit(repo, "all at once", at=1_000_000)
+    sha = _git(repo, "rev-parse", "HEAD").strip()
+    assert check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000) == sha
+
+
+def _corrupt_commit_graph_parent(repo, child, new_parent):
+    """Rewrite `child`'s first parent inside .git/objects/info/commit-graph —
+    changing what git reports as history without touching any commit or ref."""
+    _git(repo, "commit-graph", "write", "--reachable")
+    graph = repo / ".git" / "objects" / "info" / "commit-graph"
+    data = bytearray(graph.read_bytes())
+    n_chunks = data[6]
+    table = {}
+    offset = 8
+    for _ in range(n_chunks + 1):
+        table[bytes(data[offset : offset + 4])] = struct.unpack(">Q", data[offset + 4 : offset + 12])[0]
+        offset += 12
+    count = struct.unpack(">256I", data[table[b"OIDF"] : table[b"OIDF"] + 1024])[255]
+    oids = [data[table[b"OIDL"] + 20 * i : table[b"OIDL"] + 20 * i + 20].hex() for i in range(count)]
+    position = table[b"CDAT"] + 36 * oids.index(child) + 20
+    data[position : position + 4] = struct.pack(">I", oids.index(new_parent))
+    graph.write_bytes(bytes(data))
+
+
+def test_a_tampered_commit_graph_cannot_rewrite_parentage(tmp_path):
+    """Same class as grafts and replace refs: a binary cache git trusts over
+    the commits themselves. history shows freeze1, unfreeze+tune, freeze2; the
+    tampered graph says freeze2's parent is the base commit."""
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    _commit_prereg(repo, recipe=RECIPE, prediction=PREDICTION, at=1_000)
+    base = _git(repo, "rev-parse", "HEAD").strip()
+    (repo / "prereg" / "FREEZE").write_text("v1\n")
+    _commit(repo, "freeze1", at=1_100)
+    _git(repo, "rm", "-q", "prereg/FREEZE")
+    (repo / "prereg" / "recipe.md").write_text(RECIPE.replace("0.05", "0.09"))
+    _commit(repo, "unfreeze and tune", at=1_500)
+    (repo / "prereg" / "FREEZE").write_text("v2\n")
+    _commit(repo, "freeze2", at=1_600)
+    freeze2 = _git(repo, "rev-parse", "HEAD").strip()
+    _corrupt_commit_graph_parent(repo, freeze2, base)
+    # the lie is in place: plain `git log` now skips the unfreeze-and-tune
+    assert _git(repo, "log", "--format=%s").splitlines() == ["freeze2", "prereg"]
+    with pytest.raises(PreregRefrozenError):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000)
+
+
+def test_a_forged_object_whose_bytes_do_not_match_its_name_is_refused(tmp_path):
+    """`git show` serves whatever bytes a loose object file holds; overwrite
+    the frozen recipe's object with the tuned recipe's bytes and every
+    comparison looks clean. fsck notices the hash-path mismatch."""
+    repo, freeze_sha = _frozen_repo(tmp_path)
+    tuned = RECIPE.replace("0.05", "0.09")
+    (repo / "prereg" / "recipe.md").write_text(tuned)
+    _commit(repo, "tune", at=1_500_000)
+    blob = _git(repo, "rev-parse", f"{freeze_sha}:prereg/recipe.md").strip()
+    obj = repo / ".git" / "objects" / blob[:2] / blob[2:]
+    obj.chmod(0o644)
+    body = tuned.encode()
+    obj.write_bytes(zlib.compress(b"blob %d\x00" % len(body) + body))
+    assert _git(repo, "show", f"{freeze_sha}:prereg/recipe.md") == tuned  # the forgery works
+    with pytest.raises(PreregHistoryError, match="fsck"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)
+
+
+def test_repo_config_cannot_make_the_check_execute_commands(tmp_path):
+    """The repository's own config is under the author's control. An fsmonitor
+    hook or a clean filter would run on `git status`; the check must not
+    execute either."""
+    repo, _ = _frozen_repo(tmp_path)
+    marker = tmp_path / "ran-fsmonitor"
+    hook = tmp_path / "hook.sh"
+    hook.write_text(f"#!/bin/sh\ntouch {marker}\nexit 1\n")
+    hook.chmod(0o755)
+    _git(repo, "config", "core.fsmonitor", str(hook))
+    filter_marker = tmp_path / "ran-filter"
+    _git(repo, "config", "filter.evil.clean", f"sh -c 'touch {filter_marker}; cat'")
+    (repo / ".git" / "info").mkdir(exist_ok=True)
+    (repo / ".git" / "info" / "attributes").write_text("prereg/* filter=evil\n")
+    # touch a file's mtime so git would have reason to re-hash it
+    path = repo / "prereg" / "recipe.md"
+    path.write_bytes(path.read_bytes())
+    check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)
+    assert not marker.exists(), "core.fsmonitor was executed"
+    assert not filter_marker.exists(), "a clean filter was executed"
+
+
+def test_signature_display_config_does_not_corrupt_the_timestamp_or_history(tmp_path):
+    repo, freeze_sha = _frozen_repo(tmp_path)
+    _git(repo, "config", "log.showSignature", "true")
+    assert check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000) == freeze_sha
+
+
+def test_a_working_tree_symlink_standing_in_for_a_frozen_file_is_refused(tmp_path):
+    # The symlink points at a file holding EXACTLY the frozen bytes, so only
+    # the symlink check — not the byte comparison — can refuse it. Its target
+    # could be changed after certification and the judge would read the new
+    # bytes.
+    repo, _ = _frozen_repo(tmp_path)
+    path = repo / "prereg" / "thresholds.json"
+    twin = tmp_path / "outside-copy.json"
+    twin.write_bytes(path.read_bytes())
+    path.unlink()
+    path.symlink_to(twin)
+    with pytest.raises(PreregNotCommittedError, match="symlink"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)
+
+
+@pytest.mark.parametrize("edit", [lambda b: b + b" ", lambda b: b" " + b, lambda b: b + b"\n"])
+def test_a_whitespace_only_uncommitted_edit_is_reported_as_uncommitted(tmp_path, edit):
+    repo, _ = _frozen_repo(tmp_path)
+    path = repo / "prereg" / "recipe.md"
+    path.write_bytes(edit(path.read_bytes()))
+    with pytest.raises(PreregNotCommittedError, match="uncommitted"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)
+
+
+def test_an_uncommitted_crlf_checkout_is_reported_as_a_line_ending_difference(tmp_path):
+    # What a Windows checkout with core.autocrlf=true looks like to us: the
+    # working copy is the committed text with CRLF line endings.
+    repo, _ = _frozen_repo(tmp_path)
+    path = repo / "prereg" / "recipe.md"
+    path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n"))
+    with pytest.raises(PreregLineEndingError, match="autocrlf"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)
+
+
+def test_a_commit_time_git_cannot_parse_is_a_prereg_error(tmp_path, monkeypatch):
+    # `_git` is this module's wrapper around the external git process — the
+    # boundary — so faking its answer here is mocking the edge, not owned logic.
+    from wmj.harness import prereg
+
+    real = prereg._git
+
+    def fake(repo, *args, **kwargs):
+        if args[:2] == ("show", "-s"):
+            return "No signature\n1791042387\n"
+        return real(repo, *args, **kwargs)
+
+    repo, _ = _frozen_repo(tmp_path)
+    monkeypatch.setattr(prereg, "_git", fake)
+    with pytest.raises(PreregError, match="committer time"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)
+
+
+def test_a_file_that_is_in_the_working_tree_but_not_at_head_is_refused(tmp_path):
+    # Deleted in a later commit, then quietly re-created, untracked, with the
+    # frozen bytes: not committed, so not certified.
+    repo, _ = _frozen_repo(tmp_path)
+    path = repo / "prereg" / "thresholds.json"
+    frozen = path.read_bytes()
+    _git(repo, "rm", "-q", "prereg/thresholds.json")
+    _commit(repo, "delete", at=1_500_000)
+    path.write_bytes(frozen)
+    with pytest.raises(PreregNotCommittedError, match="HEAD"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)
 
 
 # --- independent review: the comparison is byte-exact (TC-MU6-04) ---
