@@ -626,3 +626,34 @@ def test_predict_returns_arrays_that_do_not_alias_the_batch_buffers(model, data)
     p = model.predict(data.heldout_pairs.state[0], data.heldout_pairs.action[0])
     for array in (p.mean, p.spread):
         assert array.base is None or not array.base.flags.writeable
+
+
+# --- independent review, P3-C03 pass 5: the push must reach the network ---
+
+
+def test_the_action_is_used_and_not_dropped_negated_or_scaled(model, trained_net):
+    """An action-blind Model A is exactly what the project exists to catch: with explicit
+    non-zero actions the prediction must equal the network's output on the true inputs, and
+    different actions must give different predictions."""
+    ctx = _ctx()
+    s = np.array([[3.0, 2.0], [3.0, 2.0], [4.5, 2.0], [3.0, 2.0]])
+    a = np.array([[0.09], [-0.09], [0.06], [0.0]])
+    out = trained_net.forward_invariant(normalise_inputs(ctx, s, a))
+    means, spreads = model.predict_batch(s, a)
+    assert np.array_equal(means, s + out[:, :2])
+    assert np.array_equal(spreads, np.exp(out[:, 2:]))
+    assert not np.array_equal(means[0], means[1])  # +0.09 and -0.09 differ
+    assert not np.array_equal(means[0], means[3])  # a push differs from no push
+    for i in range(4):
+        p = model.predict(s[i], a[i])
+        assert np.array_equal(p.mean, means[i]) and np.array_equal(p.spread, spreads[i])
+    # and a halved / negated / zeroed action would give a different network input
+    half = normalise_inputs(ctx, s, a * 0.5)
+    assert not np.array_equal(half, normalise_inputs(ctx, s, a))
+
+
+def test_the_error_classes_are_wmj_errors():
+    from wmj.errors import WmjError
+    from wmj.harness.sufficiency import SufficiencyError
+
+    assert issubclass(DirectTrainingError, WmjError) and issubclass(SufficiencyError, WmjError)

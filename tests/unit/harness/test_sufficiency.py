@@ -373,3 +373,40 @@ def test_the_default_tolerance_equals_the_frozen_recipes_sufficiency_tolerance()
     text = (Path(__file__).resolve().parents[3] / "prereg" / "recipe.md").read_text()
     found = re.findall(r"^sufficiency_tolerance:[ \t]*([^#\s]*)", text, re.MULTILINE)
     assert len(found) == 1 and float(found[0]) == sufficiency.SUFFICIENCY_TOLERANCE
+
+
+# --- independent review, P3-C03 pass 5 ---
+
+
+def test_the_fallback_value_returned_is_the_one_passed_not_a_multiple_of_m():
+    assert decide_subsample_pairs(50000, 75000, [True, False]) == 75000
+    assert decide_subsample_pairs(40000, 100000, [False]) == 100000
+    assert decide_subsample_pairs(40000, 100000, [True]) == 40000
+
+
+def test_the_default_tolerance_threshold_is_exactly_ten_percent_not_nearby():
+    # error ratios 1.099 and 1.101 straddle the recipe's 10%
+    inside = check_world("lv", lv.WORLD, _bias_by_size(0.01 * 1.099**0.5, 0.01), KICKED, SEED, "x", horizon=100)
+    outside = check_world("lv", lv.WORLD, _bias_by_size(0.01 * 1.101**0.5, 0.01), KICKED, SEED, "x", horizon=100)
+    assert inside.sufficient is True and outside.sufficient is False
+
+
+def test_check_world_on_the_pendulum_hands_the_factory_the_pendulums_context():
+    from wmj.worlds import pendulum
+
+    recipe = TrainingRecipe(
+        training_trajectories=300, subsample_pairs=1000, kick_pairs=40, heldout_pairs=300,
+        gradcheck_pairs=16,
+    )
+    seen = []
+
+    def factory(ctx, seeds, data):
+        seen.append((ctx.world_name, ctx.state_dim))
+        return _PendulumBiased()
+
+    class _PendulumBiased:
+        def predict_batch(self, states, actions):
+            return pendulum.transition_batch(states, actions), np.ones_like(states)
+
+    check_world("pendulum", pendulum.WORLD, factory, recipe, SEED, "x", horizon=300)
+    assert seen == [("pendulum", 4), ("pendulum", 4)]
