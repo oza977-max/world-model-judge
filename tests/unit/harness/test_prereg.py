@@ -28,6 +28,8 @@ from wmj.harness.prereg import (
     PreregContentError,
     PreregEntryMissingError,
     PreregError,
+    PreregHistoryError,
+    PreregLineEndingError,
     PreregNotCommittedError,
     PreregNotFrozenError,
     PreregOrderingError,
@@ -62,6 +64,7 @@ def _init_repo(repo):
     _git(repo, "init", "-q")
     _git(repo, "config", "user.email", "t@example.com")
     _git(repo, "config", "user.name", "t")
+    _git(repo, "config", "core.autocrlf", "false")  # raw bytes, whatever the machine default
 
 
 def _commit(repo, message, *, at):
@@ -379,10 +382,198 @@ def test_hyphenated_model_name_is_recognised_as_a_whole_token(tmp_path):
     check_prereg(repo, PREREG_FILES, [_Model("deep-direct")], run_timestamp=2_000_000)
 
 
-def test_requires_recipe_and_prediction_among_certified_files(tmp_path):
+def test_the_certified_set_is_fixed_and_does_not_depend_on_the_callers_list(tmp_path):
+    """A caller that forgets thresholds.json (the most important judged-
+    against content) must not get a certificate for tuned thresholds
+    (independent review, P3-C10 pass 1)."""
     repo, _ = _frozen_repo(tmp_path)
-    with pytest.raises(PreregError):
-        check_prereg(repo, ["thresholds.json"], [_Model("direct")], run_timestamp=2_000_000)
+    (repo / "prereg" / "thresholds.json").write_text('{"tuned": true}')
+    _commit(repo, "tune thresholds", at=1_500_000)
+    for files in (PREREG_FILES, ["recipe.md", "prediction.md"], [], ["thresholds.json"]):
+        with pytest.raises(PreregContentError, match="thresholds.json"):
+            check_prereg(repo, files, MODELS, run_timestamp=2_000_000)
+
+
+@pytest.mark.parametrize("bad", ["../x", "/etc/passwd", "sub/recipe.md", ""])
+def test_extra_file_names_must_be_plain_names_inside_prereg(tmp_path, bad):
+    repo, _ = _frozen_repo(tmp_path)
+    with pytest.raises(PreregError, match="plain file name"):
+        check_prereg(repo, [*PREREG_FILES, bad], MODELS, run_timestamp=2_000_000)
+
+
+# --- independent review, P3-C10 pass 1: git history must be trustworthy ---
+
+
+def test_a_shallow_clone_is_refused_not_certified(tmp_path):
+    """A shallow clone shows its boundary commit as having ADDED every file,
+    so a tuned file is compared with itself and passes. Repro: freeze, then
+    an honestly-dated tune, then `git clone --depth=1`."""
+    repo, _ = _frozen_repo(tmp_path)
+    (repo / "prereg" / "thresholds.json").write_text('{"tuned": true}')
+    _commit(repo, "tune", at=1_500_000)
+    clone = tmp_path / "clone"
+    subprocess.run(
+        ["git", "clone", "-q", "--depth=1", f"file://{repo}", str(clone)], check=True,
+        capture_output=True,
+    )
+    with pytest.raises(PreregHistoryError, match="shallow"):
+        check_prereg(clone, PREREG_FILES, MODELS, run_timestamp=2_000_000)
+
+
+def test_a_replace_ref_cannot_make_history_say_the_tuned_tree_was_frozen(tmp_path):
+    """`git replace <freeze> <tuned-commit>` is local, never pushed, and
+    leaves every sha valid in the public repo — yet makes `git show` serve
+    tuned bytes for the freeze. Every git call must ignore replace refs."""
+    repo, freeze_sha = _frozen_repo(tmp_path)
+    (repo / "prereg" / "thresholds.json").write_text('{"tuned": true}')
+    _commit(repo, "tune", at=1_500_000)
+    tuned = _git(repo, "rev-parse", "HEAD").strip()
+    _git(repo, "replace", freeze_sha, tuned)
+    with pytest.raises(PreregContentError, match="thresholds.json"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)
+
+
+def test_a_grafts_file_is_refused(tmp_path):
+    """`.git/info/grafts` rewrites parentage without touching any commit.
+    Executed: git 2.43 still honours it and `--no-replace-objects` does not
+    stop it, so the file's mere presence is refused."""
+    repo, _ = _frozen_repo(tmp_path)
+    head = _git(repo, "rev-parse", "HEAD").strip()
+    (repo / ".git" / "info").mkdir(exist_ok=True)
+    (repo / ".git" / "info" / "grafts").write_text(f"{head}\n")
+    with pytest.raises(PreregHistoryError, match="grafts"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)
+
+
+def test_a_log_follow_setting_cannot_hide_a_rename_away_and_back(tmp_path):
+    repo, _ = _frozen_repo(tmp_path)
+    _git(repo, "config", "log.follow", "true")
+    _git(repo, "mv", "prereg/FREEZE", "prereg/FREEZE.old")
+    _commit(repo, "move away", at=1_200_000)
+    _git(repo, "mv", "prereg/FREEZE.old", "prereg/FREEZE")
+    _commit(repo, "move back", at=1_300_000)
+    with pytest.raises(PreregRefrozenError):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)
+
+
+def test_ambient_git_dir_cannot_redirect_the_check_to_another_repository(tmp_path, monkeypatch):
+    """A caller inside a git hook has GIT_DIR set; the check must still read
+    the repository it was given."""
+    repo, freeze_sha = _frozen_repo(tmp_path)
+    other = tmp_path / "other"
+    _init_repo(other)
+    monkeypatch.setenv("GIT_DIR", str(other / ".git"))
+    monkeypatch.setenv("GIT_WORK_TREE", str(other))
+    assert check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000) == freeze_sha
+
+
+def test_the_repo_argument_must_be_the_top_level_of_the_repository(tmp_path):
+    repo, _ = _frozen_repo(tmp_path)
+    with pytest.raises(PreregError, match="top level"):
+        check_prereg(repo / "prereg", PREREG_FILES, MODELS, run_timestamp=2_000_000)
+
+
+# --- independent review: the comparison is byte-exact (TC-MU6-04) ---
+
+
+@pytest.mark.parametrize(
+    ("label", "tamper"),
+    [
+        ("trailing space", lambda b: b.rstrip(b"\n") + b" \n"),
+        ("extra trailing newline", lambda b: b + b"\n"),
+        ("byte-order mark", lambda b: b"\xef\xbb\xbf" + b),
+        ("leading blank line", lambda b: b"\n" + b),
+    ],
+)
+def test_tc_mu6_04_any_committed_byte_change_is_refused(tmp_path, label, tamper):
+    repo, _ = _frozen_repo(tmp_path)
+    path = repo / "prereg" / "recipe.md"
+    path.write_bytes(tamper(path.read_bytes()))
+    _commit(repo, label, at=1_500_000)
+    with pytest.raises(PreregContentError):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)
+
+
+def test_a_line_ending_only_change_is_refused_with_a_message_that_says_so(tmp_path):
+    # What a Windows checkout with core.autocrlf=true looks like: the bytes
+    # differ only by CRLF. It must fail closed, but say WHY rather than
+    # look like tampering.
+    repo, _ = _frozen_repo(tmp_path)
+    path = repo / "prereg" / "recipe.md"
+    path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n"))
+    _commit(repo, "crlf", at=1_500_000)
+    with pytest.raises(PreregLineEndingError, match="autocrlf"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)
+
+
+def test_the_repo_pins_prereg_files_to_raw_bytes_for_every_checkout():
+    root = Path(__file__).resolve().parents[3]
+    attributes = (root / ".gitattributes").read_text(encoding="utf-8")
+    assert "prereg/* -text" in attributes.splitlines()
+
+
+def test_a_certified_file_deleted_in_a_later_commit_is_refused(tmp_path):
+    repo, _ = _frozen_repo(tmp_path)
+    _git(repo, "rm", "-q", "prereg/thresholds.json")
+    _commit(repo, "delete thresholds", at=1_500_000)
+    with pytest.raises(PreregNotCommittedError, match="no working-tree copy"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)
+
+
+# --- independent review: timestamps and entry-check inputs ---
+
+
+@pytest.mark.parametrize("bad", [float("nan"), 2_000_000.5, True, None, "2000000"])
+def test_the_run_timestamp_must_be_a_plain_integer(tmp_path, bad):
+    repo, _ = _frozen_repo(tmp_path)
+    with pytest.raises(PreregError, match="run_timestamp"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=bad)
+
+
+def test_the_committer_date_not_the_author_date_is_what_is_timed(tmp_path):
+    # ADR-M5 times the freeze by the commit's committer date. A freeze
+    # authored long ago but committed after the run must not pass.
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    _commit_prereg(repo, recipe=RECIPE, prediction=PREDICTION, at=1_000_000)
+    (repo / "prereg" / "FREEZE").write_text("Frozen.\n")
+    _git(repo, "add", "-A")
+    env = {**os.environ, "GIT_AUTHOR_DATE": "@100 +0000", "GIT_COMMITTER_DATE": "@3000000 +0000"}
+    subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "freeze"], check=True,
+                   capture_output=True, env=env)
+    with pytest.raises(PreregOrderingError):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)
+
+
+def test_a_model_must_be_named_in_both_the_recipe_and_the_prediction(tmp_path):
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    _commit_prereg(
+        repo, recipe=RECIPE + "recipe-only-model is declared here.\n",
+        prediction=PREDICTION + "prediction-only-model is predicted here.\n", at=1_000_000,
+    )
+    _freeze(repo, at=1_100_000)
+    for name in ("recipe-only-model", "prediction-only-model"):
+        with pytest.raises(PreregEntryMissingError):
+            check_prereg(repo, PREREG_FILES, [_Model(name)], run_timestamp=2_000_000)
+
+
+def test_a_blank_model_name_is_refused_not_vacuously_accepted(tmp_path):
+    repo, _ = _frozen_repo(tmp_path)
+    for name in ("", "  "):
+        with pytest.raises(PreregEntryMissingError, match="blank"):
+            check_prereg(repo, PREREG_FILES, [_Model(name)], run_timestamp=2_000_000)
+
+
+def test_a_recipe_that_is_not_utf8_is_a_prereg_error_not_a_decode_crash(tmp_path):
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    _write_prereg(repo, recipe="", prediction=PREDICTION)
+    (repo / "prereg" / "recipe.md").write_bytes(b"\xff\xfe not utf-8 \xff")
+    _commit(repo, "prereg", at=1_000_000)
+    _freeze(repo, at=1_100_000)
+    with pytest.raises(PreregError, match="UTF-8"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)
 
 
 # --- TC-MU6-09: the frozen recipe pins the worlds' kick settings ---
@@ -416,6 +607,60 @@ def test_tc_mu6_09_a_missing_key_is_refused_not_ignored():
     )
     with pytest.raises(PreregWorldConstantError, match="lv_action_max"):
         check_recipe_world_constants(without)
+
+
+def test_tc_mu6_09_a_later_conflicting_duplicate_is_refused():
+    with pytest.raises(PreregWorldConstantError, match="more than once"):
+        check_recipe_world_constants(RECIPE + "lv_kick_rate_per_s: 0.9\n")
+
+
+def test_tc_mu6_09_a_near_miss_value_is_refused_exactly():
+    with pytest.raises(PreregWorldConstantError, match="lv_action_max"):
+        check_recipe_world_constants(RECIPE.replace("lv_action_max: 0.1", "lv_action_max: 0.1000001"))
+
+
+@pytest.mark.parametrize("value", ["nan", "inf", "1_0e-1", "０.５", "0x1", "."])
+def test_tc_mu6_09_only_plain_decimal_numbers_are_accepted(value):
+    with pytest.raises(PreregWorldConstantError):
+        check_recipe_world_constants(RECIPE.replace("lv_kick_rate_per_s: 0.5", f"lv_kick_rate_per_s: {value}"))
+
+
+@pytest.mark.parametrize("value", ["0.5", ".5", "5e-1", "0.50"])
+def test_tc_mu6_09_equivalent_plain_decimal_spellings_are_accepted(value):
+    check_recipe_world_constants(RECIPE.replace("lv_kick_rate_per_s: 0.5", f"lv_kick_rate_per_s: {value}"))
+
+
+@pytest.mark.parametrize(
+    "decoy",
+    ["  lv_kick_rate_per_s: 0.5", "> lv_kick_rate_per_s: 0.5", "see lv_kick_rate_per_s: 0.5"],
+)
+def test_tc_mu6_09_only_a_line_that_starts_with_the_key_counts(decoy):
+    without = "\n".join(
+        line for line in RECIPE.splitlines() if not line.startswith("lv_kick_rate_per_s")
+    )
+    with pytest.raises(PreregWorldConstantError, match="lv_kick_rate_per_s"):
+        check_recipe_world_constants(without + "\n" + decoy + "\n")
+
+
+def test_tc_mu6_09_a_value_on_the_next_line_does_not_count():
+    with pytest.raises(PreregWorldConstantError, match="lv_kick_rate_per_s"):
+        check_recipe_world_constants(RECIPE.replace("lv_kick_rate_per_s: 0.5", "lv_kick_rate_per_s:\n0.5"))
+
+
+@pytest.mark.parametrize("world", ["lv", "pendulum"])
+def test_tc_mu6_09_each_key_is_compared_with_its_own_constant(monkeypatch, world):
+    # The two real values coincide for the pendulum (1.0 and 1.0), so give
+    # each constant a distinct value and check the right one is used.
+    from wmj.worlds import lv, pendulum
+
+    module = {"lv": lv, "pendulum": pendulum}[world]
+    monkeypatch.setattr(module, "KICK_RATE_PER_S", 7.0)
+    monkeypatch.setattr(module, "TRAINED_ACTION_MAX", 3.0)
+    recipe = RECIPE.replace(f"{world}_kick_rate_per_s: {1.0 if world == 'pendulum' else 0.5}",
+                            f"{world}_kick_rate_per_s: 7.0")
+    recipe = recipe.replace(f"{world}_action_max: {1.0 if world == 'pendulum' else 0.1}",
+                            f"{world}_action_max: 3.0")
+    check_recipe_world_constants(recipe)
 
 
 def test_tc_mu6_09_comments_after_a_value_are_ignored():

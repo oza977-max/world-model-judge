@@ -21,10 +21,24 @@ The rules (models ADR-M5, design-review-010):
      a rename away and back, and a freeze added and removed on a side branch
      that was merged away (which plain `git log` hides — hence `--full-history`)
      are all refused. No `FREEZE` at all means "not frozen yet" (TC-MU6-08).
-  3. **Every certified file — `recipe.md`, `prediction.md`, `thresholds.json`
-     and `FREEZE` itself — must exist at the freeze commit, be clean in the
-     working tree, and hash byte-equal to its blob at the freeze commit**
-     (TC-MU6-04).
+  3. **Every certified file must exist at the freeze commit, be clean in the
+     working tree, and be byte-equal to its blob at the freeze commit**
+     (TC-MU6-04). The certified set is fixed — `recipe.md`, `prediction.md`,
+     `thresholds.json` and `FREEZE` itself — whatever list the caller passes;
+     `files` can only add to it. (A caller that forgot `thresholds.json`, the
+     most important judged-against content, would otherwise get a
+     certificate for tuned thresholds.) The comparison is raw bytes: a
+     trailing space, a byte-order mark or CRLF line endings all count. A
+     CRLF-only difference raises `PreregLineEndingError`, which says so
+     (the repo's `.gitattributes` pins `prereg/* -text` so a Windows
+     checkout does not trigger it).
+  3a. **The git history itself must be trustworthy.** A shallow clone shows
+     its boundary commit as having *added* every file (so a tuned file is
+     compared with itself); a `.git/info/grafts` file or a `git replace` ref
+     rewrites what history says without touching any commit and without
+     being pushed. Every git call here ignores replace refs and ambient
+     `GIT_*` settings, and a shallow repository or a grafts file is refused
+     (`PreregHistoryError`). `repo` must be the repository's top level.
   4. **The freeze commit's timestamp must strictly precede the run**
      (TC-MU6-01).
   5. For every *unrigged* model (`not is_baseline and not is_fixture`): its
@@ -61,7 +75,7 @@ here fully closes them, so they are disclosed rather than pretended away:
 
 from __future__ import annotations
 
-import hashlib
+import numbers
 import os
 import re
 import subprocess
@@ -72,11 +86,8 @@ from wmj.errors import WmjError
 
 PREREG_DIR = "prereg"
 FREEZE_FILE = "FREEZE"
-
-# The files whose committed content the per-model entry check reads — they
-# MUST be among the certified files so that content is commit-verified, not
-# read unguarded from the working tree.
-_ENTRY_FILES = ("recipe.md", "prediction.md")
+# The fixed set that is locked, whatever list a caller passes (see rule 3).
+CERTIFIED_FILES = ("recipe.md", "prediction.md", "thresholds.json", FREEZE_FILE)
 
 
 class PreregError(WmjError):
@@ -91,6 +102,10 @@ class PreregNotFrozenError(PreregError):
     """There is no freeze yet, or a certified file was never part of it."""
 
 
+class PreregHistoryError(PreregError):
+    """Git history cannot be trusted: a shallow clone or a grafts file."""
+
+
 class PreregRefrozenError(PreregError):
     """`prereg/FREEZE` was added more than once, or ever deleted (TC-MU6-06)."""
 
@@ -101,6 +116,10 @@ class PreregOrderingError(PreregError):
 
 class PreregContentError(PreregError):
     """A frozen prereg/ file's content differs from its blob at the freeze commit."""
+
+
+class PreregLineEndingError(PreregContentError):
+    """A frozen file differs from its blob only in line endings (CRLF vs LF)."""
 
 
 class PreregWorldConstantError(PreregError):
@@ -117,6 +136,33 @@ class _Classified(Protocol):
     is_fixture: bool
 
 
+def _git_env() -> dict[str, str]:
+    """The environment every git call runs in.
+
+    Every ambient `GIT_*` variable is dropped (a caller inside a git hook has
+    `GIT_DIR` set and would otherwise read a different repository; others can
+    inject config), user and system config are switched off, and replace refs
+    are ignored — a local `git replace` could otherwise make `git show` serve
+    different bytes for the freeze commit than the public history holds.
+    """
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env.update(
+        {
+            "GIT_NO_REPLACE_OBJECTS": "1",
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_OPTIONAL_LOCKS": "0",
+        }
+    )
+    return env
+
+
+def _git_argv(repo: Path, *args: str) -> list[str]:
+    # log.follow=false: a user's `git config log.follow true` would turn a
+    # rename-away-and-back into a single history and hide the second add.
+    return ["git", "-C", str(repo), "-c", "log.follow=false", *args]
+
+
 def _git(repo: Path, *args: str) -> str:
     """Run `git -C repo <args>` and return stdout (text).
 
@@ -126,11 +172,11 @@ def _git(repo: Path, *args: str) -> str:
     failed and which gate caught it)."""
     try:
         result = subprocess.run(
-            ["git", "-C", str(repo), *args],
+            _git_argv(repo, *args),
             check=True,
             capture_output=True,
             text=True,
-            env={**os.environ},
+            env=_git_env(),
         )
     except FileNotFoundError as exc:
         raise PreregError(
@@ -146,16 +192,55 @@ def _git(repo: Path, *args: str) -> str:
     return result.stdout
 
 
+def _require_trustworthy_history(repo: Path) -> None:
+    """Refuse a repository whose history git itself cannot vouch for."""
+    top = _git(repo, "rev-parse", "--show-toplevel").strip()
+    if os.path.realpath(top) != os.path.realpath(repo):
+        raise PreregError(
+            f"{repo} is not the top level of its git repository ({top}) — `check_prereg` "
+            f"must be given the repository's top level, because history paths and file "
+            f"paths are resolved from different roots otherwise"
+        )
+    if _git(repo, "rev-parse", "--is-shallow-repository").strip() == "true":
+        raise PreregHistoryError(
+            "this is a shallow clone — git shows its boundary commit as having added "
+            "every file, so a changed file would be compared with itself; fetch the full "
+            "history before certifying the pre-registration (models ADR-M5)"
+        )
+    grafts = Path(_git(repo, "rev-parse", "--git-path", "info/grafts").strip())
+    if not grafts.is_absolute():
+        grafts = repo / grafts
+    if grafts.exists():
+        raise PreregHistoryError(
+            f"{grafts} exists — a grafts file rewrites what history says without "
+            f"changing any commit, so the pre-registration cannot be certified "
+            f"against it (models ADR-M5)"
+        )
+
+
 def _commit_lines(repo: Path, diff_filter: str, relpath: str) -> list[str]:
-    """Commits that added (`A`) or deleted (`D`) exactly `relpath`, any branch.
+    """Commits that added (`A`) or deleted (`D`) exactly `relpath`, among all
+    commits reachable from HEAD (any branch that was merged in).
 
     `--full-history` is load-bearing: without it, git's history
     simplification can hide an add or delete made on a side branch whose
-    merge resolved the file away (executed, design-review-010). No
-    `--follow`: a rename shows as a delete plus an add at the path.
+    merge resolved the file away (executed, design-review-010).
+    `log.follow=false` (set for every call in `_git_argv`) is what stops a
+    user's config turning a rename-away-and-back into one history.
+    `--no-renames` is belt and braces: executed with `diff.renames` set to
+    each of true, false and copies, and with a tiny `diff.renameLimit`, it
+    changed no count — git cannot pair renames while limited to one path —
+    so no test can distinguish it.
     """
     out = _git(
-        repo, "log", "--full-history", f"--diff-filter={diff_filter}", "--format=%H", "--", relpath
+        repo,
+        "log",
+        "--full-history",
+        "--no-renames",
+        f"--diff-filter={diff_filter}",
+        "--format=%H",
+        "--",
+        relpath,
     )
     return [line for line in out.splitlines() if line.strip()]
 
@@ -168,6 +253,7 @@ def freeze_commit(repo: Path) -> str:
     (models ADR-M5, TC-MU6-06/-08).
     """
     repo = Path(repo)
+    _require_trustworthy_history(repo)
     relpath = f"{PREREG_DIR}/{FREEZE_FILE}"
     adds = _commit_lines(repo, "A", relpath)
     deletes = _commit_lines(repo, "D", relpath)
@@ -190,10 +276,10 @@ def _exists_at(repo: Path, sha: str, relpath: str) -> bool:
     """True iff `relpath` is part of the tree at commit `sha`."""
     try:
         result = subprocess.run(
-            ["git", "-C", str(repo), "cat-file", "-e", f"{sha}:{relpath}"],
+            _git_argv(repo, "cat-file", "-e", f"{sha}:{relpath}"),
             check=False,
             capture_output=True,
-            env={**os.environ},
+            env=_git_env(),
         )
     except FileNotFoundError as exc:
         raise PreregError(
@@ -211,10 +297,10 @@ def _blob_at(repo: Path, sha: str, relpath: str) -> bytes:
     """The bytes of `relpath` as it stood at commit `sha` (wrapped errors)."""
     try:
         result = subprocess.run(
-            ["git", "-C", str(repo), "show", f"{sha}:{relpath}"],
+            _git_argv(repo, "show", f"{sha}:{relpath}"),
             check=True,
             capture_output=True,
-            env={**os.environ},
+            env=_git_env(),
         )
     except FileNotFoundError as exc:
         raise PreregError(
@@ -254,6 +340,9 @@ _WORLD_KEYS = (
 )
 
 
+_PLAIN_DECIMAL = re.compile(r"[-+]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][-+]?[0-9]+)?")
+
+
 def check_recipe_world_constants(recipe_text: str) -> None:
     """Raise unless the recipe's four kick keys equal the worlds' constants.
 
@@ -261,24 +350,32 @@ def check_recipe_world_constants(recipe_text: str) -> None:
     kicked; the worlds say the same thing in code. Once the recipe is frozen
     the two must agree exactly, so nobody can change a kick setting in code
     after the lock and have the frozen recipe quietly describe something else
-    (TC-MU6-09). A missing key is refused, not skipped.
+    (TC-MU6-09). Each key must appear exactly once, at the start of a line,
+    with a plain decimal number; a missing, repeated, indented or
+    oddly-spelled key is refused, not skipped.
     """
     from wmj.worlds import lv, pendulum  # harness may import worlds; kept local
 
     modules = {"lv": lv, "pendulum": pendulum}
     for key, world, attribute in _WORLD_KEYS:
-        match = re.search(rf"^{re.escape(key)}:\s*([^#\s]+)", recipe_text, re.MULTILINE)
-        if match is None:
+        found = re.findall(rf"^{re.escape(key)}:[ \t]*([^#\s]*)", recipe_text, re.MULTILINE)
+        if not found:
             raise PreregWorldConstantError(
                 f"the recipe has no '{key}:' line — the worlds' kick settings must be "
-                f"pinned in the frozen recipe (TC-MU6-09)"
+                f"pinned in the frozen recipe, one per line, starting at the left margin "
+                f"(TC-MU6-09)"
             )
-        try:
-            recipe_value = float(match.group(1))
-        except ValueError as exc:
+        if len(found) > 1:
             raise PreregWorldConstantError(
-                f"the recipe's '{key}:' value {match.group(1)!r} is not a number (TC-MU6-09)"
-            ) from exc
+                f"the recipe pins '{key}' more than once ({found}) — a later line could "
+                f"disagree with the one that was checked (TC-MU6-09)"
+            )
+        if not _PLAIN_DECIMAL.fullmatch(found[0]):
+            raise PreregWorldConstantError(
+                f"the recipe's '{key}:' value {found[0]!r} is not a plain decimal number "
+                f"(TC-MU6-09)"
+            )
+        recipe_value = float(found[0])
         world_value = getattr(modules[world], attribute)
         if recipe_value != world_value:
             raise PreregWorldConstantError(
@@ -286,6 +383,15 @@ def check_recipe_world_constants(recipe_text: str) -> None:
                 f"is {world_value!r} — the frozen recipe and the code must agree "
                 f"(TC-MU6-09)"
             )
+
+
+def _read_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise PreregError(
+            f"{path} is not valid UTF-8 text — the per-model entry check cannot read it"
+        ) from exc
 
 
 def check_prereg(
@@ -302,25 +408,24 @@ def check_prereg(
     commit that added `prereg/FREEZE` — recorded in the verdict metadata so a
     later after-the-fact edit is detectable (TC-MU6-07, TC-JU11-02).
     """
-    repo = Path(repo)
-    files = list(files)
-
-    # The per-model entry check (below) reads recipe.md/prediction.md; that is
-    # only safe if those files went through the certification in this same
-    # loop. Require them in `files` so a caller that certifies only (say)
-    # thresholds cannot have the entry check trust unverified text.
-    missing_entry_files = [f for f in _ENTRY_FILES if f not in files]
-    if missing_entry_files:
+    if isinstance(run_timestamp, bool) or not isinstance(run_timestamp, numbers.Integral):
         raise PreregError(
-            f"check_prereg needs {list(_ENTRY_FILES)} among its certified `files` "
-            f"to verify per-model entries against committed content; missing "
-            f"{missing_entry_files}"
+            f"run_timestamp must be a plain integer of unix seconds, got {run_timestamp!r} "
+            f"— a NaN or a float would make the ordering comparison silently false"
         )
+    repo = Path(repo)
+    extras = list(files)
+    for name in extras:
+        if not name.strip() or Path(name).name != name or name in (".", ".."):
+            raise PreregError(
+                f"certified file {name!r} must be a plain file name inside {PREREG_DIR}/ "
+                f"(no directories, no '..')"
+            )
 
-    freeze_sha = freeze_commit(repo)  # raises if not frozen, or frozen twice
+    freeze_sha = freeze_commit(repo)  # raises if not frozen, frozen twice, or history untrusted
 
-    # FREEZE is certified like the rest: it cannot be edited after the fact.
-    certified = [*files, *([FREEZE_FILE] if FREEZE_FILE not in files else [])]
+    # The certified set is fixed; the caller's list can only add to it.
+    certified = list(dict.fromkeys([*CERTIFIED_FILES, *extras]))
     for file in certified:
         relpath = f"{PREREG_DIR}/{file}"
         worktree = repo / relpath
@@ -341,9 +446,17 @@ def check_prereg(
                 f"prereg file {relpath!r} is frozen but has no working-tree copy "
                 f"(deleted?) — there is no present content to certify (MU-6)"
             )
-        frozen_hash = hashlib.sha256(_blob_at(repo, freeze_sha, relpath)).hexdigest()
-        worktree_hash = hashlib.sha256(worktree.read_bytes()).hexdigest()
-        if frozen_hash != worktree_hash:
+        frozen_bytes = _blob_at(repo, freeze_sha, relpath)
+        actual_bytes = worktree.read_bytes()
+        if frozen_bytes != actual_bytes:
+            if frozen_bytes.replace(b"\r\n", b"\n") == actual_bytes.replace(b"\r\n", b"\n"):
+                raise PreregLineEndingError(
+                    f"prereg file {relpath!r} differs from the freeze commit "
+                    f"{freeze_sha[:10]} only in line endings (CRLF vs LF) — if this is a "
+                    f"Windows checkout, set core.autocrlf=false or keep the repo's "
+                    f"`prereg/* -text` line in .gitattributes; if the file was "
+                    f"re-saved, restore the frozen bytes (models ADR-M5, TC-MU6-04)"
+                )
             raise PreregContentError(
                 f"prereg file {relpath!r} has changed since the freeze commit "
                 f"{freeze_sha[:10]} — a threshold/recipe moved after the lock is not "
@@ -358,12 +471,17 @@ def check_prereg(
             f"first (MU-6 / JU-11, TC-MU6-01)"
         )
 
-    recipe_text = (repo / PREREG_DIR / "recipe.md").read_text(encoding="utf-8")
-    prediction_text = (repo / PREREG_DIR / "prediction.md").read_text(encoding="utf-8")
+    recipe_text = _read_text(repo / PREREG_DIR / "recipe.md")
+    prediction_text = _read_text(repo / PREREG_DIR / "prediction.md")
     check_recipe_world_constants(recipe_text)
     for model in models:
         if model.is_baseline or model.is_fixture:
             continue  # exempt: adding a baseline/fixture stays one file (TC-MU6-05)
+        if not model.name.strip():
+            raise PreregEntryMissingError(
+                "an unrigged model has a blank name — it cannot have a pre-registration "
+                "entry, and an empty name would match everywhere (TC-MU6-03)"
+            )
         if not (_declares(recipe_text, model.name) and _declares(prediction_text, model.name)):
             raise PreregEntryMissingError(
                 f"unrigged model {model.name!r} has no pre-registration entry in the "

@@ -1,0 +1,5 @@
+# Pre-registration files are compared byte for byte against their frozen
+# versions (models ADR-M5, TC-MU6-04). `-text` stops git converting line
+# endings on any checkout (for example core.autocrlf=true on Windows),
+# which would otherwise make an untouched file look changed.
+prereg/* -text
