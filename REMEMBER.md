@@ -113,6 +113,7 @@ Ordered by when they bite. *(D1–D6, D12 and D14 were settled at Round 10 on
 | Report **Model A's fit openly** — now via the pre-registered sufficiency test and the kick/non-kick held-out split (Round 10 replaced "fit vs the MU-5 margin", which would have tuned against the comparison). | 2026-09-27, revised 2026-09-28 |
 | Report whether the **smaller LV lever** still lets the action-blind fixture be caught (P3-C08). | 2026-09-28 |
 | Report the **first end-to-end runtime** (TC-NF2-01) against ADR-J6's measured envelope, and say plainly if it is over. | 2026-09-28 |
+| Keep the **progress page** current (the owner asked to see what's complete and where we are, end to end): https://claude.ai/artifact/YaTnTEep1qZbjpnn4xueHR — republish from `judge-progress.html` (kept in the session scratchpad; regenerate from `build/handovers/` if lost) after each build step. | 2026-10-03 |
 | Keep the **verdict-sheet mock-up** (the picture of the finished product the owner asked for): https://claude.ai/code/artifact/75cc45a4-1164-4312-8299-9ff9297a78fa — illustrative placeholder numbers and fixture names only; regenerate from real output after the judged run. | 2026-09-05 |
 
 ## 5. Housekeeping debt (stale text)
