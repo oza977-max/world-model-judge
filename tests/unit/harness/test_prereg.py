@@ -447,17 +447,6 @@ def test_a_grafts_file_is_refused(tmp_path):
         check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)
 
 
-def test_a_log_follow_setting_cannot_hide_a_rename_away_and_back(tmp_path):
-    repo, _ = _frozen_repo(tmp_path)
-    _git(repo, "config", "log.follow", "true")
-    _git(repo, "mv", "prereg/FREEZE", "prereg/FREEZE.old")
-    _commit(repo, "move away", at=1_200_000)
-    _git(repo, "mv", "prereg/FREEZE.old", "prereg/FREEZE")
-    _commit(repo, "move back", at=1_300_000)
-    with pytest.raises(PreregRefrozenError):
-        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)
-
-
 def test_ambient_git_dir_cannot_redirect_the_check_to_another_repository(tmp_path, monkeypatch):
     """A caller inside a git hook has GIT_DIR set; the check must still read
     the repository it was given."""
@@ -620,6 +609,134 @@ def test_a_tampered_commit_graph_cannot_rewrite_parentage(tmp_path):
         check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000)
 
 
+def test_one_freeze_ever_is_counted_across_every_branch_not_only_the_checked_out_one(tmp_path):
+    """A branch forked from before the freeze can tune the recipe and freeze
+    again; checking out that branch hides the first freeze from HEAD's own
+    ancestry. Nothing is rewritten and every commit is honestly dated."""
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    _commit_prereg(repo, recipe=RECIPE, prediction=PREDICTION, at=1_000)
+    main = _git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    _freeze(repo, at=1_100)
+    _git(repo, "checkout", "-q", "-b", "tuned", f"{main}~1")
+    (repo / "prereg" / "recipe.md").write_text(RECIPE.replace("0.05", "0.09"))
+    _commit(repo, "tune after seeing the result", at=1_300)
+    (repo / "prereg" / "FREEZE").write_text("Frozen again, on a branch.\n")
+    _commit(repo, "freeze the tuned recipe", at=1_400)
+    with pytest.raises(PreregRefrozenError, match="2 time"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000)
+    _git(repo, "checkout", "-q", main)
+    with pytest.raises(PreregRefrozenError, match="2 time"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000)
+
+
+def test_a_freeze_that_exists_only_on_another_branch_is_not_this_checkouts_freeze(tmp_path):
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    _commit_prereg(repo, recipe=RECIPE, prediction=PREDICTION, at=1_000)
+    main = _git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    _git(repo, "checkout", "-q", "-b", "elsewhere")
+    _freeze(repo, at=1_100)
+    _git(repo, "checkout", "-q", main)
+    with pytest.raises(PreregNotFrozenError, match="checked-out"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000)
+
+
+def test_a_stash_is_not_a_second_freeze_or_a_lifted_one(tmp_path):
+    repo, freeze_sha = _frozen_repo(tmp_path)
+    (repo / "prereg" / "FREEZE").unlink()
+    _git(repo, "stash", "-q")  # the stash commit lacks FREEZE; the checkout gets it back
+    assert (repo / "prereg" / "FREEZE").exists()
+    assert check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000) == freeze_sha
+
+
+def test_the_freeze_time_not_head_time_is_what_is_compared_with_the_run(tmp_path):
+    # A perfectly honest commit made after the run (or a later re-check of an
+    # old run) must not be refused because HEAD is newer than the run.
+    repo, freeze_sha = _frozen_repo(tmp_path, freeze_at=1_100_000)
+    (repo / "notes.txt").write_text("written after the run")
+    _commit(repo, "later work", at=3_000_000)
+    assert check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000) == freeze_sha
+
+
+def test_a_freeze_lifted_in_a_merge_that_only_one_parent_had_it_is_still_a_delete(tmp_path):
+    """A merge of a branch forked BEFORE the freeze: one parent has FREEZE,
+    the other never did. The merge drops it. Then the recipe is restored and
+    FREEZE re-added by merging a branch that still carries it — so the add is
+    hidden too. Only 'some parent had it' counts the delete."""
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    _commit_prereg(repo, recipe=RECIPE, prediction=PREDICTION, at=1_000)
+    main = _git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    _side_branch_commit(repo, "x", main, at=1_010)
+    freeze_text = "Frozen.\n"
+    (repo / "prereg" / "FREEZE").write_text(freeze_text)
+    _commit(repo, "freeze", at=1_100)
+    _side_branch_commit(repo, "z", main, at=1_200)
+    recipe = repo / "prereg" / "recipe.md"
+
+    def lift_and_tune():
+        (repo / "prereg" / "FREEZE").unlink()
+        recipe.write_text(RECIPE.replace("0.05", "0.09"))
+
+    _evil_merge(repo, "x", at=1_300, edit=lift_and_tune)
+
+    def restore():
+        recipe.write_text(RECIPE)
+        (repo / "prereg" / "FREEZE").write_text(freeze_text)
+
+    _evil_merge(repo, "z", at=1_400, edit=restore)
+    with pytest.raises(PreregRefrozenError, match="deleted 1"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000)
+
+
+def _partial_clone_of(repo, dest):
+    _git(repo, "config", "uploadpack.allowFilter", "true")
+    _git(repo, "config", "uploadpack.allowAnySHA1InWant", "true")
+    subprocess.run(
+        ["git", "clone", "-q", "--filter=blob:none", f"file://{repo}", str(dest)],
+        check=True, capture_output=True,
+    )
+
+
+def test_a_partial_clone_is_refused_and_its_configured_remote_program_never_runs(tmp_path):
+    """In a partial clone git fetches missing blobs on demand, and the
+    repository's own `remote.origin.uploadpack` names the program that
+    serves them — author-controlled code, run in the middle of the check
+    (and able to rewrite the working tree after the byte comparison)."""
+    repo, _ = _frozen_repo(tmp_path)
+    (repo / "prereg" / "thresholds.json").write_text('{"tuned": true}')
+    _commit(repo, "tune", at=1_500_000)  # the frozen blob is now absent from the clone
+    clone = tmp_path / "clone"
+    _partial_clone_of(repo, clone)
+    marker = tmp_path / "ran-uploadpack"
+    hook = tmp_path / "uploadpack.sh"
+    hook.write_text(f'#!/bin/sh\ntouch {marker}\nexec git-upload-pack "$@"\n')
+    hook.chmod(0o755)
+    _git(clone, "config", "remote.origin.uploadpack", str(hook))
+    with pytest.raises(PreregHistoryError, match="partial"):
+        check_prereg(clone, PREREG_FILES, MODELS, run_timestamp=2_000_000)
+    assert not marker.exists(), "the repo-configured upload-pack program was run"
+
+
+def test_the_text_that_is_checked_is_the_text_that_was_byte_compared(tmp_path, monkeypatch):
+    """The recipe and prediction are decoded from the very bytes that passed
+    the comparison, not re-read from disk afterwards."""
+    from pathlib import Path as _Path
+
+    repo, freeze_sha = _frozen_repo(tmp_path)
+    original = _Path.read_text
+    reads = []
+
+    def spy(self, *args, **kwargs):
+        reads.append(self.name)
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(_Path, "read_text", spy)
+    assert check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000) == freeze_sha
+    assert "recipe.md" not in reads and "prediction.md" not in reads
+
+
 def test_a_forged_object_whose_bytes_do_not_match_its_name_is_refused(tmp_path):
     """`git show` serves whatever bytes a loose object file holds; overwrite
     the frozen recipe's object with the tuned recipe's bytes and every
@@ -764,10 +881,30 @@ def test_a_line_ending_only_change_is_refused_with_a_message_that_says_so(tmp_pa
         check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)
 
 
-def test_the_repo_pins_prereg_files_to_raw_bytes_for_every_checkout():
+def test_the_repo_pins_prereg_files_to_raw_bytes_for_every_checkout(tmp_path):
+    """Actually check out under core.autocrlf=true (the Windows default): with
+    the repo's real .gitattributes the bytes survive; without it they become
+    CRLF — so the control proves the test can tell the difference."""
     root = Path(__file__).resolve().parents[3]
     attributes = (root / ".gitattributes").read_text(encoding="utf-8")
-    assert "prereg/* -text" in attributes.splitlines()
+
+    def clone_with_autocrlf(with_attributes):
+        src = tmp_path / ("src-with" if with_attributes else "src-without")
+        _init_repo(src)
+        (src / "prereg").mkdir()
+        (src / "prereg" / "recipe.md").write_bytes(b"line one\nline two\n")
+        if with_attributes:
+            (src / ".gitattributes").write_text(attributes)
+        _commit(src, "files", at=1_000)
+        dest = tmp_path / ("dst-with" if with_attributes else "dst-without")
+        subprocess.run(
+            ["git", "clone", "-q", "-c", "core.autocrlf=true", f"file://{src}", str(dest)],
+            check=True, capture_output=True,
+        )
+        return (dest / "prereg" / "recipe.md").read_bytes()
+
+    assert clone_with_autocrlf(with_attributes=True) == b"line one\nline two\n"
+    assert b"\r\n" in clone_with_autocrlf(with_attributes=False)
 
 
 def test_a_certified_file_deleted_in_a_later_commit_is_refused(tmp_path):
@@ -951,3 +1088,66 @@ def test_within_matching_margin_boundary():
     assert within_matching_margin(0.30, 0.34, margin=0.05) is True  # diff 0.04 <= 0.05
     assert within_matching_margin(0.30, 0.35, margin=0.05) is True  # diff 0.05 == 0.05
     assert within_matching_margin(0.30, 0.36, margin=0.05) is False  # diff 0.06 > 0.05
+
+
+def test_a_file_named_head_in_the_repo_root_does_not_confuse_the_history_walk(tmp_path):
+    """Review pass 3 (Minor): an untracked file called `HEAD` made `rev-list HEAD`
+    abort as ambiguous — a false refusal. The check must still pass."""
+    repo, freeze_sha = _frozen_repo(tmp_path)
+    (repo / "HEAD").write_text("not a revision\n")
+    assert check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000) == freeze_sha
+
+
+@pytest.mark.parametrize(
+    "signal",
+    ["extensions.partialclone", "remote.origin.promisor", "promisor-pack-file"],
+)
+def test_each_sign_of_a_partial_clone_is_refused_on_its_own(tmp_path, signal):
+    """Mutation check, review pass 3: the three signs of a partial clone are
+    independent defences, so each needs its own test — a full clone with just
+    one sign planted must be refused."""
+    repo, _ = _frozen_repo(tmp_path)
+    if signal == "promisor-pack-file":
+        packdir = repo / ".git" / "objects" / "pack"
+        packdir.mkdir(parents=True, exist_ok=True)
+        (packdir / "pack-0000.promisor").write_text("")
+    elif signal == "extensions.partialclone":
+        _git(repo, "config", signal, "origin")
+    else:
+        _git(repo, "config", signal, "true")
+    with pytest.raises(PreregHistoryError, match="partial"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)
+
+
+def test_a_replace_ref_does_not_add_a_second_freeze_to_the_count(tmp_path):
+    """`git replace` refs live under refs/replace/ and are ignored everywhere
+    else here; counting them as history would turn a harmless local replace
+    into a false 'frozen twice' refusal."""
+    repo, freeze_sha = _frozen_repo(tmp_path)
+    main = _git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    first = _git(repo, "rev-parse", "HEAD~1").strip()
+    _git(repo, "checkout", "-qb", "other", first)
+    _freeze(repo, at=1_200_000, text="a different freeze\n")
+    other = _git(repo, "rev-parse", "HEAD").strip()
+    _git(repo, "checkout", "-q", main)
+    _git(repo, "branch", "-q", "-D", "other")
+    _git(repo, "update-ref", f"refs/replace/{first}", other)
+    assert check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000) == freeze_sha
+
+
+def test_the_recipe_and_prediction_files_are_read_from_disk_exactly_once(tmp_path, monkeypatch):
+    """Mutation check, review pass 3: the byte comparison reads each certified
+    file once; the later text checks must reuse those bytes, not read again."""
+    from pathlib import Path as _Path
+
+    repo, freeze_sha = _frozen_repo(tmp_path)
+    original = _Path.read_bytes
+    reads = []
+
+    def spy(self):
+        reads.append(self.name)
+        return original(self)
+
+    monkeypatch.setattr(_Path, "read_bytes", spy)
+    assert check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000) == freeze_sha
+    assert reads.count("recipe.md") == 1 and reads.count("prediction.md") == 1

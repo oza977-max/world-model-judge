@@ -38,7 +38,9 @@ The rules (models ADR-M5, design-review-010):
      rewrites what history says without touching any commit and without
      being pushed. Every git call here ignores replace refs and ambient
      `GIT_*` settings, and a shallow repository or a grafts file is refused
-     (`PreregHistoryError`). `repo` must be the repository's top level.
+     (`PreregHistoryError`), as is a partial clone (git would run the
+     repository's own fetch program to fill a gap). `repo` must be the
+     repository's top level.
   4. **The freeze commit's timestamp must strictly precede the run**
      (TC-MU6-01).
   5. For every *unrigged* model (`not is_baseline and not is_fixture`): its
@@ -71,6 +73,16 @@ here fully closes them, so they are disclosed rather than pretended away:
   5. **No evaluation before the freeze is a rule, not a mechanism.** No
      evaluation-trial metric of either unrigged model may be computed before
      the freeze. An unrecorded informal run before the freeze leaves no trace.
+  6. **The certificate is a commit id, not the bytes the judge will read.** The
+     files are checked here and read again by the caller afterwards; a change
+     between the two is not detected. (`check_prereg` itself decides entries
+     from the very bytes it compared.) The caller should read the files
+     straight away, or re-check, and the judged run's own record names the
+     freeze commit so a later comparison is possible.
+  7. **Only the repository on this disk is examined.** "One freeze, ever" is
+     counted over every local ref (branches, tags, remote-tracking refs), so a
+     fork that re-freezes is refused — but a re-freeze that exists only in a
+     repository nobody has fetched from is invisible (the same shape as 2).
 """
 
 from __future__ import annotations
@@ -143,7 +155,8 @@ def _git_env() -> dict[str, str]:
     `GIT_DIR` set and would otherwise read a different repository; others can
     inject config), user and system config are switched off, and replace refs
     are ignored — a local `git replace` could otherwise make `git show` serve
-    different bytes for the freeze commit than the public history holds.
+    different bytes for the freeze commit than the public history holds — and
+    lazy fetching is off (see below).
     """
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     env.update(
@@ -152,6 +165,11 @@ def _git_env() -> dict[str, str]:
             "GIT_CONFIG_NOSYSTEM": "1",
             "GIT_CONFIG_GLOBAL": os.devnull,
             "GIT_OPTIONAL_LOCKS": "0",
+            # No call here may fetch anything: in a partial clone git would
+            # otherwise run the repo's own `remote.*.uploadpack` program to
+            # fetch a missing object, mid-check (partial clones are also
+            # refused outright in `_require_trustworthy_history`).
+            "GIT_NO_LAZY_FETCH": "1",
         }
     )
     return env
@@ -224,6 +242,35 @@ def _git(repo: Path, *args: str, stdin: str | None = None) -> str:
     return result.stdout
 
 
+def _refuse_partial_clone(repo: Path) -> None:
+    """Refuse a partial (`--filter=`) clone: it has objects it has not fetched.
+
+    Git would fetch a missing object on demand from the `origin` remote by running
+    the program that repo's own config names (`remote.origin.uploadpack`),
+    so a "read-only" check could run author-chosen code and change files on
+    disk mid-check (executed, design-review-010 review pass 3). Refusing is
+    simpler and safer than trying to make that fetch harmless.
+    """
+    why = None
+    if _run_git(repo, "config", "--get", "extensions.partialclone").returncode == 0:
+        why = "extensions.partialclone is set"
+    elif _run_git(repo, "config", "--get-regexp", r"^remote\..*\.promisor$").returncode == 0:
+        why = "a remote is marked as a promisor"
+    else:
+        packdir = Path(_git(repo, "rev-parse", "--git-path", "objects/pack").strip())
+        if not packdir.is_absolute():
+            packdir = repo / packdir
+        if packdir.is_dir() and any(packdir.glob("*.promisor")):
+            why = "the object store holds promisor packs"
+    if why:
+        raise PreregHistoryError(
+            f"this is a partial clone ({why}) — objects it has not fetched would be "
+            f"fetched on demand by a program the repository's own config names, in the "
+            f"middle of the check; clone the full history before certifying the "
+            f"pre-registration (models ADR-M5)"
+        )
+
+
 def _require_trustworthy_history(repo: Path) -> None:
     """Refuse a repository whose history git itself cannot vouch for."""
     top = _git(repo, "rev-parse", "--show-toplevel").strip()
@@ -233,6 +280,7 @@ def _require_trustworthy_history(repo: Path) -> None:
             f"must be given the repository's top level, because history paths and file "
             f"paths are resolved from different roots otherwise"
         )
+    _refuse_partial_clone(repo)
     if _git(repo, "rev-parse", "--is-shallow-repository").strip() == "true":
         raise PreregHistoryError(
             "this is a shallow clone — git shows its boundary commit as having added "
@@ -261,6 +309,9 @@ def _require_trustworthy_history(repo: Path) -> None:
         )
 
 
+_ALL_REFS = ("--exclude=refs/replace/*", "--exclude=refs/stash", "--all")
+
+
 def _freeze_history(repo: Path, relpath: str) -> tuple[list[str], list[str]]:
     """`(adds, deletes)`: commits where `relpath` came into or went out of existence.
 
@@ -269,13 +320,15 @@ def _freeze_history(repo: Path, relpath: str) -> tuple[list[str], list[str]]:
     `--full-history`), so a freeze added or lifted inside a merge — with an
     honest date and no history rewrite — would be invisible to a diff-based
     count (executed, design-review-010 review pass 2). Instead: every commit
-    reachable from HEAD is asked whether the path exists as a file; an *add* is
+    reachable from HEAD *or from any other ref* (a branch forked from before the
+    freeze can re-freeze without touching HEAD's own ancestry) is asked whether
+    the path exists as a file; an *add* is
     a commit that has it while none of its parents do (or a root), a *delete*
     is a commit without it while some parent has it. A rename away and back is
     a delete plus an add at the path.
     """
     parents: dict[str, list[str]] = {}
-    for row in _git(repo, "rev-list", "--parents", "HEAD").splitlines():
+    for row in _git(repo, "rev-list", "--parents", *_ALL_REFS, "HEAD", "--").splitlines():
         shas = row.split()
         if shas:
             parents[shas[0]] = shas[1:]
@@ -302,6 +355,10 @@ def _freeze_history(repo: Path, relpath: str) -> tuple[list[str], list[str]]:
     return adds, deletes
 
 
+def _head_ancestry(repo: Path) -> set[str]:
+    return set(_git(repo, "rev-list", "HEAD", "--").split())
+
+
 def freeze_commit(repo: Path) -> str:
     """The commit that added `prereg/FREEZE` — the one and only freeze.
 
@@ -319,11 +376,17 @@ def freeze_commit(repo: Path) -> str:
             f"yet; the recipe, prediction and thresholds must be locked by committing "
             f"it before any judged run (models ADR-M5, TC-MU6-08)"
         )
-    if len(adds) > 1 or deletes:
+    if len(adds) > 1 or deletes:  # counted over every ref, not only the checked-out one
         raise PreregRefrozenError(
             f"{relpath!r} was added {len(adds)} time(s) and deleted {len(deletes)} "
             f"time(s) — the freeze happens once, ever; a second freeze, or a "
             f"delete-and-re-add, lets the locked content move (models ADR-M5, TC-MU6-06)"
+        )
+    if adds[0] not in _head_ancestry(repo):
+        raise PreregNotFrozenError(
+            f"{relpath!r} was added at {adds[0][:10]}, which is not part of the checked-out "
+            f"history — the pre-registration is not frozen on the branch being judged "
+            f"(models ADR-M5, TC-MU6-08)"
         )
     return adds[0]
 
@@ -335,7 +398,7 @@ def _exists_at(repo: Path, rev: str, relpath: str) -> bool:
 
 def _commit_timestamp(repo: Path, sha: str) -> int:
     """The committer unix timestamp of `sha`."""
-    text = _git(repo, "show", "-s", "--format=%ct", sha).strip()
+    text = _git(repo, "show", "-s", "--format=%ct", sha, "--").strip()
     try:
         return int(text)
     except ValueError as exc:
@@ -427,12 +490,12 @@ def check_recipe_world_constants(recipe_text: str) -> None:
             )
 
 
-def _read_text(path: Path) -> str:
+def _decode(data: bytes, label: str) -> str:
     try:
-        return path.read_text(encoding="utf-8")
+        return data.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise PreregError(
-            f"{path} is not valid UTF-8 text — the per-model entry check cannot read it"
+            f"{label} is not valid UTF-8 text — the per-model entry check cannot read it"
         ) from exc
 
 
@@ -468,6 +531,7 @@ def check_prereg(
 
     # The certified set is fixed; the caller's list can only add to it.
     certified = list(dict.fromkeys([*CERTIFIED_FILES, *extras]))
+    verified: dict[str, bytes] = {}  # the exact bytes that passed the comparison
     for file in certified:
         relpath = f"{PREREG_DIR}/{file}"
         worktree = repo / relpath
@@ -515,6 +579,7 @@ def check_prereg(
                 f"{freeze_sha[:10]} — a threshold/recipe moved after the lock is not "
                 f"pre-registered (models ADR-M5, TC-MU6-04)"
             )
+        verified[file] = actual_bytes
 
     freeze_ts = _commit_timestamp(repo, freeze_sha)
     if freeze_ts >= run_timestamp:
@@ -524,8 +589,9 @@ def check_prereg(
             f"first (MU-6 / JU-11, TC-MU6-01)"
         )
 
-    recipe_text = _read_text(repo / PREREG_DIR / "recipe.md")
-    prediction_text = _read_text(repo / PREREG_DIR / "prediction.md")
+    # Decoded from the bytes that were just compared — never re-read from disk.
+    recipe_text = _decode(verified["recipe.md"], f"{PREREG_DIR}/recipe.md")
+    prediction_text = _decode(verified["prediction.md"], f"{PREREG_DIR}/prediction.md")
     check_recipe_world_constants(recipe_text)
     for model in models:
         if model.is_baseline or model.is_fixture:
