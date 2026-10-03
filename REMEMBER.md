@@ -74,13 +74,16 @@ Ordered by when they bite. *(D1–D6, D12 and D14 were settled at Round 10 on
 - **Measure runtime** for real and report it against judge ADR-J6's new measured envelope.
 - Start-disjointness (TC-MU7-01), purpose-keyed seeds (TC-MU7-02, TC-NF1-10), subsample (TC-MU7-03), train-twice-identical (TC-MU8-01).
 
-**P3-C03 / P3-C04 — Models A and B**
+**P3-C03 / P3-C04 — Models A and B** (P3-C03 built 2026-10-03: `src/wmj/models/direct.py`, `harness/sufficiency.py`; see `build/measurements/p3-c03-model-a-real-run.md` and D18)
 - β-NLL with the written-out gradient (TC-MU5-04); `forward_invariant` + `predict_batch` (TC-MU1-04).
 - **Run the M-sufficiency test** (TC-MU5-05) and report the result, and the kick/non-kick held-out split, to the owner. The test never looks at the MU-5 margin.
 - Report measured convergence + runtime at `epochs: 100`; any change is an open recipe revision, never silent — and only before the freeze.
 - Per iteration: `forward` → `backward` → `Adam.step`, in that order (no runtime guard exists).
 - Gradient-check on real normalised training inputs before training; factories pass `seeds.rng("weights")` / per-member streams.
 - P3-C04: `sqrt(1+1/K)·std(ddof=1)` spread mapping (TC-MU5-03).
+- **P3-C02 must be re-opened (amendment never recorded until now; found in P3-C03's pass-4 review):** `persistence` and `linear` do not yet declare `stateless` (persistence True, linear False) and `persistence` has no `predict_batch`; models ADR-M1 / TC-MU1-04 require both, and the implementation guide's P3-C02 text says the chunk is "re-opened" for it. Do this with P3-C04/P3-C05 (before P6-C01 batches rollouts), with TC-MU1-04 over every registered stateless model.
+- **D17 clarification:** the 6 (LV) / 10 (pendulum) kicked held-out rows are for the 50,000-pair build; the sufficiency report scores the 100,000-pair build's held-out set, which has 10 (LV) / 7 (pendulum). Same conclusion — far too few for a kick-split claim.
+- Serialising `KickSplit` counts (numpy ints) to JSON at P6-C01: cast to `int`.
 - **Contract from P3-C06's review (read before building the models):**
   - *Factories must refuse `train_pairs is None`* (the pair fields are optional only for the skeleton/preview callers; backlog A19).
   - *Shuffle every epoch with your own seeded stream:* `train_pairs` lists the 12,500 kick pairs first, then the non-kick pairs.

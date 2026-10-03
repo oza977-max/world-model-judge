@@ -321,3 +321,55 @@ def test_the_factory_is_given_the_worlds_own_context():
 
     check_world("lv", lv.WORLD, factory, RECIPE, SEED, "x", horizon=100)
     assert seen == [("lv", 2), ("lv", 2)]
+
+
+# --- independent review, P3-C03 pass 4: kicked held-out rows and the default-argument path ---
+
+KICKED = TrainingRecipe(
+    training_trajectories=100, subsample_pairs=1000, kick_pairs=40, heldout_pairs=2000,
+    gradcheck_pairs=16,
+)
+
+
+def _bias_by_size(bias_small, bias_big):
+    def factory(ctx, seeds, data):
+        small = data.train_pairs.state.shape[0] == KICKED.subsample_pairs
+        return _BiasedWorldModel(bias_small if small else bias_big)
+
+    return factory
+
+
+def test_kicked_held_out_rows_are_predicted_with_their_own_action():
+    """With a model that is the true step plus a fixed bias, every row — kicked or not — has
+    the same error only if the kicked rows are predicted with their real (non-zero) action."""
+    r = check_world("lv", lv.WORLD, _bias_by_size(0.01, 0.01), KICKED, SEED, "x", horizon=100)
+    assert r.split_m.n_kick > 0 and r.split_2m.n_kick > 0
+    want = np.mean((0.01 / np.asarray(lv.WORLD.scale)) ** 2)
+    for split in (r.split_m, r.split_2m):
+        assert split.error_kick == pytest.approx(want, rel=1e-9)
+        assert split.error_plain == pytest.approx(want, rel=1e-9)
+    assert r.err_m == pytest.approx(want, rel=1e-9) and r.err_2m == pytest.approx(want, rel=1e-9)
+
+
+def test_the_default_horizon_is_the_worlds_own_and_the_default_tolerance_is_ten_percent(monkeypatch):
+    seen = []
+    original = sufficiency.build_training_data
+
+    def spy(name, world, seeds, recipe, *, horizon=None):
+        seen.append(horizon)
+        return original(name, world, seeds, recipe, horizon=100)  # quick; only the argument matters
+
+    monkeypatch.setattr(sufficiency, "build_training_data", spy)
+    over = check_world("lv", lv.WORLD, _bias_by_size(0.010583, 0.01), KICKED, SEED, "x")  # ratio 1.12
+    assert seen == [None, None] and over.sufficient is False
+    under = check_world("lv", lv.WORLD, _bias_by_size(0.0102, 0.01), KICKED, SEED, "x")  # ratio 1.04
+    assert under.sufficient is True
+
+
+def test_the_default_tolerance_equals_the_frozen_recipes_sufficiency_tolerance():
+    import re
+    from pathlib import Path
+
+    text = (Path(__file__).resolve().parents[3] / "prereg" / "recipe.md").read_text()
+    found = re.findall(r"^sufficiency_tolerance:[ \t]*([^#\s]*)", text, re.MULTILINE)
+    assert len(found) == 1 and float(found[0]) == sufficiency.SUFFICIENCY_TOLERANCE
