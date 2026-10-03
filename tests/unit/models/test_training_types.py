@@ -114,3 +114,102 @@ def test_pairs_and_trajectories_must_agree_on_state_and_action_width():
     states, actions = _states_actions(d=2, a=1)
     with pytest.raises(TrainingDataShapeError, match="width"):
         TrainingData(states=states, actions=actions, train_pairs=_pairs(5, d=3), heldout_pairs=_pairs(2))
+
+
+# --- independent review, P3-C06 pass 1 (I-4): every validation rule pinned ---
+
+
+def _kw(**over):
+    base = {
+        "state": np.zeros((5, 2)), "action": np.zeros((5, 1)), "next_state": np.ones((5, 2)),
+        "is_kick": np.zeros(5, dtype=bool),
+    }
+    base.update(over)
+    return base
+
+
+@pytest.mark.parametrize("field", ["state", "action", "next_state"])
+@pytest.mark.parametrize("bad", [np.nan, np.inf, -np.inf])
+def test_non_finite_values_are_refused_in_every_pairs_array(field, bad):
+    array = _kw()[field].copy()
+    array[0, 0] = bad
+    with pytest.raises(TrainingDataShapeError, match="finite"):
+        Pairs(**_kw(**{field: array}))
+
+
+@pytest.mark.parametrize("field", ["state", "action", "next_state"])
+@pytest.mark.parametrize("dtype", [np.float32, np.int64])
+def test_pairs_arrays_must_be_float64(field, dtype):
+    with pytest.raises(TrainingDataShapeError, match="float64"):
+        Pairs(**_kw(**{field: _kw()[field].astype(dtype)}))
+
+
+def test_is_kick_must_agree_with_the_actions():
+    with pytest.raises(TrainingDataShapeError, match="is_kick"):
+        Pairs(**_kw(is_kick=np.ones(5, dtype=bool)))  # actions are all zero
+    action = np.zeros((5, 1))
+    action[2, 0] = 0.05
+    with pytest.raises(TrainingDataShapeError, match="is_kick"):
+        Pairs(**_kw(action=action))  # a kick not flagged
+    flags = np.zeros(5, dtype=bool)
+    flags[2] = True
+    Pairs(**_kw(action=action, is_kick=flags))  # consistent: accepted
+
+
+def test_pairs_row_counts_and_widths_are_each_checked():
+    with pytest.raises(TrainingDataShapeError):
+        Pairs(**_kw(next_state=np.ones((4, 2))))  # next_state rows
+    with pytest.raises(TrainingDataShapeError):
+        Pairs(**_kw(next_state=np.ones((5, 1))))  # next_state narrower
+    with pytest.raises(TrainingDataShapeError):
+        Pairs(**_kw(is_kick=np.zeros((5, 1), dtype=bool)))  # 2-D flags
+
+
+@pytest.mark.parametrize("name", ["states", "actions"])
+@pytest.mark.parametrize("bad", [np.nan, np.inf])
+def test_non_finite_trajectories_are_refused(name, bad):
+    states, actions = _states_actions()
+    arrays = {"states": states, "actions": actions}
+    arrays[name][0, 0, 0] = bad
+    with pytest.raises(TrainingDataShapeError, match="finite"):
+        TrainingData(**arrays)
+
+
+@pytest.mark.parametrize("name", ["states", "actions"])
+@pytest.mark.parametrize("dtype", [np.float32, np.int64, bool, object])
+def test_trajectory_arrays_must_be_float64(name, dtype):
+    states, actions = _states_actions()
+    arrays = {"states": states, "actions": actions}
+    arrays[name] = arrays[name].astype(dtype)
+    with pytest.raises(TrainingDataShapeError, match="float64"):
+        TrainingData(**arrays)
+
+
+@pytest.mark.parametrize("shape", [(2, 4), (2, 3, 1, 1)])
+def test_trajectory_arrays_must_be_three_dimensional(shape):
+    states, _ = _states_actions()
+    with pytest.raises(TrainingDataShapeError, match="3-D"):
+        TrainingData(states=states, actions=np.zeros(shape))
+
+
+def test_heldout_width_and_type_are_checked_too():
+    states, actions = _states_actions()
+    with pytest.raises(TrainingDataShapeError, match="heldout_pairs"):
+        TrainingData(states=states, actions=actions, train_pairs=_pairs(5), heldout_pairs=_pairs(2, d=3))
+    with pytest.raises(TrainingDataShapeError, match="Pairs"):
+        TrainingData(states=states, actions=actions, train_pairs=object())
+
+
+@pytest.mark.parametrize(
+    "index",
+    [
+        np.array([0, 0], dtype=np.int64),  # duplicates
+        np.array([], dtype=np.int64),  # empty
+        np.array([0, 1], dtype=np.int32),  # wrong width
+        np.array([0, 1], dtype=np.uint64),
+    ],
+)
+def test_gradcheck_index_must_be_distinct_nonempty_int64(index):
+    states, actions = _states_actions()
+    with pytest.raises(TrainingDataShapeError, match="gradcheck"):
+        TrainingData(states=states, actions=actions, train_pairs=_pairs(5), gradcheck_index=index)

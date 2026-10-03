@@ -472,3 +472,170 @@ def test_the_default_horizon_is_the_longest_task_horizon():
     rate_boost.kick_rate_per_s = 20.0  # plenty of kicks in a tiny run
     data = build_training_data("lv", rate_boost, seeds, recipe)
     assert data.actions.shape[1] == 9
+
+
+# --- independent review, P3-C06 pass 1 ---
+
+
+def _flat_kick_mask(data):
+    return np.any(data.actions != 0.0, axis=2).reshape(-1)
+
+
+def _pairs_at(data, flat):
+    h = data.actions.shape[1]
+    i, t = np.divmod(flat, h)
+    return data.states[i, t], data.actions[i, t], data.states[i, t + 1]
+
+
+@pytest.mark.parametrize("name", WORLDS)
+def test_the_chosen_pairs_are_exactly_the_first_of_the_named_seeded_permutations(name):
+    """I-1: recompute the choice independently from the spec and compare every row."""
+    _, recipe, _ = SMALL[name]
+    data = _build(name)
+    seeds = SeedSource(SEED, None)
+    mask = _flat_kick_mask(data)
+    kicks, plain = np.flatnonzero(mask), np.flatnonzero(~mask)
+    k_perm = seeds.rng_for(name, "training", "subsample-kick").permutation(kicks.size)
+    p_perm = seeds.rng_for(name, "training", "subsample-nonkick").permutation(plain.size)
+    wanted_plain = recipe.subsample_pairs - recipe.kick_pairs
+    chosen = np.concatenate([kicks[k_perm[: recipe.kick_pairs]], plain[p_perm[:wanted_plain]]])
+    rest = np.ones(mask.size, dtype=bool)
+    rest[chosen] = False
+    pool = np.flatnonzero(rest)
+    held = pool[seeds.rng_for(name, "training", "heldout").permutation(pool.size)][
+        : recipe.heldout_pairs
+    ]
+    for pairs, flat in ((data.train_pairs, chosen), (data.heldout_pairs, held)):
+        state, action, nxt = _pairs_at(data, flat)
+        assert np.array_equal(pairs.state, state)
+        assert np.array_equal(pairs.action, action)
+        assert np.array_equal(pairs.next_state, nxt)
+
+
+def test_the_first_training_row_is_a_kick_the_first_heldout_row_is_not_and_gradcheck_matches():
+    """Layout sanity on one small build (kick pairs lead the training set; the
+    held-out pool is almost all non-kick) and the gradient-check draw."""
+    data = _build("lv")
+    assert data.train_pairs.is_kick[0] and data.train_pairs.action[0, 0] != 0.0
+    assert not data.heldout_pairs.is_kick[0]
+    perm = SeedSource(SEED, None).rng_for("lv", "training", "gradcheck-batch").permutation(2000)
+    assert data.gradcheck_index[:3].tolist() == perm[:3].tolist()
+
+
+# I-2: one pair short refuses; exactly enough builds.
+
+
+def _available(name):
+    data = _build(name)
+    n_kick = int(_flat_kick_mask(data).sum())
+    return data, n_kick, data.actions.shape[0] * data.actions.shape[1] - n_kick
+
+
+@pytest.mark.parametrize("name", WORLDS)
+def test_exactly_the_available_kick_pairs_builds_and_one_more_is_refused(name):
+    module, recipe, horizon = SMALL[name]
+    _, n_kick, _ = _available(name)
+    seeds = SeedSource(SEED, None)
+    ok = replace(recipe, kick_pairs=n_kick, subsample_pairs=n_kick + 200, heldout_pairs=50)
+    data = build_training_data(name, module.WORLD, seeds, ok, horizon=horizon)
+    assert int(data.train_pairs.is_kick.sum()) == n_kick
+    short = replace(ok, kick_pairs=n_kick + 1, subsample_pairs=n_kick + 201)
+    with pytest.raises(TrainingDataError, match="kick pairs"):
+        build_training_data(name, module.WORLD, seeds, short, horizon=horizon)
+
+
+@pytest.mark.parametrize("name", WORLDS)
+def test_exactly_the_available_non_kick_pairs_builds_and_one_more_is_refused(name):
+    module, recipe, horizon = SMALL[name]
+    _, n_kick, n_plain = _available(name)
+    seeds = SeedSource(SEED, None)
+    kp = min(recipe.kick_pairs, n_kick - 60)  # leaves kicked pairs for the held-out pool
+    ok = replace(recipe, kick_pairs=kp, subsample_pairs=kp + n_plain, heldout_pairs=50,
+                 gradcheck_pairs=8)
+    data = build_training_data(name, module.WORLD, seeds, ok, horizon=horizon)
+    assert data.train_pairs.state.shape[0] == kp + n_plain
+    with pytest.raises(TrainingDataError, match="non-kick pairs"):
+        build_training_data(
+            name, module.WORLD, seeds, replace(ok, subsample_pairs=ok.subsample_pairs + 1),
+            horizon=horizon,
+        )
+
+
+@pytest.mark.parametrize("name", WORLDS)
+def test_a_heldout_request_equal_to_the_leftover_pool_builds_and_one_more_is_refused(name):
+    module, recipe, horizon = SMALL[name]
+    total = recipe.training_trajectories * horizon
+    seeds = SeedSource(SEED, None)
+    exact = replace(recipe, heldout_pairs=total - recipe.subsample_pairs)
+    data = build_training_data(name, module.WORLD, seeds, exact, horizon=horizon)
+    assert data.heldout_pairs.state.shape[0] == total - recipe.subsample_pairs
+    with pytest.raises(TrainingDataError, match="held-out"):
+        build_training_data(
+            name, module.WORLD, seeds, replace(exact, heldout_pairs=exact.heldout_pairs + 1),
+            horizon=horizon,
+        )
+
+
+# I-3: the disjointness check at its edges.
+
+
+@pytest.mark.parametrize("eval_position", [0, 1, 4])
+@pytest.mark.parametrize("train_row", [0, 1, 199])
+def test_a_leak_is_found_at_any_position_and_for_any_training_trajectory(eval_position, train_row):
+    data = _build("lv")
+    eval_starts = data.states[:5, 1].copy()  # later states: legal
+    eval_starts[eval_position] = data.states[train_row, 0]
+    with pytest.raises(TrainingDataError, match=f"start {eval_position}"):
+        assert_eval_starts_disjoint(data, eval_starts)
+
+
+@pytest.mark.parametrize("shape", [(2,), (1, 2, 2), (0,)])
+def test_eval_starts_of_the_wrong_rank_are_refused(shape):
+    data = _build("lv")
+    with pytest.raises(TrainingDataError, match="shape"):
+        assert_eval_starts_disjoint(data, np.zeros(shape))
+
+
+# I-4 / minors
+
+
+@pytest.mark.parametrize("name", WORLDS)
+def test_training_arrays_own_their_memory_so_freezing_leaves_no_writable_base(name):
+    data = _build(name)
+    for array in (data.states, data.actions, data.train_pairs.state, data.train_pairs.action,
+                  data.heldout_pairs.state, data.gradcheck_index):
+        base = array.base
+        assert base is None or not base.flags.writeable, "a writable base can change a frozen array"
+
+
+@pytest.mark.parametrize("line", ["kick_pairs: 12500 13000", "kick_pairs: 12500 (was 10000)",
+                                  "kick_pairs: 012500", "kick_pairs:\\t0"])
+def test_trailing_text_that_is_not_a_comment_is_refused(tmp_path, line):
+    text = _recipe_text(kick_pairs=None) + line.replace("\\t", "\t") + "\n"
+    with pytest.raises(TrainingDataError, match="kick_pairs"):
+        _read(tmp_path, text)
+
+
+@pytest.mark.parametrize("value", ["12500\t", "12500 # c", "12500# c", "\t12500", "12500  "])
+def test_whitespace_and_comments_around_the_value_are_fine(tmp_path, value):
+    assert _read(tmp_path, _recipe_text(kick_pairs=value)).kick_pairs == 12500
+
+
+def test_a_crlf_recipe_is_read(tmp_path):
+    path = tmp_path / "recipe.md"
+    path.write_bytes(_recipe_text().replace("\n", "\r\n").encode())
+    assert read_training_recipe(path).kick_pairs == 12500
+
+
+def test_a_directory_in_place_of_the_recipe_is_a_clear_refusal(tmp_path):
+    with pytest.raises(TrainingDataError, match="cannot be read"):
+        read_training_recipe(tmp_path)
+
+
+def test_a_world_with_no_tasks_has_no_default_horizon():
+    class _NoTasks(_TwoTaskWorld):
+        def tasks(self):
+            return ()
+
+    with pytest.raises(TrainingDataError, match="no tasks"):
+        build_training_data("lv", _NoTasks(), SeedSource(SEED, None), SMALL["lv"][1])

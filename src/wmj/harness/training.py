@@ -64,6 +64,7 @@ _RECIPE_KEYS = (
     "gradcheck_pairs",
 )
 _PLAIN_POSITIVE_INT = re.compile(r"[1-9][0-9]*")
+_RECIPE_LINE = re.compile(r"[ \t]*([^#\s]*)[ \t]*(?:#.*)?")
 
 
 class TrainingDataError(WmjError):
@@ -117,26 +118,36 @@ def read_training_recipe(recipe_path: str | Path) -> TrainingRecipe:
         raise TrainingDataError(f"the recipe {path} does not exist — the counts live there") from exc
     except UnicodeDecodeError as exc:
         raise TrainingDataError(f"the recipe {path} is not valid UTF-8 text") from exc
+    except OSError as exc:
+        raise TrainingDataError(f"the recipe {path} cannot be read: {exc}") from exc
     values: dict[str, int] = {}
     for key in _RECIPE_KEYS:
-        found = re.findall(rf"^{re.escape(key)}:[ \t]*([^#\s]*)", text, re.MULTILINE)
-        if not found:
+        lines = [
+            line.rstrip("\r")
+            for line in re.findall(rf"^{re.escape(key)}:.*$", text, re.MULTILINE)
+        ]
+        if not lines:
             raise TrainingDataError(f"the recipe has no '{key}:' line at the left margin ({path})")
-        if len(found) > 1:
+        if len(lines) > 1:
             raise TrainingDataError(
-                f"the recipe pins '{key}' more than once ({found}) — a later line could "
+                f"the recipe pins '{key}' more than once ({lines}) — a later line could "
                 f"disagree with the one used"
             )
-        if not _PLAIN_POSITIVE_INT.fullmatch(found[0]):
+        match = _RECIPE_LINE.fullmatch(lines[0][len(key) + 1 :])
+        if match is None or not _PLAIN_POSITIVE_INT.fullmatch(match.group(1)):
             raise TrainingDataError(
-                f"the recipe's '{key}:' value {found[0]!r} is not a positive plain integer"
+                f"the recipe's line {lines[0]!r} is not '{key}: <positive plain integer>' "
+                f"(optionally followed by a '# comment')"
             )
-        values[key] = int(found[0])
+        values[key] = int(match.group(1))
     return TrainingRecipe(**values)
 
 
 def _default_horizon(world: Any) -> int:
-    return max(int(task.horizon) for task in world.tasks())
+    tasks = world.tasks()
+    if not tasks:
+        raise TrainingDataError("the world declares no tasks, so it has no default horizon")
+    return max(int(task.horizon) for task in tasks)
 
 
 def _gather_pairs(
@@ -165,6 +176,8 @@ def build_training_data(
 
     `horizon` defaults to the world's declared evaluation horizon (the
     longest task horizon); tests pass a shorter one to run quickly.
+    `world_name` must be the name of `world` — it keys every seed stream, and
+    nothing can check it against the world object (the harness owns the pairing).
     """
     if horizon is None:
         horizon = _default_horizon(world)
@@ -187,7 +200,7 @@ def build_training_data(
     states[:, 0] = starts
     for step in range(horizon):
         states[:, step + 1] = world.transition_batch(states[:, step], kicks[:, step])
-    actions = kicks
+    actions = kicks.copy()  # owns its memory: freezing it must not leave a writable base
 
     is_kick = np.any(actions != 0.0, axis=2).reshape(-1)
     kick_index = np.flatnonzero(is_kick)

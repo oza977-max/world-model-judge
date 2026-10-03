@@ -140,6 +140,10 @@ class Pairs:
             array = getattr(self, name)
             if not isinstance(array, np.ndarray) or array.ndim != 2:
                 raise TrainingDataShapeError(f"Pairs.{name} must be a 2-D numpy array")
+            if array.dtype != np.float64:
+                raise TrainingDataShapeError(
+                    f"Pairs.{name} must be float64, got {array.dtype} (models spec ADR-M1)"
+                )
             if not np.all(np.isfinite(array)):
                 raise TrainingDataShapeError(f"Pairs.{name} must hold only finite numbers")
         m = self.state.shape[0]
@@ -159,6 +163,11 @@ class Pairs:
             or self.is_kick.shape != (m,)
         ):
             raise TrainingDataShapeError(f"Pairs.is_kick must be a bool array of shape ({m},)")
+        if not np.array_equal(self.is_kick, np.any(self.action != 0.0, axis=1)):
+            raise TrainingDataShapeError(
+                "Pairs.is_kick disagrees with the actions: a kick pair is exactly one whose "
+                "action is not zero (the exact kick quota rests on this flag)"
+            )
         _freeze_arrays(self.state, self.action, self.next_state, self.is_kick)
 
 
@@ -186,8 +195,16 @@ class TrainingData:
     gradcheck_index: np.ndarray | None = None  # int64[g], indices into train_pairs
 
     def __post_init__(self) -> None:
-        if self.states.ndim != 3 or self.actions.ndim != 3:
-            raise TrainingDataShapeError("states and actions must be 3-D [trajectories, steps, dims]")
+        for name in ("states", "actions"):
+            array = getattr(self, name)
+            if not isinstance(array, np.ndarray) or array.ndim != 3:
+                raise TrainingDataShapeError(
+                    f"{name} must be a 3-D numpy array [trajectories, steps, dims]"
+                )
+            if array.dtype != np.float64:
+                raise TrainingDataShapeError(f"{name} must be float64, got {array.dtype}")
+            if not np.all(np.isfinite(array)):
+                raise TrainingDataShapeError(f"{name} must hold only finite numbers")
         if self.states.shape[0] != self.actions.shape[0]:
             raise TrainingDataShapeError(
                 f"{self.states.shape[0]} state trajectories but {self.actions.shape[0]} "
@@ -201,6 +218,8 @@ class TrainingData:
         d, a = self.states.shape[2], self.actions.shape[2]
         for name in ("train_pairs", "heldout_pairs"):
             pairs = getattr(self, name)
+            if pairs is not None and not isinstance(pairs, Pairs):
+                raise TrainingDataShapeError(f"{name} must be a Pairs, got {type(pairs).__name__}")
             if pairs is not None and (pairs.state.shape[1] != d or pairs.action.shape[1] != a):
                 raise TrainingDataShapeError(
                     f"{name} width (state {pairs.state.shape[1]}, action "
@@ -214,11 +233,15 @@ class TrainingData:
             if (
                 not isinstance(index, np.ndarray)
                 or index.ndim != 1
-                or not np.issubdtype(index.dtype, np.integer)
-                or (index.size and (index.min() < 0 or index.max() >= m))
+                or index.dtype != np.int64
+                or index.size == 0
+                or index.min() < 0
+                or index.max() >= m
+                or np.unique(index).size != index.size
             ):
                 raise TrainingDataShapeError(
-                    f"gradcheck_index must be a 1-D integer array of rows in [0, {m}) of train_pairs"
+                    f"gradcheck_index must be a non-empty 1-D int64 array of distinct rows in "
+                    f"[0, {m}) of train_pairs (the first g of a permutation of the training set)"
                 )
         _freeze_arrays(self.states, self.actions, self.gradcheck_index)
 

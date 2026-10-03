@@ -112,12 +112,12 @@ def test_tc_wd3_01_training_data_generator_steps_only_through_the_worlds_batch_s
 
     tree = ast.parse(Path(inspect.getsourcefile(training)).read_text())
     imported = {
-        alias.name
+        part
         for node in ast.walk(tree)
         if isinstance(node, (ast.Import, ast.ImportFrom))
-        for alias in node.names
+        for part in [getattr(node, "module", None) or "", *(alias.name for alias in node.names)]
     }
-    assert "rk4_step" not in imported and "integrator" not in imported
+    assert not [name for name in imported if "rk4_step" in name or "integrator" in name]
     assert "build_training_data" in {
         fn.name
         for fn in ast.walk(tree)
