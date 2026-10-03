@@ -185,7 +185,8 @@ class TrainingData:
 
     The three pair fields are optional only so the earlier skeleton and
     preview builders, which fit the baselines on a handful of trajectories,
-    still construct; the MLP factories refuse `None` (backlog A19).
+    still construct; the MLP factories (P3-C03/C04) must refuse `None` when
+    they are built (backlog A19, REMEMBER.md §3).
     """
 
     states: np.ndarray  # float64[N, H+1, d]

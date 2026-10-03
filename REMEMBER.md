@@ -80,6 +80,11 @@ Ordered by when they bite. *(D1–D6, D12 and D14 were settled at Round 10 on
 - Per iteration: `forward` → `backward` → `Adam.step`, in that order (no runtime guard exists).
 - Gradient-check on real normalised training inputs before training; factories pass `seeds.rng("weights")` / per-member streams.
 - P3-C04: `sqrt(1+1/K)·std(ddof=1)` spread mapping (TC-MU5-03).
+- **Contract from P3-C06's review (read before building the models):**
+  - *Factories must refuse `train_pairs is None`* (the pair fields are optional only for the skeleton/preview callers; backlog A19).
+  - *Shuffle every epoch with your own seeded stream:* `train_pairs` lists the 12,500 kick pairs first, then the non-kick pairs.
+  - *Sufficiency test:* build the 2M set with `dataclasses.replace(recipe, subsample_pairs=...)` (the M set is an exact prefix of it, verified at full scale). **The held-out set of an M build and a 2M build are different draws and overlap with the other's training set (361/10,000 LV rows, 57/10,000 pendulum rows of the M build's held-out set sit inside the 2M training set) — score *both* models on the 2M build's held-out set, never each on a different one or the 2M model on the M build's.** Also disclose next to D17 that held-out pairs are pair-level draws, so about 3.5% (LV) have their successor pair in the M training set (7% in the 2M set), which mildly favours the 2M model.
+  - *The fallback count lives in the recipe* (`subsample_pairs_fallback: 100000`) and the sufficiency tolerance in `sufficiency_tolerance:`; `read_training_recipe` does not read them — add one shared reader rather than hard-coding either.
 
 **P3-C05, P3-C08 — fixtures, action-blind check** (TC-MU3-01..04, TC-MU4-01/02, TC-MU1-04). **P3-C08 must report whether the smaller LV lever (kicks ≤ 0.1, Round 10) is still enough for the action-blind fixture to be caught.**
 

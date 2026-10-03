@@ -106,6 +106,9 @@ class TrainingRecipe:
 def read_training_recipe(recipe_path: str | Path) -> TrainingRecipe:
     """Read the five pinned counts from `prereg/recipe.md`.
 
+    In plain words: the numbers that were locked in the recipe are the numbers
+    the training data is built from — read here, never typed in code.
+
     Each key must appear exactly once, at the start of a line, with a plain
     positive integer (an indented or bullet-quoted mention in the prose is
     not a key); a trailing `# comment` is ignored. Anything else is refused,
@@ -173,6 +176,12 @@ def build_training_data(
     horizon: int | None = None,
 ) -> TrainingData:
     """Make one world's homework (models spec ADR-M1, §4).
+
+    In plain words: simulate the world's histories with occasional kicks, then
+    pick, once and by seeded shuffle, the training examples (with the pinned
+    number of kicked ones), the held-back examples and the few used to check
+    the learning arithmetic. Consumers must shuffle the training rows
+    themselves each epoch (the kicked ones come first), with their own stream.
 
     `horizon` defaults to the world's declared evaluation horizon (the
     longest task horizon); tests pass a shorter one to run quickly.
@@ -255,6 +264,9 @@ def build_training_data(
 
 def assert_eval_starts_disjoint(training: TrainingData, eval_starts: np.ndarray) -> None:
     """Refuse if any evaluation start is exactly a training start (MU-7, TC-MU7-01).
+
+    In plain words: the exam must never begin from a question the model
+    practised on.
 
     Only *starts* are compared: later states of a training trajectory may
     legitimately resemble evaluation states (the systems cycle) — MU-7

@@ -639,3 +639,8 @@ def test_a_world_with_no_tasks_has_no_default_horizon():
 
     with pytest.raises(TrainingDataError, match="no tasks"):
         build_training_data("lv", _NoTasks(), SeedSource(SEED, None), SMALL["lv"][1])
+
+
+def test_a_gradcheck_batch_as_large_as_the_training_set_is_a_legal_recipe():
+    TrainingRecipe(training_trajectories=10, subsample_pairs=50, kick_pairs=5,
+                   heldout_pairs=5, gradcheck_pairs=50)

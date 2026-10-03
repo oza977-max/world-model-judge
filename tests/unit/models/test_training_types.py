@@ -213,3 +213,30 @@ def test_gradcheck_index_must_be_distinct_nonempty_int64(index):
     states, actions = _states_actions()
     with pytest.raises(TrainingDataShapeError, match="gradcheck"):
         TrainingData(states=states, actions=actions, train_pairs=_pairs(5), gradcheck_index=index)
+
+
+# --- independent review, P3-C06 pass 2 ---
+
+
+def test_pairs_action_width_must_match_the_trajectories_action_width():
+    states, actions = _states_actions(d=2, a=1)
+    wide = Pairs(
+        state=np.zeros((3, 2)), action=np.zeros((3, 2)), next_state=np.zeros((3, 2)),
+        is_kick=np.zeros(3, dtype=bool),
+    )
+    with pytest.raises(TrainingDataShapeError, match="action"):
+        TrainingData(states=states, actions=actions, train_pairs=wide, heldout_pairs=_pairs(2))
+
+
+@pytest.mark.parametrize("states_steps", [3, 5, 6])  # H is 3: states must have exactly H+1 = 4
+def test_states_must_have_exactly_one_more_step_than_actions(states_steps):
+    with pytest.raises(TrainingDataShapeError, match="one more step"):
+        TrainingData(states=np.zeros((2, states_steps, 2)), actions=np.zeros((2, 3, 1)))
+
+
+def test_a_gradcheck_batch_as_large_as_the_whole_training_set_is_legal():
+    states, actions = _states_actions()
+    TrainingData(
+        states=states, actions=actions, train_pairs=_pairs(4),
+        gradcheck_index=np.array([3, 1, 0, 2], dtype=np.int64),
+    )
