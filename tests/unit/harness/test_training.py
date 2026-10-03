@@ -824,3 +824,32 @@ def test_a_world_with_no_action_dimension_is_refused():
 
     with pytest.raises(TrainingDataError, match="action"):
         build_training_data("lv", _NoLever(), SeedSource(SEED, None), TrainingRecipe(6, 30, 1, 5, 3), horizon=9)
+
+
+# --- independent review, P3-C03 pass 1: make_world_context carries the world's own facts ---
+
+
+@pytest.mark.parametrize("name", WORLDS)
+def test_make_world_context_is_exactly_the_worlds_own_declarations(name):
+    from wmj.harness.training import make_world_context
+
+    module = SMALL[name][0]
+    ctx = make_world_context(name, module.WORLD)
+    spec = module.regions()
+    assert ctx.world_name == name
+    assert (ctx.state_dim, ctx.action_dim) == (module.WORLD.d, module.WORLD.a)
+    assert np.array_equal(ctx.training_state_box, spec.training_state_box)
+    assert np.array_equal(ctx.training_action_interval, spec.training_action_interval)
+    assert np.array_equal(ctx.scale, module.WORLD.scale)
+
+
+def test_make_world_context_known_values():
+    from wmj.harness.training import make_world_context
+
+    lv_ctx = make_world_context("lv", lv.WORLD)
+    assert lv_ctx.scale.tolist() == [4.0, 2.5]
+    assert lv_ctx.training_action_interval.tolist() == [[-0.1, 0.1]]
+    assert lv_ctx.training_state_box.tolist() == [[2.0, 6.0], [1.0, 4.0]]
+    pend = make_world_context("pendulum", pendulum.WORLD)
+    assert (pend.state_dim, pend.action_dim) == (4, 1)
+    assert pend.training_action_interval.tolist() == [[-1.0, 1.0]]

@@ -10,6 +10,7 @@ was told to use are the numbers the frozen recipe pins.
 
 from __future__ import annotations
 
+import itertools
 import re
 from pathlib import Path
 
@@ -410,3 +411,91 @@ def test_direct_is_registered_under_its_name_with_the_uniform_factory(data):
     assert all_models()["direct"] is direct_factory
     built = direct_factory(_ctx(), _seeds(), data)
     assert isinstance(built, DirectModel)
+
+
+# --- independent review, P3-C03 pass 1: an independent reference trainer pins the whole recipe ---
+
+
+def _reference_train(ctx, seeds, pairs, *, epochs, batch_size, beta):
+    """Model A trained straight from the spec text, sharing no code with `train_direct`."""
+    d = ctx.state_dim
+    hw = (ctx.training_action_interval[:, 1] - ctx.training_action_interval[:, 0]) / 2.0
+    X = np.hstack([pairs.state / ctx.scale, pairs.action / hw])
+    T = pairs.next_state - pairs.state
+    sizes = [X.shape[1], 64, 64, 2 * d]
+    rng = seeds.rng("weights")
+    Ws = [rng.uniform(-1 / np.sqrt(i), 1 / np.sqrt(i), size=(i, o)) for i, o in itertools.pairwise(sizes)]
+    bs = [np.zeros(o) for o in sizes[1:]]
+    m_w = [np.zeros_like(w) for w in Ws]; v_w = [np.zeros_like(w) for w in Ws]
+    m_b = [np.zeros_like(b) for b in bs]; v_b = [np.zeros_like(b) for b in bs]
+    t = 0
+    for epoch in range(epochs):
+        order = seeds.rng("shuffle", str(epoch)).permutation(X.shape[0])
+        for start in range(0, X.shape[0], batch_size):
+            rows = order[start : start + batch_size]
+            x, y = X[rows], T[rows]
+            acts = [x]
+            for k in range(3):
+                pre = acts[-1] @ Ws[k] + bs[k]
+                acts.append(np.tanh(pre) if k < 2 else pre)
+            out = acts[-1]
+            mu, s = out[:, :d], out[:, d:]
+            r = y - mu
+            sigma = np.exp(s)
+            w = sigma ** (2 * beta)
+            g = np.hstack([-w * r / sigma**2, w * (1 - r**2 / sigma**2)]) / x.shape[0]
+            dW, db = [None] * 3, [None] * 3
+            for k in (2, 1, 0):
+                dW[k] = acts[k].T @ g
+                db[k] = g.sum(axis=0)
+                if k:
+                    g = (g @ Ws[k].T) * (1 - acts[k] ** 2)
+            t += 1
+            for k in range(3):
+                for p, gr, mm, vv in ((Ws[k], dW[k], m_w[k], v_w[k]), (bs[k], db[k], m_b[k], v_b[k])):
+                    mm *= 0.9; mm += 0.1 * gr
+                    vv *= 0.999; vv += 0.001 * gr**2
+                    p -= 1e-3 * (mm / (1 - 0.9**t)) / (np.sqrt(vv / (1 - 0.999**t)) + 1e-8)
+    return list(zip(Ws, bs))
+
+
+def _close(net, reference, rtol=1e-7, atol=1e-10):
+    for (W, b), (Wr, br) in zip(net.layers, reference):
+        assert np.allclose(W, Wr, rtol=rtol, atol=atol) and np.allclose(b, br, rtol=rtol, atol=atol)
+
+
+@pytest.mark.parametrize("batch_size", [64, 256])
+def test_train_direct_equals_an_independent_trainer_written_from_the_spec(data, batch_size):
+    net = train_direct(_ctx(), _seeds(), data, epochs=3, batch_size=batch_size)
+    ref = _reference_train(_ctx(), _seeds(), data.train_pairs, epochs=3, batch_size=batch_size, beta=0.5)
+    _close(net, ref)
+
+
+def test_the_registered_factory_trains_with_the_recipes_epochs_batch_size_and_beta(data):
+    """I2: the factory (what the registry and P6-C01 call) must use 100 / 256 / 0.5 and the
+    seeds it is given — checked by comparing with the reference trainer at those values."""
+    built = direct_factory(_ctx(), _seeds(), data)
+    ref = _reference_train(_ctx(), _seeds(), data.train_pairs, epochs=100, batch_size=256, beta=0.5)
+    # Over 800 steps rounding differences between two correct implementations are amplified
+    # (training is chaotic — see the P3-C03 report), so the tolerance here is loose; a wrong
+    # epoch count, batch size, beta, learning rate or seed differs by far more than this.
+    _close(built._net, ref, rtol=0.1, atol=0.05)
+
+
+def test_the_factory_uses_the_seed_it_is_given(data):
+    other = direct_factory(_ctx(), SeedSource(SEED + 5, "direct"), data)
+    same = direct_factory(_ctx(), _seeds(), data)
+    assert other._net.layers[0][0].tobytes() != same._net.layers[0][0].tobytes()
+
+
+def test_a_missing_gradcheck_index_or_empty_training_set_is_refused():
+    from wmj.models.base import Pairs
+
+    pairs = Pairs(np.zeros((5, 2)), np.zeros((5, 1)), np.ones((5, 2)), np.zeros(5, dtype=bool))
+    states, actions = np.zeros((2, 4, 2)), np.zeros((2, 3, 1))
+    no_check = TrainingData(states=states, actions=actions, train_pairs=pairs)
+    with pytest.raises(DirectTrainingError, match="gradcheck_index"):
+        train_direct(_ctx(), _seeds(), no_check, epochs=1)
+    empty = Pairs(np.zeros((0, 2)), np.zeros((0, 1)), np.zeros((0, 2)), np.zeros(0, dtype=bool))
+    with pytest.raises(DirectTrainingError, match="empty|no training"):
+        train_direct(_ctx(), _seeds(), TrainingData(states=states, actions=actions, train_pairs=empty), epochs=1)

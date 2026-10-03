@@ -23,7 +23,7 @@ training sets (the 50,000 set is the first part of the 100,000 set); scoring
 the larger model on the smaller build's held-out set would let it see some of
 those examples in training and tilt the test toward "50,000 is not enough"
 (found in the independent review of the training-data chunk; recorded in
-backlog A20 as a clarification of "each model's own held-out pairs").
+backlog A21 as a clarification of "each model's own held-out pairs").
 
 **Kick split.** The same step reports each model's held-out error separately
 for kicked and un-kicked examples, because training is 25% kicks while the
@@ -80,6 +80,11 @@ class KickSplit:
 
 def kick_split_error(means: np.ndarray, pairs: Pairs, scale: np.ndarray) -> KickSplit:
     means = np.asarray(means, dtype=float)
+    if means.shape != pairs.next_state.shape:
+        raise SufficiencyError(
+            f"predicted means have shape {tuple(means.shape)} but the held-out targets have "
+            f"{tuple(pairs.next_state.shape)}"
+        )
     per_example = np.mean(((means - pairs.next_state) / scale) ** 2, axis=1)
     kick = pairs.is_kick
     return KickSplit(

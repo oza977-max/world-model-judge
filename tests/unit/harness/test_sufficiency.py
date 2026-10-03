@@ -222,7 +222,7 @@ def test_tc_mu5_05_no_parameter_or_identifier_can_carry_the_margin_or_evaluation
 
 
 def test_tc_mu5_05_the_check_runs_with_the_margin_machinery_unavailable(monkeypatch):
-    import wmj.harness.prereg as prereg
+    from wmj.harness import prereg
 
     def unavailable(*_a, **_k):
         raise AssertionError("the sufficiency check reached for the matching margin")
@@ -232,3 +232,37 @@ def test_tc_mu5_05_the_check_runs_with_the_margin_machinery_unavailable(monkeypa
     monkeypatch.setattr(prereg, "check_prereg", unavailable)
     r = check_world("lv", lv.WORLD, _biased_factory(False), RECIPE, SEED, "x", horizon=100)
     assert r.sufficient is True
+
+
+# --- independent review, P3-C03 pass 1 ---
+
+
+def _ratio_factory(bias_small, bias_big):
+    """A model whose bias depends on the training size, so err(M)/err(2M) = (bias_small/bias_big)^2."""
+
+    def factory(ctx, seeds, data):
+        small = data.train_pairs.state.shape[0] == RECIPE.subsample_pairs
+        return _BiasedWorldModel(bias_small if small else bias_big)
+
+    return factory
+
+
+def test_the_tolerance_argument_decides_the_flag():
+    # ratio of errors = (1.1)^2 = 1.21
+    factory = _ratio_factory(0.011, 0.010)
+    assert check_world("lv", lv.WORLD, factory, RECIPE, SEED, "x", tolerance=0.25, horizon=100).sufficient is True
+    assert check_world("lv", lv.WORLD, factory, RECIPE, SEED, "x", tolerance=0.15, horizon=100).sufficient is False
+    # and the default is the recipe's 10%: 1.21 > 1.10
+    assert check_world("lv", lv.WORLD, factory, RECIPE, SEED, "x", horizon=100).sufficient is False
+
+
+def test_each_kick_split_comes_from_its_own_models_predictions():
+    factory = _ratio_factory(0.02, 0.01)
+    r = check_world("lv", lv.WORLD, factory, RECIPE, SEED, "x", horizon=100)
+    assert r.split_m.error_plain == pytest.approx(4 * r.split_2m.error_plain, rel=1e-6)
+    assert r.err_m == pytest.approx(4 * r.err_2m, rel=1e-6)
+
+
+def test_the_kick_split_refuses_a_shape_mismatch():
+    with pytest.raises(SufficiencyError, match="shape"):
+        kick_split_error(np.zeros((2, 2)), _pairs([[1.0, 1.0]]), SCALE)

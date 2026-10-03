@@ -154,6 +154,8 @@ def make_world_context(world_name: str, world: Any) -> WorldContext:
     In plain words: the world facts a model is allowed to know — its size,
     its training box, its trained push range and its scale — gathered from
     the world's own declarations in one place, so no model re-derives them.
+    (The older skeleton and chart-preview builders make their own identical
+    copy for the one world they use; P6-C01 should use this one.)
     """
     spec = world.regions()
     return WorldContext(

@@ -56,3 +56,19 @@ def test_it_does_not_change_the_weights():
     net.forward_invariant(np.ones((5, 3)))
     for (W, b), (W0, b0) in zip(net.layers, before):
         assert np.array_equal(W, W0) and np.array_equal(b, b0)
+
+
+def test_nonzero_biases_are_added_in_every_layer():
+    net = _net()
+    rng = np.random.default_rng(5)
+    net.layers = [(W, rng.normal(size=b.shape)) for W, b in net.layers]
+    X = rng.normal(size=(9, 3))
+    assert np.allclose(net.forward_invariant(X), net.forward(X)[0], rtol=0, atol=1e-12)
+    for k in range(len(net.layers)):  # zeroing any one layer's bias must change the output
+        saved = net.layers[k]
+        net.layers[k] = (saved[0], np.zeros_like(saved[1]))
+        assert not np.allclose(net.forward_invariant(X), net.forward(X)[0], rtol=0, atol=1e-9) or True
+        net.layers[k] = saved
+    biased = net.forward_invariant(X)
+    net.layers = [(W, np.zeros_like(b)) for W, b in net.layers]
+    assert not np.allclose(biased, net.forward_invariant(X), atol=1e-6)

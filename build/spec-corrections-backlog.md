@@ -923,3 +923,40 @@ measured.
    kick rate or a shorter horizon refuses the build (as designed).
 
 *Where recorded:* `build/handovers/P3-C06.md`; `REMEMBER.md` D17.
+
+### A20 — found building P3-C03: two things Model A's spec leaves open (for the next review)
+
+**In plain words:** the spec says what Model A predicts, but not in what units,
+and it asks the model's code to read the recipe, which the project's own
+import rules forbid. Both were resolved the simplest consistent way; the next
+review should write the choice into the spec.
+
+1. **Output units.** ADR-M3 says the network outputs "per-dimension
+   `(Δmean, log σ)`" and `mean = state + Δmean`, `spread = exp(log σ)`, but not
+   whether the outputs are in the state's own units or divided by the world's
+   scale (the *inputs* are explicitly divided by scale). Implemented
+   literally: raw state units. The held-out error used by the sufficiency test
+   is scale-normalised either way. A scale-normalised output would make the
+   loss weights `σ^(2β)` mean something different per dimension; whichever is
+   chosen changes trained bytes, so it belongs in the spec.
+2. **Recipe numbers inside the model.** The implementation guide says P3-C03/
+   C04 "read every count from `prereg/recipe.md`". The models import allowlist
+   (cross-cutting ADR-003, gate TC-NF6-09) allows no file access in
+   `wmj/models/*`. Resolved the way the worlds' kick settings already are:
+   `EPOCHS`, `BATCH_SIZE`, `BETA_NLL` are mirrored constants in
+   `models/direct.py`, and a test compares them with `prereg/recipe.md` on every
+   run (a drift fails). The harness-side counts (pairs, heldout, gradcheck) are
+   read from the recipe by `harness/training.py`.
+
+### A21 — found building P3-C03: which held-out set the sufficiency test uses
+
+ADR-M3 / TC-MU5-05 say the test uses "each model's own held-out training-region
+pairs at M and 2M". Taken literally that scores the 2M model on the M build's
+held-out set, 3.6% (LV) / 0.6% (pendulum) of which the 2M model trained on —
+tilting the test toward "M is not enough" (measured in the P3-C06 review).
+Implemented: both versions are scored on the **2M build's** held-out set,
+which is disjoint from both training sets. Next review: write this into
+ADR-M3 and TC-MU5-05.
+
+*Where recorded:* `build/handovers/P3-C03.md` (to be written at convergence);
+independent review of P3-C03, pass 1.

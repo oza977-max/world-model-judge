@@ -177,17 +177,23 @@ def train_direct(
     d, a = ctx.state_dim, ctx.action_dim
     net = MLP((d + a, HIDDEN_UNITS, HIDDEN_UNITS, 2 * d), seeds.rng("weights"))
 
+    if pairs.state.shape[0] == 0:
+        raise DirectTrainingError("train_pairs is empty — there is nothing to train on")
+    if training.gradcheck_index is None:
+        raise DirectTrainingError(
+            "training.gradcheck_index is missing — the one-time backprop check must run "
+            "before each training run (models ADR-M3); the harness always provides it"
+        )
     X = normalise_inputs(ctx, pairs.state, pairs.action)
     T = pairs.next_state - pairs.state
-    if training.gradcheck_index is not None:
-        idx = training.gradcheck_index
-        check_target = T[idx]
-        gradient_check(
-            net,
-            X[idx],
-            lambda Y: gaussian_nll_loss_and_grad(Y, check_target),
-            tolerance=GRADIENT_TOLERANCE,
-        )
+    idx = training.gradcheck_index
+    check_target = T[idx]
+    gradient_check(
+        net,
+        X[idx],
+        lambda Y: gaussian_nll_loss_and_grad(Y, check_target),
+        tolerance=GRADIENT_TOLERANCE,
+    )
 
     adam = Adam(net.param_shapes(), lr=LEARNING_RATE)
     m = X.shape[0]
