@@ -62,10 +62,10 @@ def test_training_data_arrays_are_read_only():
     ],
 )
 def test_pairs_with_inconsistent_shapes_are_refused(kwargs):
-    base = dict(
-        state=np.zeros((5, 2)), action=np.zeros((5, 1)), next_state=np.ones((5, 2)),
-        is_kick=np.zeros(5, dtype=bool),
-    )
+    base = {
+        "state": np.zeros((5, 2)), "action": np.zeros((5, 1)), "next_state": np.ones((5, 2)),
+        "is_kick": np.zeros(5, dtype=bool),
+    }
     base.update(kwargs)
     with pytest.raises(TrainingDataShapeError):
         Pairs(**base)

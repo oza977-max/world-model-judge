@@ -17,7 +17,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from wmj.harness.benchmarks import sample_region_starts
+from wmj.harness.benchmarks import declared_regions, sample_region_starts
 from wmj.harness.kicks import seeded_kick_sequences
 from wmj.harness.training import (
     TRAINING_PURPOSES,
@@ -69,10 +69,10 @@ def test_the_real_recipe_gives_the_pinned_counts():
 
 
 def _recipe_text(**overrides):
-    values = dict(
-        training_trajectories="2000", subsample_pairs="50000", kick_pairs="12500",
-        heldout_pairs="10000", gradcheck_pairs="64",
-    )
+    values = {
+        "training_trajectories": "2000", "subsample_pairs": "50000", "kick_pairs": "12500",
+        "heldout_pairs": "10000", "gradcheck_pairs": "64",
+    }
     values.update(overrides)
     lines = [f"{k}: {v}" for k, v in values.items() if v is not None]
     return "```\n" + "\n".join(lines) + "\n```\n"
@@ -354,7 +354,7 @@ def test_trajectories_equal_the_worlds_own_single_steps_bit_for_bit(name):
     data = _build(name)
     for i in (0, 1, data.states.shape[0] - 1):
         state = data.states[i, 0]
-        for t in range(0, 60):
+        for t in range(60):
             state = module.transition(state, data.actions[i, t])
             assert np.array_equal(state, data.states[i, t + 1])
 
@@ -374,15 +374,17 @@ def test_eval_starts_never_coincide_with_training_starts(name):
     module, _, _ = SMALL[name]
     data = _build(name)
     seeds = SeedSource(SEED, None)
-    for region, box, _band in __import__("wmj.harness.benchmarks", fromlist=["x"]).declared_regions(module.WORLD):
+    for region, box, _band in declared_regions(module.WORLD):
         eval_starts = sample_region_starts(seeds.rng_for(name, region, "eval-starts"), box, 200)
         assert_eval_starts_disjoint(data, eval_starts)
 
 
 def test_the_disjointness_check_can_fail():
     data = _build("lv")
-    leaked = np.vstack([data.states[3, 0], data.states[0, 1]])  # row 0 is a real training start
-    with pytest.raises(TrainingDataError, match="start"):
+    # Only the LAST row is a real training start, so a check that looks at
+    # just the first rows (or stops early) would miss it.
+    leaked = np.vstack([data.states[0, 1], data.states[1, 1], data.states[2, 1], data.states[3, 0]])
+    with pytest.raises(TrainingDataError, match="start 3"):
         assert_eval_starts_disjoint(data, leaked)
 
 
@@ -431,3 +433,42 @@ def test_the_result_is_a_training_data_with_read_only_arrays(built):
         data.states[0, 0, 0] = 0.0
     with pytest.raises(ValueError):
         data.train_pairs.state[0, 0] = 0.0
+
+
+@pytest.mark.parametrize("key", ["training_trajectories", "subsample_pairs", "kick_pairs",
+                                 "heldout_pairs", "gradcheck_pairs"])
+@pytest.mark.parametrize("bad", [0, -3, 2.5, True, "7"])
+def test_a_recipe_object_built_directly_is_validated_too(key, bad):
+    values = {"training_trajectories": 10, "subsample_pairs": 100, "kick_pairs": 5,
+              "heldout_pairs": 20, "gradcheck_pairs": 4}
+    values[key] = bad
+    with pytest.raises(TrainingDataError, match=key):
+        TrainingRecipe(**values)
+
+
+class _TwoTaskWorld:
+    """lv, but with two tasks of different horizons: the default is the longest."""
+
+    d, a, dt, scale = lv.WORLD.d, lv.WORLD.a, lv.WORLD.dt, lv.WORLD.scale
+    kick_rate_per_s = lv.WORLD.kick_rate_per_s
+
+    def regions(self):
+        return lv.regions()
+
+    def tasks(self):
+        from wmj.worlds.base import Task
+
+        return (Task("short", "control", 0.1, 5), Task("long", "planning", 0.4, 9))
+
+    def transition_batch(self, s, a):
+        return lv.transition_batch(s, a)
+
+
+def test_the_default_horizon_is_the_longest_task_horizon():
+    recipe = TrainingRecipe(training_trajectories=6, subsample_pairs=30, kick_pairs=1,
+                            heldout_pairs=5, gradcheck_pairs=3)
+    seeds = SeedSource(SEED, None)
+    rate_boost = _TwoTaskWorld()
+    rate_boost.kick_rate_per_s = 20.0  # plenty of kicks in a tiny run
+    data = build_training_data("lv", rate_boost, seeds, recipe)
+    assert data.actions.shape[1] == 9

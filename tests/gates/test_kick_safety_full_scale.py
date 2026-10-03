@@ -17,10 +17,8 @@ ADR-002 rule 2): 2,000 full-horizon training trajectories
 evaluation trials ("eval-starts" / "eval-kicks") and 64 benchmark starts
 with their perturbed twins ("benchmark-starts" / "benchmark-kicks").
 
-**Note for P3-C06:** the training half below re-creates the generation
-rule from the spec. When P3-C06 builds the real training-data generator,
-this gate must call it instead, so the gate checks the code that runs
-rather than a copy of it.
+The training half calls the real training-data generator (P3-C06), so the gate
+checks the code that runs rather than a copy of it.
 """
 
 from __future__ import annotations
@@ -36,7 +34,6 @@ from wmj.harness.benchmarks import (
 from wmj.harness.kicks import seeded_kick_sequences
 from wmj.models.base import SeedSource
 from wmj.worlds import lv, pendulum
-from wmj.worlds.actions import kick_sequence, step_probability
 from wmj.worlds.divergence import perturb
 
 SEED = 20260825
@@ -57,25 +54,19 @@ def _roll(module, starts: np.ndarray, kicks: np.ndarray) -> None:
     assert np.all(np.isfinite(states))
 
 
-def _kicks(seeds: SeedSource, world: str, region: str, purpose: str, n: int, module, band: str):
-    p = step_probability(module.KICK_RATE_PER_S, module.DT)
-    umax = float(module.regions().training_action_interval[0, 1])
-    return np.stack(
-        [
-            kick_sequence(seeds.rng_for(world, region, purpose, str(i)),
-                          horizon=module.HORIZON, p_step=p, band=band, umax=umax)
-            for i in range(n)
-        ]
-    )
-
-
 @pytest.mark.parametrize(("name", "module"), WORLDS)
 def test_tc_wd2_02_training_trajectories_never_breach_the_floor(name, module):
-    seeds = SeedSource(SEED, None)
-    box = module.regions().training_state_box
-    starts = sample_region_starts(seeds.rng_for(name, "training", "train-starts"), box, N_TRAIN)
-    kicks = _kicks(seeds, name, "training", "train-kicks", N_TRAIN, module, "in")
-    _roll(module, starts, kicks)
+    # Calls the real training-data generator (P3-C06), not a copy of its
+    # rule: `transition_batch` aborts on any floor breach, so a successful
+    # build is the proof (and finiteness is asserted for the pendulum).
+    from pathlib import Path
+
+    from wmj.harness.training import build_training_data, read_training_recipe
+
+    recipe = read_training_recipe(Path(__file__).resolve().parents[2] / "prereg" / "recipe.md")
+    assert recipe.training_trajectories == N_TRAIN
+    data = build_training_data(name, module.WORLD, SeedSource(SEED, None), recipe)
+    assert np.all(np.isfinite(data.states))
 
 
 @pytest.mark.parametrize(("name", "module"), WORLDS)

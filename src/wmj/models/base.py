@@ -110,17 +110,117 @@ class WorldContext:
         _freeze_arrays(self.training_state_box, self.training_action_interval, self.scale)
 
 
+class TrainingDataShapeError(WmjError):
+    """Raised when training data (or a `Pairs` bundle) is malformed.
+
+    In plain words: the homework handed to every model must be well
+    formed — matching shapes, finite numbers, indices that point at real
+    rows — or it is refused on the spot, not discovered halfway through
+    training (models spec ADR-M1, design-review-010).
+    """
+
+
+@dataclass(frozen=True)
+class Pairs:
+    """One-step examples: (state, action) -> next state, plus a kick flag.
+
+    In plain words: each row says "from this state, with this push, the
+    world moved to that state"; `is_kick` marks the rows where the push
+    was not zero. Built once by the harness, never by a model (models
+    spec ADR-M1, §4).
+    """
+
+    state: np.ndarray  # float64[m, d]
+    action: np.ndarray  # float64[m, a]
+    next_state: np.ndarray  # float64[m, d]
+    is_kick: np.ndarray  # bool[m]
+
+    def __post_init__(self) -> None:
+        for name in ("state", "action", "next_state"):
+            array = getattr(self, name)
+            if not isinstance(array, np.ndarray) or array.ndim != 2:
+                raise TrainingDataShapeError(f"Pairs.{name} must be a 2-D numpy array")
+            if not np.all(np.isfinite(array)):
+                raise TrainingDataShapeError(f"Pairs.{name} must hold only finite numbers")
+        m = self.state.shape[0]
+        if self.action.shape[0] != m or self.next_state.shape[0] != m:
+            raise TrainingDataShapeError(
+                f"Pairs rows disagree: state {self.state.shape[0]}, action "
+                f"{self.action.shape[0]}, next_state {self.next_state.shape[0]}"
+            )
+        if self.next_state.shape[1] != self.state.shape[1]:
+            raise TrainingDataShapeError(
+                f"Pairs.next_state width {self.next_state.shape[1]} differs from "
+                f"state width {self.state.shape[1]}"
+            )
+        if (
+            not isinstance(self.is_kick, np.ndarray)
+            or self.is_kick.dtype != np.bool_
+            or self.is_kick.shape != (m,)
+        ):
+            raise TrainingDataShapeError(f"Pairs.is_kick must be a bool array of shape ({m},)")
+        _freeze_arrays(self.state, self.action, self.next_state, self.is_kick)
+
+
 @dataclass(frozen=True)
 class TrainingData:
     """The seeded training trajectories every factory fits against.
 
-    Built once per world by the harness and handed identically to every
-    registered factory — one producer, one construction site (models
-    spec ADR-M1).
+    In plain words: the shared homework. `states`/`actions` are the
+    simulated histories; `train_pairs` is the fixed set of one-step examples
+    every network trains on; `heldout_pairs` is held back for checking
+    only; `gradcheck_index` picks the few training rows used once to check
+    the learning arithmetic. Built once per world by the harness and handed
+    identically to every registered factory — one producer, one
+    construction site (models spec ADR-M1, design-review-010).
+
+    The three pair fields are optional only so the earlier skeleton and
+    preview builders, which fit the baselines on a handful of trajectories,
+    still construct; the MLP factories refuse `None` (backlog A19).
     """
 
     states: np.ndarray  # float64[N, H+1, d]
     actions: np.ndarray  # float64[N, H, a]
+    train_pairs: Pairs | None = None
+    heldout_pairs: Pairs | None = None
+    gradcheck_index: np.ndarray | None = None  # int64[g], indices into train_pairs
+
+    def __post_init__(self) -> None:
+        if self.states.ndim != 3 or self.actions.ndim != 3:
+            raise TrainingDataShapeError("states and actions must be 3-D [trajectories, steps, dims]")
+        if self.states.shape[0] != self.actions.shape[0]:
+            raise TrainingDataShapeError(
+                f"{self.states.shape[0]} state trajectories but {self.actions.shape[0]} "
+                f"action trajectories"
+            )
+        if self.states.shape[1] != self.actions.shape[1] + 1:
+            raise TrainingDataShapeError(
+                f"states must have one more step than actions (H+1 vs H): got "
+                f"{self.states.shape[1]} and {self.actions.shape[1]}"
+            )
+        d, a = self.states.shape[2], self.actions.shape[2]
+        for name in ("train_pairs", "heldout_pairs"):
+            pairs = getattr(self, name)
+            if pairs is not None and (pairs.state.shape[1] != d or pairs.action.shape[1] != a):
+                raise TrainingDataShapeError(
+                    f"{name} width (state {pairs.state.shape[1]}, action "
+                    f"{pairs.action.shape[1]}) differs from the trajectories' (state {d}, action {a})"
+                )
+        if self.gradcheck_index is not None:
+            index = self.gradcheck_index
+            if self.train_pairs is None:
+                raise TrainingDataShapeError("a gradcheck_index needs train_pairs to index into")
+            m = self.train_pairs.state.shape[0]
+            if (
+                not isinstance(index, np.ndarray)
+                or index.ndim != 1
+                or not np.issubdtype(index.dtype, np.integer)
+                or (index.size and (index.min() < 0 or index.max() >= m))
+            ):
+                raise TrainingDataShapeError(
+                    f"gradcheck_index must be a 1-D integer array of rows in [0, {m}) of train_pairs"
+                )
+        _freeze_arrays(self.states, self.actions, self.gradcheck_index)
 
 
 @dataclass(frozen=True)

@@ -99,3 +99,38 @@ def test_tc_wd3_02_mismatched_dt_fails_the_alignment_check():
     something (worlds spec ADR-W1)."""
     with pytest.raises(DtMismatchError):
         assert_dt_alignment(world_dt=lv.DT, model_dt=lv.DT * 2.0)
+
+
+def test_tc_wd3_01_training_data_generator_steps_only_through_the_worlds_batch_step():
+    """TC-WD3-01, training-data half (P3-C06): the generator that makes the
+    training trajectories advances the world only by calling the world's own
+    `transition_batch` (which, per test_batched_step, calls the one shared
+    `rk4_step`). It must neither import the integrator nor define a stepping
+    function of its own — a second integrator would make every model chart
+    measure the integrator instead of the model."""
+    from wmj.harness import training
+
+    tree = ast.parse(Path(inspect.getsourcefile(training)).read_text())
+    imported = {
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+        for alias in node.names
+    }
+    assert "rk4_step" not in imported and "integrator" not in imported
+    assert "build_training_data" in {
+        fn.name
+        for fn in ast.walk(tree)
+        if isinstance(fn, ast.FunctionDef)
+        and any(
+            isinstance(c, ast.Call)
+            and isinstance(c.func, ast.Attribute)
+            and c.func.attr == "transition_batch"
+            for c in ast.walk(fn)
+        )
+    }
+    assert not [
+        fn.name
+        for fn in ast.walk(tree)
+        if isinstance(fn, ast.FunctionDef) and "deriv" in fn.name.lower()
+    ]

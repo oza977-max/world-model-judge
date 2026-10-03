@@ -891,3 +891,35 @@ reviewed); this note is what the next design review should fold in.
 
 *Where recorded:* `build/handovers/P3-C10.md` (to be written at convergence);
 independent review of P3-C10, passes 1–3.
+
+### A19 — found building P3-C06: two things the training-data spec leaves open (for the next review)
+
+**In plain words:** the spec says how to pick the training examples; building
+it showed one choice the spec made silently and one consequence nobody
+measured.
+
+1. **`TrainingData`'s three new fields are optional in the code.** The spec
+   shows `train_pairs`, `heldout_pairs` and `gradcheck_index` as plain
+   required fields. The two earlier builders (the skeleton and the
+   chart-preview) fit the baselines on a handful of trajectories and have no
+   such pick, so the fields default to `None` there. The MLP factories
+   (P3-C03/C04) must refuse `None` when they build. Next review: either make
+   the fields required and give those two callers a small pick, or write the
+   optional-with-refusal rule into ADR-M1.
+2. **The held-out set contains almost no kicked examples** (measured at full
+   scale, seed 20260825). The spec draws the held-out set from the pairs *not*
+   chosen for training. The training set takes 12,500 of the kick pairs the
+   world supplies — LV has 13,874, the pendulum 19,900 — so what is left is
+   about 1,374 kick pairs in 1.35 million (LV) and 7,400 in 9.9 million
+   (pendulum). A 10,000-pair held-out draw therefore has **6 kick pairs (LV)
+   and 10 (pendulum)**. The build-time report "held-out error split by kick
+   and non-kick pairs" (ADR-M3) will rest on those few examples for the kick
+   half, so it cannot support any conclusion about the models' behaviour on
+   kicks. Not a build error; a design question for the owner (**D17** in
+   `REMEMBER.md`): e.g. give the held-out set its own kick quota, or report
+   the kick split on a separately generated kicked held-out set. Any change
+   is a pre-freeze recipe revision, logged openly. Also noted: LV's margin
+   over the 12,500 quota is small (13,874 available, 11% spare), so a lower
+   kick rate or a shorter horizon refuses the build (as designed).
+
+*Where recorded:* `build/handovers/P3-C06.md`; `REMEMBER.md` D17.
