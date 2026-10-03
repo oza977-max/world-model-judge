@@ -2,48 +2,61 @@
 
 In plain words: before the judge is allowed to grade an unrigged model, this
 checks that the recipe, the ranking prediction, and the thresholds were
-written down, committed to git, and have not changed since — *before* any
-result was seen. That is what makes the pre-registration real rather than a
-promise. The judge itself cannot read git (it is a pure function, JU-12), so
-the harness owns this check and hands the judge only the thresholds, as data.
+**frozen** — locked by one commit that added a small file, `prereg/FREEZE` —
+before the run, and have not changed by a single byte since. That is what makes
+the pre-registration real rather than a promise. Until the freeze, the recipe
+may be revised openly (each revision dated in its own log); after it, nothing
+locked may change, and the freeze itself can happen once, ever. The judge
+itself cannot read git (it is a pure function, JU-12), so the harness owns this
+check and hands the judge only the thresholds, as data.
 
-Three things are asserted for every `prereg/` file (models ADR-M5):
-  1. it is committed (not a dirty working-tree edit);
-  2. its *first-added* commit timestamp strictly precedes the judged run;
-  3. its content has not changed since that first-added commit — the blob at
-     the first add hashes equal to the working-tree file.
-And for every *unrigged* model (`not is_baseline and not is_fixture`): its
-name appears in the committed recipe and prediction (a per-model entry, not
-just "the files exist" — TC-MU6-03). Baselines and fixtures are exempt
-(adding one stays a one-file change — TC-MU6-05).
-
-Why (2) uses `--reverse` (design-review-008 I6): a file deleted and later
-re-added has *two* "added" events; git's default newest-first order would
-resolve to the re-add, whose content matches the working tree by
-construction — silently passing the exact gaming this check exists to catch.
-`--reverse` pins the oldest add.
+The rules (models ADR-M5, design-review-010):
+  1. **The freeze commit is the commit that added `prereg/FREEZE`** — read from
+     git history, never typed or chosen. `FREEZE` holds only a human-readable
+     declaration; a commit cannot name its own id, and the git tag
+     `prereg-freeze`, if anyone makes one, is a label this module never reads
+     (a tag can be moved with one command and no history rewrite).
+  2. **One freeze, ever** (TC-MU6-06): exactly one add and no delete of
+     `prereg/FREEZE` anywhere in history. A second freeze, a delete-then-re-add,
+     a rename away and back, and a freeze added and removed on a side branch
+     that was merged away (which plain `git log` hides — hence `--full-history`)
+     are all refused. No `FREEZE` at all means "not frozen yet" (TC-MU6-08).
+  3. **Every certified file — `recipe.md`, `prediction.md`, `thresholds.json`
+     and `FREEZE` itself — must exist at the freeze commit, be clean in the
+     working tree, and hash byte-equal to its blob at the freeze commit**
+     (TC-MU6-04).
+  4. **The freeze commit's timestamp must strictly precede the run**
+     (TC-MU6-01).
+  5. For every *unrigged* model (`not is_baseline and not is_fixture`): its
+     name appears as a whole token in the committed recipe and prediction
+     (TC-MU6-03). Baselines and fixtures are exempt (TC-MU6-05).
+  6. **The recipe's kick settings equal the worlds' own** (TC-MU6-09), so the
+     frozen recipe pins them and the code cannot drift away silently.
+`check_prereg` returns the freeze commit's SHA, which the harness records as
+`meta.prereg_commit` in every verdict (TC-MU6-07).
 
 This is a harness module: it shells out to git and reads files, which the
 pure judge may not. Nothing here reads the network.
 
 **Disclosed residuals — what `check_prereg` does NOT close (named, not
-solved, in the same spirit as models ADR-M5's own residual risks).** These
-are inherent to a single-author, offline, no-server-side-witness project;
-no mechanical control here fully closes them, so they are disclosed rather
-than pretended away (surfaced by the P3-C07 independent review):
-  1. **Commit-timestamp forgeability** (ADR-M5's already-disclosed residual
-     #3): the ordering check reads the committer date, which the committer
-     supplies (`git commit --date=...`, `GIT_COMMITTER_DATE`). A run
-     executed, disliked, then "pre-registered" with a back-dated commit
-     passes the ordering check. The content-hash (TC-MU6-04) still catches
-     the *un*-back-dated drift, which is the likelier accident.
-  2. **Entry substance** (new, same family — backlog A13): the per-model
-     check confirms the model's name appears as a token in the committed
-     recipe and prediction; it cannot verify the surrounding text is a
-     genuine recipe/prediction for that model. A hollow mention passes.
-     Verifying substance would need semantic understanding of prose, which
-     is not mechanizable; the honesty of the entry's *content* rests on the
-     author, exactly as ADR-M5 already discloses for the recipe as a whole.
+solved; models ADR-M5's five residuals).** These are inherent to a
+single-author, offline, no-server-side-witness project; no mechanical control
+here fully closes them, so they are disclosed rather than pretended away:
+  1. **Rewritable git history.** A determined author can rewrite the freeze
+     commit itself. The content check closes ordinary, honestly-dated drift,
+     which is the likelier accident, not deliberate history surgery.
+  2. **Non-publication.** Nothing here can show that a judged run happened if
+     its output was never committed.
+  3. **Commit-timestamp forgeability.** The ordering check reads the committer
+     date, which the committer supplies (`git commit --date=...`,
+     `GIT_COMMITTER_DATE`). A run executed, disliked, then "frozen" with a
+     back-dated commit passes the ordering check.
+  4. **Entry substance** (backlog A13): the per-model check confirms a model's
+     name appears as a token in the committed recipe and prediction; it cannot
+     verify the surrounding text is a genuine recipe/prediction for that model.
+  5. **No evaluation before the freeze is a rule, not a mechanism.** No
+     evaluation-trial metric of either unrigged model may be computed before
+     the freeze. An unrecorded informal run before the freeze leaves no trace.
 """
 
 from __future__ import annotations
@@ -58,6 +71,7 @@ from typing import Iterable, Protocol
 from wmj.errors import WmjError
 
 PREREG_DIR = "prereg"
+FREEZE_FILE = "FREEZE"
 
 # The files whose committed content the per-model entry check reads — they
 # MUST be among the certified files so that content is commit-verified, not
@@ -73,12 +87,24 @@ class PreregNotCommittedError(PreregError):
     """A prereg/ file is missing from git or has uncommitted working-tree edits."""
 
 
+class PreregNotFrozenError(PreregError):
+    """There is no freeze yet, or a certified file was never part of it."""
+
+
+class PreregRefrozenError(PreregError):
+    """`prereg/FREEZE` was added more than once, or ever deleted (TC-MU6-06)."""
+
+
 class PreregOrderingError(PreregError):
-    """A prereg/ file's first-added commit does not precede the judged run."""
+    """The freeze commit does not strictly precede the judged run (TC-MU6-01)."""
 
 
 class PreregContentError(PreregError):
-    """A prereg/ file's content changed since its first-added commit."""
+    """A frozen prereg/ file's content differs from its blob at the freeze commit."""
+
+
+class PreregWorldConstantError(PreregError):
+    """The recipe's kick settings differ from, or omit, the worlds' own (TC-MU6-09)."""
 
 
 class PreregEntryMissingError(PreregError):
@@ -120,23 +146,60 @@ def _git(repo: Path, *args: str) -> str:
     return result.stdout
 
 
-def first_added_commit(repo: Path, relpath: str) -> str:
-    """The oldest commit that ADDED `relpath`, or "" if git knows no such add.
+def _commit_lines(repo: Path, diff_filter: str, relpath: str) -> list[str]:
+    """Commits that added (`A`) or deleted (`D`) exactly `relpath`, any branch.
 
-    `git log --reverse --diff-filter=A` lists add-events oldest-first; the
-    first line is therefore the original add (never a later delete-then-readd).
+    `--full-history` is load-bearing: without it, git's history
+    simplification can hide an add or delete made on a side branch whose
+    merge resolved the file away (executed, design-review-010). No
+    `--follow`: a rename shows as a delete plus an add at the path.
     """
     out = _git(
-        repo,
-        "log",
-        "--reverse",
-        "--diff-filter=A",
-        "--format=%H",
-        "--",
-        relpath,
+        repo, "log", "--full-history", f"--diff-filter={diff_filter}", "--format=%H", "--", relpath
     )
-    lines = [line for line in out.splitlines() if line.strip()]
-    return lines[0] if lines else ""
+    return [line for line in out.splitlines() if line.strip()]
+
+
+def freeze_commit(repo: Path) -> str:
+    """The commit that added `prereg/FREEZE` — the one and only freeze.
+
+    Raises `PreregNotFrozenError` if `FREEZE` was never committed, and
+    `PreregRefrozenError` unless history shows exactly one add and no delete
+    (models ADR-M5, TC-MU6-06/-08).
+    """
+    repo = Path(repo)
+    relpath = f"{PREREG_DIR}/{FREEZE_FILE}"
+    adds = _commit_lines(repo, "A", relpath)
+    deletes = _commit_lines(repo, "D", relpath)
+    if not adds:
+        raise PreregNotFrozenError(
+            f"{relpath!r} has never been committed — the pre-registration is not frozen "
+            f"yet; the recipe, prediction and thresholds must be locked by committing "
+            f"it before any judged run (models ADR-M5, TC-MU6-08)"
+        )
+    if len(adds) > 1 or deletes:
+        raise PreregRefrozenError(
+            f"{relpath!r} was added {len(adds)} time(s) and deleted {len(deletes)} "
+            f"time(s) — the freeze happens once, ever; a second freeze, or a "
+            f"delete-and-re-add, lets the locked content move (models ADR-M5, TC-MU6-06)"
+        )
+    return adds[0]
+
+
+def _exists_at(repo: Path, sha: str, relpath: str) -> bool:
+    """True iff `relpath` is part of the tree at commit `sha`."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo), "cat-file", "-e", f"{sha}:{relpath}"],
+            check=False,
+            capture_output=True,
+            env={**os.environ},
+        )
+    except FileNotFoundError as exc:
+        raise PreregError(
+            "git executable not found — cannot certify pre-registration"
+        ) from exc
+    return result.returncode == 0
 
 
 def _commit_timestamp(repo: Path, sha: str) -> int:
@@ -183,6 +246,48 @@ def _declares(text: str, name: str) -> bool:
     return re.search(pattern, text) is not None
 
 
+_WORLD_KEYS = (
+    ("lv_kick_rate_per_s", "lv", "KICK_RATE_PER_S"),
+    ("lv_action_max", "lv", "TRAINED_ACTION_MAX"),
+    ("pendulum_kick_rate_per_s", "pendulum", "KICK_RATE_PER_S"),
+    ("pendulum_action_max", "pendulum", "TRAINED_ACTION_MAX"),
+)
+
+
+def check_recipe_world_constants(recipe_text: str) -> None:
+    """Raise unless the recipe's four kick keys equal the worlds' constants.
+
+    In plain words: the recipe says how often and how hard each world is
+    kicked; the worlds say the same thing in code. Once the recipe is frozen
+    the two must agree exactly, so nobody can change a kick setting in code
+    after the lock and have the frozen recipe quietly describe something else
+    (TC-MU6-09). A missing key is refused, not skipped.
+    """
+    from wmj.worlds import lv, pendulum  # harness may import worlds; kept local
+
+    modules = {"lv": lv, "pendulum": pendulum}
+    for key, world, attribute in _WORLD_KEYS:
+        match = re.search(rf"^{re.escape(key)}:\s*([^#\s]+)", recipe_text, re.MULTILINE)
+        if match is None:
+            raise PreregWorldConstantError(
+                f"the recipe has no '{key}:' line — the worlds' kick settings must be "
+                f"pinned in the frozen recipe (TC-MU6-09)"
+            )
+        try:
+            recipe_value = float(match.group(1))
+        except ValueError as exc:
+            raise PreregWorldConstantError(
+                f"the recipe's '{key}:' value {match.group(1)!r} is not a number (TC-MU6-09)"
+            ) from exc
+        world_value = getattr(modules[world], attribute)
+        if recipe_value != world_value:
+            raise PreregWorldConstantError(
+                f"the recipe pins {key} = {recipe_value!r} but wmj.worlds.{world}.{attribute} "
+                f"is {world_value!r} — the frozen recipe and the code must agree "
+                f"(TC-MU6-09)"
+            )
+
+
 def check_prereg(
     repo: Path,
     files: Iterable[str],
@@ -190,21 +295,20 @@ def check_prereg(
     *,
     run_timestamp: int,
 ) -> str:
-    """Certify the prereg/ files before a judged run; return the commit-of-record.
+    """Certify the frozen prereg/ files before a judged run; return the freeze commit.
 
     Raises the specific `PreregError` subclass on the first failure, naming the
-    file or model at fault. On success returns the recipe's first-added commit
-    SHA — recorded in the verdict metadata so a later after-the-fact edit is
-    detectable (TC-JU11-02).
+    file or model at fault. On success returns the freeze commit's SHA — the
+    commit that added `prereg/FREEZE` — recorded in the verdict metadata so a
+    later after-the-fact edit is detectable (TC-MU6-07, TC-JU11-02).
     """
     repo = Path(repo)
     files = list(files)
 
-    # The per-model entry check (below) reads recipe.md/prediction.md from the
-    # working tree; that is only safe if those files went through the
-    # commit/timestamp/content-hash certification in this same loop. Require
-    # them in `files` so a caller that certifies only (say) thresholds cannot
-    # have the entry check silently trust uncommitted recipe/prediction text.
+    # The per-model entry check (below) reads recipe.md/prediction.md; that is
+    # only safe if those files went through the certification in this same
+    # loop. Require them in `files` so a caller that certifies only (say)
+    # thresholds cannot have the entry check trust unverified text.
     missing_entry_files = [f for f in _ENTRY_FILES if f not in files]
     if missing_entry_files:
         raise PreregError(
@@ -213,57 +317,61 @@ def check_prereg(
             f"{missing_entry_files}"
         )
 
-    for file in files:
+    freeze_sha = freeze_commit(repo)  # raises if not frozen, or frozen twice
+
+    # FREEZE is certified like the rest: it cannot be edited after the fact.
+    certified = [*files, *([FREEZE_FILE] if FREEZE_FILE not in files else [])]
+    for file in certified:
         relpath = f"{PREREG_DIR}/{file}"
         worktree = repo / relpath
 
-        sha = first_added_commit(repo, relpath)
-        if not sha:
-            raise PreregNotCommittedError(
-                f"prereg file {relpath!r} is not committed to git — it must be "
-                f"committed before any judged run (models ADR-M5, MU-6)"
+        if not _exists_at(repo, freeze_sha, relpath):
+            raise PreregNotFrozenError(
+                f"prereg file {relpath!r} was not part of the frozen commit "
+                f"{freeze_sha[:10]} — a file added after the freeze was never locked "
+                f"(models ADR-M5)"
             )
         if _has_uncommitted_changes(repo, relpath):
             raise PreregNotCommittedError(
                 f"prereg file {relpath!r} has uncommitted working-tree changes — "
-                f"the judged-against content must be the committed content (MU-6)"
+                f"the judged-against content must be the committed, frozen content (MU-6)"
             )
         if not worktree.is_file():
             raise PreregNotCommittedError(
-                f"prereg file {relpath!r} has a commit history but no working-tree "
-                f"copy (deleted?) — there is no present content to certify (MU-6)"
+                f"prereg file {relpath!r} is frozen but has no working-tree copy "
+                f"(deleted?) — there is no present content to certify (MU-6)"
             )
-
-        ts = _commit_timestamp(repo, sha)
-        if ts >= run_timestamp:
-            raise PreregOrderingError(
-                f"prereg file {relpath!r} was first committed at {ts}, which does "
-                f"not strictly precede the judged run at {run_timestamp} — "
-                f"pre-registration must come first (MU-6 / JU-11)"
-            )
-
-        first_add_hash = hashlib.sha256(_blob_at(repo, sha, relpath)).hexdigest()
+        frozen_hash = hashlib.sha256(_blob_at(repo, freeze_sha, relpath)).hexdigest()
         worktree_hash = hashlib.sha256(worktree.read_bytes()).hexdigest()
-        if first_add_hash != worktree_hash:
+        if frozen_hash != worktree_hash:
             raise PreregContentError(
-                f"prereg file {relpath!r} has changed since its first-added commit "
-                f"{sha[:10]} — a threshold/recipe moved after pre-registration is "
-                f"not pre-registered (models ADR-M5, TC-MU6-04)"
+                f"prereg file {relpath!r} has changed since the freeze commit "
+                f"{freeze_sha[:10]} — a threshold/recipe moved after the lock is not "
+                f"pre-registered (models ADR-M5, TC-MU6-04)"
             )
+
+    freeze_ts = _commit_timestamp(repo, freeze_sha)
+    if freeze_ts >= run_timestamp:
+        raise PreregOrderingError(
+            f"the freeze commit {freeze_sha[:10]} was made at {freeze_ts}, which does not "
+            f"strictly precede the judged run at {run_timestamp} — the lock must come "
+            f"first (MU-6 / JU-11, TC-MU6-01)"
+        )
 
     recipe_text = (repo / PREREG_DIR / "recipe.md").read_text(encoding="utf-8")
     prediction_text = (repo / PREREG_DIR / "prediction.md").read_text(encoding="utf-8")
+    check_recipe_world_constants(recipe_text)
     for model in models:
         if model.is_baseline or model.is_fixture:
             continue  # exempt: adding a baseline/fixture stays one file (TC-MU6-05)
         if not (_declares(recipe_text, model.name) and _declares(prediction_text, model.name)):
             raise PreregEntryMissingError(
                 f"unrigged model {model.name!r} has no pre-registration entry in the "
-                f"committed recipe and prediction — a contestant never declared in "
+                f"frozen recipe and prediction — a contestant never declared in "
                 f"advance is the exact gaming MU-6 prevents (TC-MU6-03)"
             )
 
-    return first_added_commit(repo, f"{PREREG_DIR}/recipe.md")
+    return freeze_sha
 
 
 def read_matching_margin(recipe_path: str | Path) -> float:

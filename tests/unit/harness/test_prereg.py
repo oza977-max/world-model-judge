@@ -305,6 +305,25 @@ def test_tc_mu6_06_refuses_a_freeze_hidden_on_a_side_branch_that_was_merged_away
         freeze_commit(repo)
 
 
+def test_tc_mu6_06_refuses_two_branches_that_each_added_a_freeze_and_were_merged(tmp_path):
+    """Two adds with no delete at all: two side branches each froze the
+    recipe (different declarations) and were merged. Only the add count
+    catches it — the delete count is zero."""
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    _commit_prereg(repo, recipe=RECIPE, prediction=PREDICTION, at=1_000_000)
+    main = _git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    for n, at in (("a", 1_100_000), ("b", 1_150_000)):
+        _git(repo, "checkout", "-q", "-b", f"freeze-{n}", main)
+        (repo / "prereg" / "FREEZE").write_text(f"Frozen on branch {n}.\n")
+        _commit(repo, f"freeze {n}", at=at)
+    _git(repo, "checkout", "-q", "freeze-a")
+    _git(repo, "merge", "-q", "--no-edit", "-X", "ours", "freeze-b", date="@1200000 +0000")
+    assert (repo / "prereg" / "FREEZE").exists()
+    with pytest.raises(PreregRefrozenError, match="2 time"):
+        freeze_commit(repo)
+
+
 def test_freeze_commit_returns_the_single_adding_commit(tmp_path):
     repo, sha = _frozen_repo(tmp_path)
     assert freeze_commit(repo) == sha
