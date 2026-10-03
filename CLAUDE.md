@@ -103,12 +103,12 @@ tests/                          unit tests and gates
 Build state (2026-10-03): Phases 1–2 done; Phase 3 in progress — P3-C01 (MLP
 core), P3-C02 (registry), P3-C07 (pre-registration tooling), P3-C09 (batched
 worlds, kick generator, `out-large-action` region, kicked benchmark) and P3-C10
-(the one-time lock, six review passes) done; P3-C06 (training data) built and in
-independent review. Round 10
+(the one-time lock, six review passes) and P3-C06 (training data, five review
+passes) done. Round 10
 design review (the training-recipe revision) closed 2026-09-28: 20 findings,
 owner-triaged, fixes written into requirements v1.4 and the specs, and an
 independent fix-check of those edits converged clean after five passes.
-Next: finish P3-C06, then P3-C03/P3-C04 (the two practice models) — see `REMEMBER.md` §3. `HANDOVER.md` is a historical record
+Next: P3-C03/P3-C04 (the two practice models; owner decision D17 first) — see `REMEMBER.md` §3. `HANDOVER.md` is a historical record
 up to 2026-08-31.
 
 The dominant risk is not technical: it is that on a clean toy world every model

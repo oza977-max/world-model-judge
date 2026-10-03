@@ -60,14 +60,14 @@ Ordered by when they bite. *(D1–D6, D12 and D14 were settled at Round 10 on
 
 ## 3. Owed work, by stage
 
-**Now — next build steps: finish P3-C06's review, then P3-C03/P3-C04 (the two practice models). P3-C10 (the one-time lock) is DONE (2026-10-03, six review passes, handover `build/handovers/P3-C10.md`).**
+**Now — next build steps: P3-C03/P3-C04 (the two practice models) — blocked on owner decision D17 for their kick report; P3-C06 is DONE. P3-C10 (the one-time lock) is DONE (2026-10-03, six review passes, handover `build/handovers/P3-C10.md`).**
 - **Independent re-check of the v1.8 purity guards and the rewritten ADR-004 orchestration loop** — owed by BC-2 since `calibration.md:249`; Rounds 9 and 10 were scoped elsewhere. Neither is built yet (P4-C06, P6-C01).
 - Fold the remaining spec text corrections listed in §5 into the specs at the next review.
 
 
 **P3-C10 — DONE.** Carry-forward: P6-C01 must hold the bytes `check_prereg` verified (or re-check immediately before use) — the certificate is a commit id, not the bytes later read (residual 6). Making the freeze itself (committing `prereg/FREEZE`) is a human act after the recipe is final; D17 and the sufficiency-test result come first.
 
-**P3-C06 — training data: BUILT 2026-10-03 (`src/wmj/harness/training.py`, `build/prompts/P3-C06.md`); independent review in progress. Kick-safety gate now calls the real generator. Full-scale: LV 13,874 kick pairs available (need 12,500), pendulum 19,900; builds in ~1 s / ~12 s. Open: D17 (held-out kick share ~0.1%).**
+**P3-C06 — training data: DONE 2026-10-03 (five review passes, handover `build/handovers/P3-C06.md`; `src/wmj/harness/training.py`). Kick-safety gate calls the real generator. Full-scale: LV 13,874 kick pairs available (need 12,500), pendulum 19,900; builds in ~1 s / ~11 s. Open: D17 (held-out kick share ~0.1% — owner decision before P3-C03's kick report). Note for P6-C01: `read_training_recipe` has no from-bytes entry; add one if holding verified bytes.**
 - Draw kicks with `wmj.harness.kicks.seeded_kick_sequences(..., "train-kicks", ...)` and step with `transition_batch` (both built at P3-C09); then point the training half of `tests/gates/test_kick_safety_full_scale.py` at the real generator.
 - 2,000 kicked full-horizon trajectories per world, then the harness's subsample (12,500 kick pairs + non-kick pairs to M), held-out and grad-check sets — models §4 as revised at Round 10.
 - **Measure runtime** for real and report it against judge ADR-J6's new measured envelope.
