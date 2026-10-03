@@ -1086,8 +1086,10 @@ def test_read_matching_margin_parses_the_recipe(tmp_path):
 def test_within_matching_margin_boundary():
     # at the margin: satisfied; over it: not yet satisfied (judging does not proceed)
     assert within_matching_margin(0.30, 0.34, margin=0.05) is True  # diff 0.04 <= 0.05
-    assert within_matching_margin(0.30, 0.35, margin=0.05) is True  # diff 0.05 == 0.05
     assert within_matching_margin(0.30, 0.36, margin=0.05) is False  # diff 0.06 > 0.05
+    # An exact tie, with values a float holds exactly (0.30/0.35 differ by 0.04999...).
+    assert within_matching_margin(0.0, 0.5, margin=0.5) is True
+    assert within_matching_margin(0.0, 0.5, margin=0.25) is False
 
 
 def test_a_file_named_head_in_the_repo_root_does_not_confuse_the_history_walk(tmp_path):
@@ -1416,3 +1418,48 @@ def test_the_world_constants_are_compared_exactly(tmp_path):
         check_recipe_world_constants(RECIPE.replace("lv_kick_rate_per_s: 0.5", "lv_kick_rate_per_s: 5_0e-2"))
     # An honest note glued to the value is not part of the number.
     check_recipe_world_constants(RECIPE.replace("lv_kick_rate_per_s: 0.5", "lv_kick_rate_per_s: 0.5#note"))
+
+
+def test_a_log_output_encoding_setting_cannot_make_the_timestamp_unreadable(tmp_path):
+    """Review pass 6: `i18n.logOutputEncoding=UTF-16` in a repo's own config made
+    `git show` emit bytes the text decoder refuses — a crash, not a refusal."""
+    repo, freeze_sha = _frozen_repo(tmp_path)
+    _git(repo, "config", "i18n.logOutputEncoding", "UTF-16")
+    assert check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000) == freeze_sha
+
+
+def test_a_freeze_lifted_through_a_non_first_parent_is_still_a_delete(tmp_path):
+    """Review pass 6 (F3): FREEZE reaches branch B only as the merge's SECOND
+    parent and is dropped by that merge; the later merge restores it."""
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    _commit_prereg(repo, recipe=RECIPE, prediction=PREDICTION, at=1_000)
+    main = _git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    _git(repo, "checkout", "-qb", "a")
+    f = _freeze(repo, at=1_100)
+    (repo / "a2.txt").write_text("x")
+    _commit(repo, "a2", at=1_150)
+    f2 = _git(repo, "rev-parse", "HEAD").strip()
+    _git(repo, "checkout", "-q", main)
+    (repo / "b.txt").write_text("x")
+    _commit(repo, "b", at=1_200)
+    _evil_merge(repo, f, at=1_300, edit=lambda: (repo / "prereg" / "FREEZE").unlink())
+    _evil_merge(
+        repo, f2, at=1_400,
+        edit=lambda: _git(repo, "checkout", f2, "--", "prereg/FREEZE"),
+    )
+    with pytest.raises(PreregRefrozenError, match="deleted"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000)
+
+
+def test_an_uncommitted_revert_to_the_frozen_bytes_is_not_a_clean_file(tmp_path):
+    """Review pass 6 (F4): HEAD holds tuned thresholds; the worktree was put
+    back to the frozen bytes without committing. The judged-against content
+    must be committed, so this is refused even though the bytes are frozen."""
+    repo, freeze_sha = _frozen_repo(tmp_path)
+    frozen = (repo / "prereg" / "thresholds.json").read_bytes()
+    (repo / "prereg" / "thresholds.json").write_text('{"tuned": true}')
+    _commit(repo, "tune", at=1_500_000)
+    (repo / "prereg" / "thresholds.json").write_bytes(frozen)
+    with pytest.raises(PreregNotCommittedError, match="uncommitted"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)

@@ -190,11 +190,14 @@ def _git_env() -> dict[str, str]:
 #                             alone changes nothing, removing both fails the test.
 #   log.showSignature=false   gpg chatter must not appear in parsed output
 #   core.fsmonitor=false, core.hooksPath=<null>   no repo-supplied program runs
+#   i18n.logOutputEncoding=UTF-8   a repo cannot make git re-encode its output into
+#                             something the text decoder here refuses
 _PINNED_CONFIG = (
     "core.commitGraph=false",
     "core.useReplaceRefs=false",
     "log.showSignature=false",
     "core.fsmonitor=false",
+    "i18n.logOutputEncoding=UTF-8",
     f"core.hooksPath={os.devnull}",
 )
 
@@ -310,7 +313,9 @@ def _require_trustworthy_history(repo: Path) -> None:
     if fsck.returncode != 0:
         raise PreregHistoryError(
             f"`git fsck` reports a damaged or forged object store in {repo} — the "
-            f"pre-registration cannot be certified against objects git cannot verify: "
+            f"pre-registration cannot be certified against objects git cannot verify "
+            f"(if the message below names a dangling `refs/remotes/origin/HEAD` after a "
+            f"remote's default branch changed, `git remote set-head origin -a` repairs it): "
             f"{(_stderr_text(fsck) or fsck.stdout or '').strip()[:300]}"
         )
 
