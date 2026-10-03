@@ -1286,3 +1286,133 @@ def test_a_numpy_integer_run_timestamp_is_accepted(tmp_path):
 
     repo, freeze_sha = _frozen_repo(tmp_path)
     assert check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=np.int64(2_000_000)) == freeze_sha
+
+
+# --- independent review, P3-C10 pass 5: boundaries, layouts, exit codes ---
+
+
+@pytest.mark.parametrize(
+    ("text", "name", "expected"),
+    [
+        ("we use direct here", "direct", True),
+        ("direct", "direct", True),
+        ("(direct)", "direct", True),
+        ("direct-v2", "direct", False),  # right-hand hyphen continues the name
+        ("deep-direct", "direct", False),  # left-hand hyphen
+        ("directional", "direct", False),  # right-hand letter
+        ("redirect", "direct", False),  # left-hand letter
+        ("direct_2", "direct", False),  # underscore continues the name
+        ("direct2", "direct", False),  # digit continues the name
+        ("2direct", "direct", False),
+        ("DIRECT", "direct", False),  # names are case-sensitive
+        ("a.b", "a.b", True),
+        ("axb", "a.b", False),  # a regex metacharacter in a name is literal
+        ("fx-action-blind", "fx-action-blind", True),
+    ],
+)
+def test_declares_matches_whole_tokens_only(text, name, expected):
+    from wmj.harness.prereg import _declares
+
+    assert _declares(text, name) is expected
+
+
+def _worktree(repo, dest):
+    _git(repo, "worktree", "add", "-q", "--detach", str(dest), "HEAD")
+
+
+def test_a_grafts_file_is_refused_when_the_checkout_is_a_linked_worktree(tmp_path):
+    """`.git` is a file there and grafts live in the common git dir; a check that
+    looked only under `<repo>/.git/info` would see nothing and the freeze
+    commit could be hidden (the tuned commit becomes a root)."""
+    repo, _ = _frozen_repo(tmp_path)
+    (repo / "prereg" / "recipe.md").write_text(RECIPE.replace("0.05", "0.09"))
+    _commit(repo, "tune", at=1_500_000)
+    tuned = _git(repo, "rev-parse", "HEAD").strip()
+    wt = tmp_path / "wt"
+    _worktree(repo, wt)
+    (repo / ".git" / "info").mkdir(exist_ok=True)
+    (repo / ".git" / "info" / "grafts").write_text(f"{tuned}\n")
+    with pytest.raises(PreregHistoryError, match="grafts"):
+        check_prereg(wt, PREREG_FILES, MODELS, run_timestamp=2_000_000)
+
+
+def test_a_linked_worktree_of_an_honest_frozen_repo_passes(tmp_path):
+    repo, freeze_sha = _frozen_repo(tmp_path)
+    wt = tmp_path / "wt"
+    _worktree(repo, wt)
+    assert check_prereg(wt, PREREG_FILES, MODELS, run_timestamp=2_000_000) == freeze_sha
+
+
+def test_any_nonzero_fsck_exit_is_refused_not_only_exit_one(tmp_path):
+    """fsck reports different faults with different exit bits (1 object error,
+    2 connectivity, 4 ref error, ...). A ref pointing at nothing exits 2."""
+    repo, _ = _frozen_repo(tmp_path)
+    (repo / ".git" / "refs" / "heads" / "broken").write_text("0123456789012345678901234567890123456789\n")
+    with pytest.raises(PreregHistoryError, match="fsck"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)
+
+
+def test_a_relative_repo_path_is_accepted(tmp_path, monkeypatch):
+    repo, freeze_sha = _frozen_repo(tmp_path)
+    monkeypatch.chdir(repo)
+    assert check_prereg(Path("."), PREREG_FILES, MODELS, run_timestamp=2_000_000) == freeze_sha
+
+
+def test_a_symlinked_repo_path_is_accepted(tmp_path):
+    repo, freeze_sha = _frozen_repo(tmp_path)
+    link = tmp_path / "link-to-repo"
+    link.symlink_to(repo, target_is_directory=True)
+    assert check_prereg(link, PREREG_FILES, MODELS, run_timestamp=2_000_000) == freeze_sha
+
+
+def test_a_certified_path_that_was_a_directory_at_the_freeze_is_refused(tmp_path):
+    """`byte-equal to its blob` needs a blob. If `prereg/recipe.md` was a
+    directory when frozen, `git show` prints its listing; a later FILE holding
+    exactly that listing (and satisfying every text rule) must still be refused,
+    because nothing was ever frozen under that name as a file."""
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    pdir = repo / "prereg"
+    (pdir / "recipe.md").mkdir(parents=True)
+    for entry in [*KICK_KEYS.strip().splitlines(), "direct", "ensemble"]:
+        (pdir / "recipe.md" / entry).write_text("x")
+    (pdir / "prediction.md").write_text(PREDICTION)
+    (pdir / "thresholds.json").write_text("{}")
+    _commit(repo, "dirs", at=1_000_000)
+    freeze_sha = _freeze(repo, at=1_100_000)
+    listing = _git(repo, "show", f"{freeze_sha}:prereg/recipe.md")
+    import shutil
+
+    shutil.rmtree(pdir / "recipe.md")
+    (pdir / "recipe.md").write_text(listing)
+    _commit(repo, "now a file", at=1_500_000)
+    with pytest.raises(PreregNotFrozenError, match="recipe.md"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)
+
+
+def test_a_non_utf8_prediction_is_refused_with_a_clear_message(tmp_path):
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    _write_prereg(repo, recipe=RECIPE, prediction="x")
+    (repo / "prereg" / "prediction.md").write_bytes(b"direct ensemble \xff\xfe\n")
+    _commit(repo, "prereg", at=1_000_000)
+    _freeze(repo, at=1_100_000)
+    with pytest.raises(PreregError, match="UTF-8"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)
+
+
+def test_a_nul_in_a_certified_file_name_is_a_clear_refusal(tmp_path):
+    repo, _ = _frozen_repo(tmp_path)
+    with pytest.raises(PreregError, match="plain file name"):
+        check_prereg(repo, ["recipe\0.md"], MODELS, run_timestamp=2_000_000)
+
+
+def test_the_world_constants_are_compared_exactly(tmp_path):
+    from wmj.harness.prereg import check_recipe_world_constants
+
+    with pytest.raises(PreregWorldConstantError):
+        check_recipe_world_constants(RECIPE.replace("lv_kick_rate_per_s: 0.5", "lv_kick_rate_per_s: 0.50000000001"))
+    with pytest.raises(PreregWorldConstantError):  # underscores are not a plain decimal; 5_0e-2 == 0.5
+        check_recipe_world_constants(RECIPE.replace("lv_kick_rate_per_s: 0.5", "lv_kick_rate_per_s: 5_0e-2"))
+    # An honest note glued to the value is not part of the number.
+    check_recipe_world_constants(RECIPE.replace("lv_kick_rate_per_s: 0.5", "lv_kick_rate_per_s: 0.5#note"))

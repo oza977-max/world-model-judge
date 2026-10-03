@@ -404,8 +404,11 @@ def freeze_commit(repo: Path) -> str:
 
 
 def _exists_at(repo: Path, rev: str, relpath: str) -> bool:
-    """True iff `relpath` is part of the tree at `rev` (a commit sha or HEAD)."""
-    return _run_git(repo, "cat-file", "-e", f"{rev}:{relpath}").returncode == 0
+    """True iff `relpath` is a *file* (a blob) in the tree at `rev` (a commit sha or HEAD).
+
+    A directory of that name does not count: the rule is "byte-equal to its blob"."""
+    result = _run_git(repo, "cat-file", "-t", f"{rev}:{relpath}")
+    return result.returncode == 0 and result.stdout.strip() == "blob"
 
 
 def _commit_timestamp(repo: Path, sha: str) -> int:
@@ -468,8 +471,11 @@ def check_recipe_world_constants(recipe_text: str) -> None:
     the two must agree exactly, so nobody can change a kick setting in code
     after the lock and have the frozen recipe quietly describe something else
     (TC-MU6-09). Each key must appear exactly once, at the start of a line,
-    with a plain decimal number; a missing, repeated, indented or
-    oddly-spelled key is refused, not skipped.
+    with a plain decimal number; a key that is missing, repeated at the left
+    margin, or given a non-decimal value is refused. (A look-alike line that
+    does *not* start at the left margin — indented, upper-case, a space before
+    the colon — is not a key, so it is ignored, and cannot change what is
+    checked.)
     """
     from wmj.worlds import lv, pendulum  # harness may import worlds; kept local
 
@@ -533,7 +539,7 @@ def check_prereg(
     repo = Path(repo)
     extras = list(files)
     for name in extras:
-        if not name.strip() or Path(name).name != name or name in (".", ".."):
+        if not name.strip() or "\0" in name or Path(name).name != name or name in (".", ".."):
             raise PreregError(
                 f"certified file {name!r} must be a plain file name inside {PREREG_DIR}/ "
                 f"(no directories, no '..')"
