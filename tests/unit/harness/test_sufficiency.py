@@ -266,3 +266,20 @@ def test_each_kick_split_comes_from_its_own_models_predictions():
 def test_the_kick_split_refuses_a_shape_mismatch():
     with pytest.raises(SufficiencyError, match="shape"):
         kick_split_error(np.zeros((2, 2)), _pairs([[1.0, 1.0]]), SCALE)
+
+
+def test_the_models_name_reaches_its_seed_streams():
+    seen = []
+
+    def factory(ctx, seeds, data):
+        seen.append(seeds.my_name)
+        return _BiasedWorldModel(0.01)
+
+    check_world("lv", lv.WORLD, factory, RECIPE, SEED, "ensemble", horizon=100)
+    assert seen == ["ensemble", "ensemble"]
+
+
+def test_the_kick_error_is_a_mean_not_a_sum():
+    pairs = _pairs([[2.0, 0.0], [2.0, 0.0], [0.0, 0.0]], kicks=[True, True, False])
+    split = kick_split_error(np.zeros((3, 2)), pairs, SCALE)
+    assert split.n_kick == 2 and split.error_kick == pytest.approx(0.5)  # not 1.0

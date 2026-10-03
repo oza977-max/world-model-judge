@@ -472,14 +472,17 @@ def test_train_direct_equals_an_independent_trainer_written_from_the_spec(data, 
 
 
 def test_the_registered_factory_trains_with_the_recipes_epochs_batch_size_and_beta(data):
-    """I2: the factory (what the registry and P6-C01 call) must use 100 / 256 / 0.5 and the
-    seeds it is given — checked by comparing with the reference trainer at those values."""
+    """I2 / pass-2 I1: the factory (what the registry and P6-C01 call) must train exactly as
+    `train_direct` does at the recipe's 100 / 256 / 0.5. Training is deterministic, so the
+    comparison is bit-exact — an off-by-one epoch, a batch of 255 or a beta of 0.49 all
+    change the bytes (the training logic itself is pinned by the reference-trainer tests)."""
     built = direct_factory(_ctx(), _seeds(), data)
-    ref = _reference_train(_ctx(), _seeds(), data.train_pairs, epochs=100, batch_size=256, beta=0.5)
-    # Over 800 steps rounding differences between two correct implementations are amplified
-    # (training is chaotic — see the P3-C03 report), so the tolerance here is loose; a wrong
-    # epoch count, batch size, beta, learning rate or seed differs by far more than this.
-    _close(built._net, ref, rtol=0.1, atol=0.05)
+    expected = train_direct(
+        _ctx(), _seeds(), data, epochs=EPOCHS, batch_size=BATCH_SIZE, beta=BETA_NLL
+    )
+    for (W, b), (We, be) in zip(built._net.layers, expected.layers):
+        assert W.tobytes() == We.tobytes() and b.tobytes() == be.tobytes()
+    assert (EPOCHS, BATCH_SIZE, BETA_NLL) == (100, 256, 0.5)
 
 
 def test_the_factory_uses_the_seed_it_is_given(data):
@@ -499,3 +502,61 @@ def test_a_missing_gradcheck_index_or_empty_training_set_is_refused():
     empty = Pairs(np.zeros((0, 2)), np.zeros((0, 1)), np.zeros((0, 2)), np.zeros(0, dtype=bool))
     with pytest.raises(DirectTrainingError, match="empty|no training"):
         train_direct(_ctx(), _seeds(), TrainingData(states=states, actions=actions, train_pairs=empty), epochs=1)
+
+
+# --- independent review, P3-C03 pass 2 ---
+
+
+def test_a_non_default_beta_is_the_one_used(data):
+    net = train_direct(_ctx(), _seeds(), data, epochs=2, batch_size=64, beta=0.25)
+    ref = _reference_train(_ctx(), _seeds(), data.train_pairs, epochs=2, batch_size=64, beta=0.25)
+    _close(net, ref)
+    default = train_direct(_ctx(), _seeds(), data, epochs=2, batch_size=64)
+    assert net.layers[0][0].tobytes() != default.layers[0][0].tobytes()
+
+
+@pytest.mark.parametrize("kw", [{"epochs": 0}, {"epochs": -1}, {"epochs": 2.0}, {"batch_size": 0},
+                                {"batch_size": -5}, {"batch_size": True}, {"beta": -0.1},
+                                {"beta": float("nan")}, {"beta": None}])
+def test_nonsense_training_arguments_are_refused(data, kw):
+    with pytest.raises(DirectTrainingError):
+        train_direct(_ctx(), _seeds(), data, **{"epochs": 1, **kw})
+
+
+def test_a_last_step_blow_up_is_caught_by_the_epoch_end_check_not_left_to_predict(data, monkeypatch):
+    monkeypatch.setattr(direct, "LEARNING_RATE", float("inf"))
+    with pytest.raises(DirectTrainingError, match="not finite after epoch"):
+        train_direct(_ctx(), _seeds(), data, epochs=1, batch_size=10**6)
+
+
+def test_the_gradient_check_target_is_the_change_of_the_gradcheck_rows(data, monkeypatch):
+    seen = {}
+
+    def spy(mlp, X, loss_and_grad, **kw):
+        # With outputs mu = 0 and s = 0 the plain-NLL gradient w.r.t. mu is -(target)/n per row.
+        Y = np.zeros((X.shape[0], 4))
+        _, grad = loss_and_grad(Y)
+        seen["target"] = -grad[:, :2] * X.shape[0]
+
+    monkeypatch.setattr(direct, "gradient_check", spy)
+    train_direct(_ctx(), _seeds(), data, epochs=1)
+    idx = data.gradcheck_index
+    expected = data.train_pairs.next_state[idx] - data.train_pairs.state[idx]
+    assert np.allclose(seen["target"], expected, rtol=0, atol=1e-12)
+
+
+def test_an_infinite_spread_and_a_nan_action_are_each_refused_by_name(trained_net):
+    model = DirectModel(_ctx(), trained_net)
+    saved = trained_net.layers[-1][1].copy()
+    try:
+        trained_net.layers[-1][1][2:] = 1e4  # log sigma huge -> exp overflows to inf
+        with np.errstate(over="ignore"), pytest.raises(DirectTrainingError, match="spread"):
+            model.predict_batch(np.full((2, 2), 3.0), np.zeros((2, 1)))
+    finally:
+        trained_net.layers[-1][1][:] = saved
+    with pytest.raises(DirectTrainingError, match="finite"):
+        model.predict_batch(np.full((2, 2), 3.0), np.array([[np.nan], [0.0]]))
+    with pytest.raises(DirectTrainingError, match="one state"):
+        model.predict(np.zeros((2, 2)), np.zeros(1))
+    with pytest.raises(DirectTrainingError, match="one state"):
+        model.predict(np.zeros(2), np.zeros((1, 1)))

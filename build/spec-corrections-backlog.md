@@ -958,5 +958,18 @@ Implemented: both versions are scored on the **2M build's** held-out set,
 which is disjoint from both training sets. Next review: write this into
 ADR-M3 and TC-MU5-05.
 
-*Where recorded:* `build/handovers/P3-C03.md` (to be written at convergence);
-independent review of P3-C03, pass 1.
+*Where recorded (A20 and A21):* `build/handovers/P3-C03.md`; independent review of P3-C03, pass 1.
+
+### A22 — found running P3-C03 for real: the sufficiency test is dominated by optimisation noise (owner decision D18)
+
+**In plain words:** the spec's "is 50,000 enough?" test compares one trained
+network on 50,000 examples with one on 100,000. Run for real, the answer
+depends mostly on the random seed, not on the data. Full numbers:
+`build/measurements/p3-c03-model-a-real-run.md`. No recipe value was changed.
+Options for the owner (all before the freeze, openly logged): judge on the
+median of several seeds (e.g. 5); lengthen and/or decay the training schedule
+(held-out error is still falling at 200 epochs); or accept the single run.
+Recommended: median-of-5-seeds plus a longer/decayed schedule, then re-measure.
+`REMEMBER.md` D18.
+
+*Where recorded:* `build/measurements/p3-c03-model-a-real-run.md`; A20/A21 above for the other two P3-C03 findings.

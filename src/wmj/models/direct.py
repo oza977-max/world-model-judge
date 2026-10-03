@@ -174,6 +174,12 @@ def train_direct(
     the run.
     """
     pairs = _pairs_or_refuse(ctx, training)
+    if isinstance(epochs, bool) or not isinstance(epochs, int) or epochs < 1:
+        raise DirectTrainingError(f"epochs must be a positive int, got {epochs!r}")
+    if isinstance(batch_size, bool) or not isinstance(batch_size, int) or batch_size < 1:
+        raise DirectTrainingError(f"batch_size must be a positive int, got {batch_size!r}")
+    if not (isinstance(beta, (int, float)) and math.isfinite(beta) and beta >= 0.0):
+        raise DirectTrainingError(f"beta must be a finite number >= 0, got {beta!r}")
     d, a = ctx.state_dim, ctx.action_dim
     net = MLP((d + a, HIDDEN_UNITS, HIDDEN_UNITS, 2 * d), seeds.rng("weights"))
 

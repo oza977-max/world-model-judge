@@ -14,8 +14,9 @@ whole experiment is about — how close the two practice models are to each
 other (the "matching margin") — nor at evaluation trials or skill scores.
 Choosing the amount of data by peeking at that comparison would tune the
 setup against the very result it is meant to leave open. So nothing here
-accepts or reads any of those: the functions take held-out examples and
-predictions only (TC-MU5-05).
+accepts or reads any of those: the scoring functions take held-out examples
+and predictions only, and `check_world` takes only the world, a model factory,
+the recipe counts and a seed (TC-MU5-05).
 
 **Which held-out set.** Both versions of a model are scored on the held-out
 set of the *larger* (100,000-example) build. That set is disjoint from both
