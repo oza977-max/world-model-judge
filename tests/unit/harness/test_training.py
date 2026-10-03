@@ -644,3 +644,93 @@ def test_a_world_with_no_tasks_has_no_default_horizon():
 def test_a_gradcheck_batch_as_large_as_the_training_set_is_a_legal_recipe():
     TrainingRecipe(training_trajectories=10, subsample_pairs=50, kick_pairs=5,
                    heldout_pairs=5, gradcheck_pairs=50)
+
+
+# --- independent review, P3-C06 pass 3 ---
+
+
+def test_mixed_numpy_integer_recipe_values_are_normalised_and_build():
+    recipe = TrainingRecipe(np.int64(200), np.uint64(2000), np.int32(100), np.int16(500), np.uint8(16))
+    assert all(type(getattr(recipe, k)) is int for k in
+               ("training_trajectories", "subsample_pairs", "kick_pairs", "heldout_pairs",
+                "gradcheck_pairs"))
+    data = build_training_data("lv", lv.WORLD, SeedSource(SEED, None), recipe, horizon=200)
+    plain = build_training_data("lv", lv.WORLD, SeedSource(SEED, None), SMALL["lv"][1], horizon=200)
+    assert data.train_pairs.state.tobytes() == plain.train_pairs.state.tobytes()
+
+
+def test_impossible_counts_are_refused_before_anything_is_simulated(monkeypatch):
+    def boom(*_a, **_k):
+        raise AssertionError("simulation started although the counts cannot be met")
+
+    monkeypatch.setattr(lv.WORLD.__class__, "transition_batch", boom)
+    recipe = TrainingRecipe(5, 10**6, 100, 50, 16)
+    with pytest.raises(TrainingDataError, match="training pairs"):
+        build_training_data("lv", lv.WORLD, SeedSource(SEED, None), recipe, horizon=10)
+    recipe = TrainingRecipe(5, 30, 10, 30, 16)  # 30 + 30 > 50
+    with pytest.raises(TrainingDataError, match="held-out"):
+        build_training_data("lv", lv.WORLD, SeedSource(SEED, None), recipe, horizon=10)
+
+
+class _BadStepWorld(_TwoTaskWorld):
+    mode = "ok"
+
+    def transition_batch(self, s, a):
+        if self.mode == "scalar":
+            return 0.0
+        if self.mode == "row":
+            return s[:1]
+        if self.mode == "nan":
+            out = lv.transition_batch(s, a)
+            out[0, 0] = np.nan
+            return out
+        if self.mode == "mutate":
+            s += 1.0  # edits the caller's array
+        return lv.transition_batch(s, a)
+
+
+@pytest.mark.parametrize("mode", ["scalar", "row", "nan"])
+def test_a_world_step_with_a_wrong_shape_or_non_finite_result_is_refused(mode):
+    world = _BadStepWorld()
+    world.mode = mode
+    world.kick_rate_per_s = 20.0
+    recipe = TrainingRecipe(6, 30, 1, 5, 3)
+    with pytest.raises(TrainingDataError, match="transition_batch"):
+        build_training_data("lv", world, SeedSource(SEED, None), recipe, horizon=9)
+
+
+def test_a_world_step_that_edits_its_input_cannot_corrupt_the_record():
+    clean, noisy = _BadStepWorld(), _BadStepWorld()
+    for w in (clean, noisy):
+        w.kick_rate_per_s = 20.0
+    noisy.mode = "mutate"
+    recipe = TrainingRecipe(6, 30, 1, 5, 3)
+    # The mutating world steps from start + 1 each time, so its result differs from
+    # the clean world's; but whatever it returns, earlier recorded states must be
+    # exactly the values that were passed in (no after-the-fact edits).
+    data = build_training_data("lv", noisy, SeedSource(SEED, None), recipe, horizon=9)
+    for t in range(9):
+        assert np.array_equal(
+            data.states[:, t + 1], lv.transition_batch(data.states[:, t] + 1.0, data.actions[:, t])
+        )
+    assert build_training_data("lv", clean, SeedSource(SEED, None), recipe, horizon=9).states.shape == data.states.shape
+
+
+def test_a_world_whose_dimension_disagrees_with_its_training_box_is_refused():
+    class _Wrong(_TwoTaskWorld):
+        d = 3
+
+    with pytest.raises(TrainingDataError, match="state dimensions"):
+        build_training_data("lv", _Wrong(), SeedSource(SEED, None), TrainingRecipe(5, 30, 1, 5, 3), horizon=9)
+
+
+def test_non_finite_eval_starts_are_refused_and_negative_zero_equals_zero():
+    data = _build("lv")
+    with pytest.raises(TrainingDataError, match="finite"):
+        assert_eval_starts_disjoint(data, np.array([[np.nan, 1.0]]))
+    # A training start with a 0.0 component, rebuilt by hand, must collide with its -0.0 twin.
+    states = data.states.copy()
+    states[0, 0] = [0.0, 2.0]
+    patched = TrainingData(states=states, actions=data.actions)
+    with pytest.raises(TrainingDataError, match="start 0"):
+        assert_eval_starts_disjoint(patched, np.array([[-0.0, 2.0]]))

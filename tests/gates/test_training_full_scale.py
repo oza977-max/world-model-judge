@@ -46,6 +46,18 @@ def _digest(data) -> str:
     return h.hexdigest()
 
 
+# Known answers for seed 20260825 and the frozen recipe (numpy is pinned < 2).
+# If one of these fails the DATA changed: that is a recipe/seed revision to be
+# made openly and re-reported (REMEMBER.md D17, backlog A19), never a number to
+# update quietly. Pass 3 of the P3-C06 review: every other determinism test
+# compares a build with another build of the same code, so none would notice
+# `rng_for` switching generator or entropy order.
+GOLDEN = {
+    "lv": {"states": "510476bc873b", "available": 13874, "held_kicks": 6},
+    "pendulum": {"states": "0aed9d76c286", "available": 19900, "held_kicks": 10},
+}
+
+
 @pytest.mark.parametrize(("name", "module"), WORLDS)
 def test_the_real_recipe_builds_the_real_training_set(name, module, capsys):
     recipe = read_training_recipe(RECIPE)
@@ -71,6 +83,9 @@ def test_the_real_recipe_builds_the_real_training_set(name, module, capsys):
             f"{recipe.heldout_pairs}"
         )
     assert available >= recipe.kick_pairs
+    golden = GOLDEN[name]
+    assert hashlib.sha256(np.ascontiguousarray(data.states).tobytes()).hexdigest()[:12] == golden["states"]
+    assert available == golden["available"] and held_kicks == golden["held_kicks"]
 
     for region, box, _band in declared_regions(module.WORLD):
         eval_starts = sample_region_starts(seeds.rng_for(name, region, "eval-starts"), box, 200)

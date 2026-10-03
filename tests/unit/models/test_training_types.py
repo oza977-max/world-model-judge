@@ -240,3 +240,50 @@ def test_a_gradcheck_batch_as_large_as_the_whole_training_set_is_legal():
         states=states, actions=actions, train_pairs=_pairs(4),
         gradcheck_index=np.array([3, 1, 0, 2], dtype=np.int64),
     )
+
+
+# --- independent review, P3-C06 pass 3 ---
+
+
+@pytest.mark.parametrize("field", ["state", "action", "next_state"])
+def test_pairs_arrays_must_be_exactly_two_dimensional(field):
+    array = {"state": np.zeros((5, 2, 1)), "action": np.zeros((5, 1, 1)),
+             "next_state": np.ones((5, 2, 1))}[field]
+    with pytest.raises(TrainingDataShapeError, match="2-D"):
+        Pairs(**_kw(**{field: array}))
+
+
+def test_next_state_with_extra_dimensions_cannot_hide_behind_a_matching_width():
+    with pytest.raises(TrainingDataShapeError, match="2-D"):
+        Pairs(**_kw(state=np.zeros((5, 2, 2)), next_state=np.ones((5, 2, 3))))
+
+
+def test_known_answer_the_seed_stream_is_the_pinned_one():
+    """Pass 3: every 'same seed, same bytes' test compares one build with another in
+    the same code, so a change to PCG64 or to the entropy order in `rng_for` would
+    pass them all while changing every number the project reports. This pins the
+    stream itself (numpy is pinned < 2 in pyproject.toml)."""
+    from wmj.models.base import SeedSource
+
+    raw = SeedSource(20260825, None).rng_for("lv", "training", "train-starts")
+    assert raw.bit_generator.random_raw(2).tolist() == [16609791346661725697, 7698975185448255597]
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"is_kick": [False] * 5},
+        {"state": [[0.0, 0.0]] * 5},
+    ],
+)
+def test_pairs_built_from_lists_are_refused_cleanly(kwargs):
+    with pytest.raises(TrainingDataShapeError):
+        Pairs(**_kw(**kwargs))
+
+
+def test_trajectories_and_gradcheck_built_from_lists_are_refused_cleanly():
+    with pytest.raises(TrainingDataShapeError):
+        TrainingData(states=[[[0.0]]], actions=np.zeros((1, 0, 1)))
+    states, actions = _states_actions()
+    with pytest.raises(TrainingDataShapeError, match="gradcheck"):
+        TrainingData(states=states, actions=actions, train_pairs=_pairs(5), gradcheck_index=[0, 1])

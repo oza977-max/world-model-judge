@@ -91,6 +91,7 @@ class TrainingRecipe:
             value = getattr(self, key)
             if isinstance(value, bool) or not isinstance(value, numbers.Integral) or value < 1:
                 raise TrainingDataError(f"recipe key {key!r} must be a positive integer, got {value!r}")
+            object.__setattr__(self, key, int(value))  # plain ints: mixed numpy widths must not mix
         if self.kick_pairs > self.subsample_pairs:
             raise TrainingDataError(
                 f"kick_pairs ({self.kick_pairs}) cannot exceed subsample_pairs "
@@ -201,6 +202,24 @@ def build_training_data(
 
     n = recipe.training_trajectories
     box = world.regions().training_state_box
+    if box.shape[0] != world.d:
+        raise TrainingDataError(
+            f"{world_name!r} declares {world.d} state dimensions but a training box of "
+            f"{box.shape[0]} — the world's own declarations disagree"
+        )
+    total_pairs = n * horizon
+    if recipe.subsample_pairs > total_pairs:
+        raise TrainingDataError(
+            f"the recipe asks for {recipe.subsample_pairs} training pairs but {n} trajectories of "
+            f"{horizon} steps hold only {total_pairs} pairs — the non-kick pairs would run short; "
+            f"refusing before simulating anything (the count is never shrunk)"
+        )
+    if recipe.subsample_pairs + recipe.heldout_pairs > total_pairs:
+        raise TrainingDataError(
+            f"training ({recipe.subsample_pairs}) plus held-out ({recipe.heldout_pairs}) pairs exceed "
+            f"the {total_pairs} pairs that exist — the held-out set must not overlap training and "
+            f"the count is never shrunk; refusing before simulating anything"
+        )
     starts = sample_region_starts(seeds.rng_for(world_name, TRAINING_REGION, "train-starts"), box, n)
     kicks = seeded_kick_sequences(
         seeds, world_name, world, TRAINING_REGION, "in", "train-kicks", n, horizon
@@ -208,7 +227,16 @@ def build_training_data(
     states = np.zeros((n, horizon + 1, world.d))
     states[:, 0] = starts
     for step in range(horizon):
-        states[:, step + 1] = world.transition_batch(states[:, step], kicks[:, step])
+        # Copies in: a world that edits its input must not edit the record. Checked out:
+        # a wrong shape would otherwise broadcast into a plausible-looking but wrong set.
+        nxt = np.asarray(world.transition_batch(states[:, step].copy(), kicks[:, step].copy()))
+        if nxt.shape != (n, world.d) or not np.all(np.isfinite(nxt)):
+            raise TrainingDataError(
+                f"{world_name!r} transition_batch returned shape {nxt.shape} (finite: "
+                f"{bool(np.all(np.isfinite(nxt)))}) at step {step}; expected a finite ({n}, "
+                f"{world.d}) array"
+            )
+        states[:, step + 1] = nxt
     actions = kicks.copy()  # owns its memory: freezing it must not leave a writable base
 
     is_kick = np.any(actions != 0.0, axis=2).reshape(-1)
@@ -278,8 +306,11 @@ def assert_eval_starts_disjoint(training: TrainingData, eval_starts: np.ndarray)
         raise TrainingDataError(
             f"evaluation starts must have shape [n, {d}], got {tuple(eval_starts.shape)}"
         )
-    used = {row.tobytes() for row in training.states[:, 0]}
-    for i, row in enumerate(np.ascontiguousarray(eval_starts, dtype=np.float64)):
+    if not np.all(np.isfinite(eval_starts)):
+        raise TrainingDataError("evaluation starts must be finite numbers")
+    # `+ 0.0` turns -0.0 into 0.0 so equal values compare equal byte for byte.
+    used = {(row + 0.0).tobytes() for row in training.states[:, 0]}
+    for i, row in enumerate(np.ascontiguousarray(eval_starts, dtype=np.float64) + 0.0):
         if row.tobytes() in used:
             raise TrainingDataError(
                 f"evaluation start {i} is also a training start — evaluation must never "
