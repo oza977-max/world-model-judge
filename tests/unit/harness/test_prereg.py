@@ -290,8 +290,8 @@ def test_tc_mu6_06_refuses_a_freeze_renamed_away_and_back(tmp_path):
 def test_tc_mu6_06_refuses_a_freeze_hidden_on_a_side_branch_that_was_merged_away(tmp_path):
     """Executed before pinning: plain `git log` shows NOTHING for a freeze
     that was added and removed on a side branch whose merge resolved to
-    "no FREEZE" — history simplification hides it. `--full-history` shows
-    it, and this test is what keeps the flag in place."""
+    "no FREEZE" — history simplification hides it. The commit-by-commit walk
+    shows it."""
     repo = tmp_path / "repo"
     _init_repo(repo)
     _commit_prereg(repo, recipe=RECIPE, prediction=PREDICTION, at=1_000_000)
@@ -1151,3 +1151,138 @@ def test_the_recipe_and_prediction_files_are_read_from_disk_exactly_once(tmp_pat
     monkeypatch.setattr(_Path, "read_bytes", spy)
     assert check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000) == freeze_sha
     assert reads.count("recipe.md") == 1 and reads.count("prediction.md") == 1
+
+
+# --- independent review, P3-C10 pass 4: pin what the code already got right ---
+
+
+def _signed_looking(repo):
+    """Rewrite HEAD as a commit that carries a `gpgsig` header (not a valid
+    signature) so git has something to try to verify when told to show it."""
+    raw = _git(repo, "cat-file", "commit", "HEAD")
+    head, _, message = raw.partition("\n\n")
+    signed = head + "\ngpgsig -----BEGIN PGP SIGNATURE-----\n \n abcd\n -----END PGP SIGNATURE-----\n\n" + message
+    new = subprocess.run(
+        ["git", "-C", str(repo), "hash-object", "-t", "commit", "-w", "--stdin"],
+        input=signed, check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    _git(repo, "update-ref", "HEAD", new)
+    return new
+
+
+def test_a_signed_looking_freeze_commit_is_not_disturbed_by_signature_display(tmp_path):
+    repo, _ = _frozen_repo(tmp_path)
+    _git(repo, "config", "log.showSignature", "true")
+    freeze_sha = _signed_looking(repo)
+    assert check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000) == freeze_sha
+
+
+@pytest.mark.parametrize("order", ["newcomer-first", "newcomer-last", "baseline-first", "two-undeclared"])
+def test_every_unrigged_model_is_checked_not_just_the_first_or_last(tmp_path, order):
+    """The contest has two unrigged models; one never declared must fail the
+    certificate wherever it sits in the list and whatever precedes it."""
+    repo, _ = _frozen_repo(tmp_path)
+    models = {
+        "newcomer-first": [_Model("newcomer"), _Model("direct")],
+        "newcomer-last": [_Model("direct"), _Model("newcomer")],
+        "baseline-first": [_Model("persistence", is_baseline=True), _Model("newcomer")],
+        "two-undeclared": [_Model("alpha"), _Model("beta")],
+    }[order]
+    with pytest.raises(PreregEntryMissingError):
+        check_prereg(repo, PREREG_FILES, models, run_timestamp=2_000_000)
+
+
+def test_a_freeze_on_a_feature_branch_that_was_merged_and_deleted_is_the_freeze(tmp_path):
+    """An honest workflow: freeze on a branch, merge it with a merge commit,
+    delete the branch. The add sits on the merge's SECOND parent and must be
+    found, not refused and not missed."""
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    _commit_prereg(repo, recipe=RECIPE, prediction=PREDICTION, at=1_000_000)
+    main = _git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    _git(repo, "checkout", "-qb", "s")
+    freeze_sha = _freeze(repo, at=1_100_000)
+    _git(repo, "checkout", "-q", main)
+    (repo / "other.txt").write_text("x")
+    _commit(repo, "main moves", at=1_200_000)
+    _git(repo, "merge", "--no-ff", "-q", "-m", "merge s", "s", date=None)
+    _git(repo, "branch", "-q", "-D", "s")
+    assert check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000) == freeze_sha
+
+
+def test_a_second_freeze_hidden_behind_a_merge_second_parent_is_still_counted(tmp_path):
+    """Freeze 1 on branch `s`; tuned thresholds and freeze 2 on main; `s` merged
+    with `-X ours` and deleted. Only a walk of the merge's second parent sees
+    freeze 1, so only it shows there were two."""
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    _commit_prereg(repo, recipe=RECIPE, prediction=PREDICTION, at=1_000_000)
+    main = _git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    _git(repo, "checkout", "-qb", "s")
+    _freeze(repo, at=1_100_000)
+    _git(repo, "checkout", "-q", main)
+    (repo / "prereg" / "thresholds.json").write_text('{"tuned": true}')
+    _freeze(repo, at=1_200_000, text="second freeze\n")
+    _git(repo, "merge", "--no-ff", "-q", "-X", "ours", "-m", "merge s", "s")
+    _git(repo, "branch", "-q", "-D", "s")
+    with pytest.raises(PreregRefrozenError, match="2 time"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)
+
+
+@pytest.mark.parametrize(
+    "ref", ["refs/tags/old-freeze", "refs/remotes/origin/feature", "refs/notes/hidden"]
+)
+def test_a_second_freeze_held_only_by_a_tag_remote_ref_or_notes_ref_is_counted(tmp_path, ref):
+    repo, _ = _frozen_repo(tmp_path)
+    main = _git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    first = _git(repo, "rev-parse", "HEAD~1").strip()
+    _git(repo, "checkout", "-qb", "other", first)
+    _freeze(repo, at=1_200_000, text="a different freeze\n")
+    other = _git(repo, "rev-parse", "HEAD").strip()
+    _git(repo, "checkout", "-q", main)
+    _git(repo, "branch", "-q", "-D", "other")
+    _git(repo, "update-ref", ref, other)
+    with pytest.raises(PreregRefrozenError, match="2 time"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)
+
+
+def test_the_refusal_names_the_commits_so_a_stale_ref_can_be_found(tmp_path):
+    repo, freeze_sha = _frozen_repo(tmp_path)
+    first = _git(repo, "rev-parse", "HEAD~1").strip()
+    _git(repo, "checkout", "-qb", "stale", first)
+    _freeze(repo, at=1_200_000, text="a different freeze\n")
+    other = _git(repo, "rev-parse", "HEAD").strip()
+    _git(repo, "checkout", "-q", "-")
+    with pytest.raises(PreregRefrozenError) as info:
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)
+    assert freeze_sha[:10] in str(info.value) and other[:10] in str(info.value)
+
+
+def test_a_symlinked_prereg_directory_is_refused(tmp_path):
+    """The directory could be repointed after certification just like a file."""
+    repo, _ = _frozen_repo(tmp_path)
+    copy = tmp_path / "prereg-copy"
+    (repo / "prereg").rename(copy)
+    (repo / "prereg").symlink_to(copy, target_is_directory=True)
+    with pytest.raises(PreregNotCommittedError, match="symlink"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)
+
+
+def test_an_extra_certified_file_is_byte_compared_like_the_fixed_ones(tmp_path):
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    _commit_prereg(repo, recipe=RECIPE, prediction=PREDICTION, at=1_000_000)
+    (repo / "prereg" / "notes.md").write_text("before\n")
+    _commit(repo, "notes", at=1_050_000)
+    _freeze(repo, at=1_100_000)
+    (repo / "prereg" / "notes.md").write_text("after\n")
+    _commit(repo, "edit notes", at=1_500_000)
+    with pytest.raises(PreregContentError, match="notes.md"):
+        check_prereg(repo, [*PREREG_FILES, "notes.md"], MODELS, run_timestamp=2_000_000)
+
+
+def test_a_numpy_integer_run_timestamp_is_accepted(tmp_path):
+    import numpy as np
+
+    repo, freeze_sha = _frozen_repo(tmp_path)
+    assert check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=np.int64(2_000_000)) == freeze_sha

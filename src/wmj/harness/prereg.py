@@ -19,7 +19,8 @@ The rules (models ADR-M5, design-review-010):
   2. **One freeze, ever** (TC-MU6-06): exactly one add and no delete of
      `prereg/FREEZE` anywhere in history. A second freeze, a delete-then-re-add,
      a rename away and back, and a freeze added and removed on a side branch
-     that was merged away (which plain `git log` hides — hence `--full-history`)
+     that was merged away (which plain `git log` hides — so history is walked
+     commit by commit, every parent of every merge)
      are all refused. No `FREEZE` at all means "not frozen yet" (TC-MU6-08).
   3. **Every certified file must exist at the freeze commit, be clean in the
      working tree, and be byte-equal to its blob at the freeze commit**
@@ -80,9 +81,13 @@ here fully closes them, so they are disclosed rather than pretended away:
      straight away, or re-check, and the judged run's own record names the
      freeze commit so a later comparison is possible.
   7. **Only the repository on this disk is examined.** "One freeze, ever" is
-     counted over every local ref (branches, tags, remote-tracking refs), so a
-     fork that re-freezes is refused — but a re-freeze that exists only in a
-     repository nobody has fetched from is invisible (the same shape as 2).
+     counted over every local ref (branches, tags, remote-tracking refs, notes),
+     so a fork that re-freezes is refused — but a re-freeze that exists only in
+     a repository nobody has fetched from is invisible (the same shape as 2),
+     and so is one parked under `refs/stash` or `refs/replace/` (both are
+     deliberately left out: a stash is not history, and a replace ref is
+     ignored everywhere here). Deleting a branch is likewise rewriting history
+     (residual 1).
 """
 
 from __future__ import annotations
@@ -115,7 +120,8 @@ class PreregNotFrozenError(PreregError):
 
 
 class PreregHistoryError(PreregError):
-    """Git history cannot be trusted: a shallow clone or a grafts file."""
+    """Git history cannot be trusted: shallow or partial clone, grafts file, failed fsck, or
+    a parent commit that history does not contain."""
 
 
 class PreregRefrozenError(PreregError):
@@ -345,6 +351,9 @@ def _freeze_history(repo: Path, relpath: str) -> tuple[list[str], list[str]]:
         present[sha] = len(tokens) == 3 and tokens[1] == "blob"
     for sha, its_parents in parents.items():
         for parent in its_parents:
+            # Defence in depth: unreachable while fsck, shallow and grafts refusals
+            # hold (rev-list lists every ancestor), so no test can reach it; it
+            # stays so a future change to the walk fails loudly, not silently.
             if parent not in present:
                 raise PreregHistoryError(
                     f"commit {sha[:10]} names a parent {parent[:10]} that history does not "
@@ -378,8 +387,11 @@ def freeze_commit(repo: Path) -> str:
         )
     if len(adds) > 1 or deletes:  # counted over every ref, not only the checked-out one
         raise PreregRefrozenError(
-            f"{relpath!r} was added {len(adds)} time(s) and deleted {len(deletes)} "
-            f"time(s) — the freeze happens once, ever; a second freeze, or a "
+            f"{relpath!r} was added {len(adds)} time(s) (at {', '.join(c[:10] for c in adds)}) "
+            f"and deleted {len(deletes)} time(s) (at {', '.join(c[:10] for c in deletes) or 'nowhere'}) "
+            f"in the commits reachable from any local ref — if a stale branch or tag from a "
+            f"squash-merged branch is the cause, delete that ref; the freeze happens once, "
+            f"ever; a second freeze, or a "
             f"delete-and-re-add, lets the locked content move (models ADR-M5, TC-MU6-06)"
         )
     if adds[0] not in _head_ancestry(repo):
@@ -542,8 +554,12 @@ def check_prereg(
                 f"{freeze_sha[:10]} — a file added after the freeze was never locked "
                 f"(models ADR-M5)"
             )
-        if worktree.is_symlink() or not worktree.is_file():
-            what = "is a symlink" if worktree.is_symlink() else "has no working-tree copy (deleted?)"
+        if (repo / PREREG_DIR).is_symlink() or worktree.is_symlink() or not worktree.is_file():
+            what = (
+                "is a symlink, or sits in a symlinked directory"
+                if (repo / PREREG_DIR).is_symlink() or worktree.is_symlink()
+                else "has no working-tree copy (deleted?)"
+            )
             raise PreregNotCommittedError(
                 f"prereg file {relpath!r} {what} — there is no present file content to "
                 f"certify (MU-6)"
