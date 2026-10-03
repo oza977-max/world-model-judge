@@ -222,3 +222,54 @@ def test_transition_refuses_a_wrongly_shaped_action(name, module, action):
     state = module.regions().training_state_box.mean(axis=1)
     with pytest.raises(WorldInputShapeError, match="WD-2"):
         module.transition(state, action)
+
+
+# --- independent review, P3-C09 pass 4 (minor): row reporting and edges ---
+
+
+@pytest.mark.parametrize(("name", "module"), WORLDS)
+def test_a_non_finite_action_in_a_later_row_is_refused_and_named(name, module):
+    states = np.tile(module.regions().training_state_box.mean(axis=1), (5, 1))
+    actions = np.zeros((5, 1))
+    actions[3, 0] = float("nan")
+    actions[4, 0] = float("inf")
+    with pytest.raises(WorldInputShapeError, match="row 3"):
+        module.transition_batch(states, actions)
+
+
+def test_the_first_of_several_failing_rows_is_the_one_reported():
+    states = np.array([[4.0, 2.0], [0.12, 2.0], [0.11, 2.0]])
+    with pytest.raises(StateFloorClampError, match="row 1"):
+        lv.transition_batch(states, np.array([[0.0], [-0.1], [-0.1]]))
+    with pytest.raises(ActionRangeError, match="row 1"):
+        lv.transition_batch(np.tile([4.0, 2.0], (3, 1)), np.array([[0.0], [5.0], [-5.0]]))
+
+
+@pytest.mark.parametrize(("name", "module"), WORLDS)
+def test_actions_exactly_on_the_declared_range_are_accepted_and_one_step_beyond_refused(
+    name, module
+):
+    state = module.regions().training_state_box.mean(axis=1)
+    lo, hi = module.ACTION_RANGE
+    for edge in (lo, hi):
+        module.transition(state, np.array([edge]))
+        module.transition_batch(state[None, :], np.array([[edge]]))
+    for beyond in (np.nextafter(lo, -np.inf), np.nextafter(hi, np.inf)):
+        with pytest.raises(ActionRangeError):
+            module.transition(state, np.array([beyond]))
+        with pytest.raises(ActionRangeError):
+            module.transition_batch(state[None, :], np.array([[beyond]]))
+
+
+def test_lv_state_exactly_on_the_floor_is_legal_and_just_below_is_refused():
+    # worlds §4.1: populations are kept >= 0.05 (closed). A kick landing
+    # prey exactly on the floor is accepted at the impulse check.
+    lv._check_floor(np.array([[lv.STATE_FLOOR, 2.0]]), "probe")
+    with pytest.raises(StateFloorClampError):
+        lv._check_floor(np.array([[np.nextafter(lv.STATE_FLOOR, 0.0), 2.0]]), "probe")
+
+
+@pytest.mark.parametrize(("name", "module"), WORLDS)
+def test_transition_batch_refuses_a_batch_of_the_wrong_width(name, module):
+    with pytest.raises(WorldInputShapeError, match="WD-2"):
+        module.transition_batch(np.zeros((3, module.WORLD.d + 1)), np.zeros((3, 1)))

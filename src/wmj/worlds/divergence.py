@@ -1,15 +1,19 @@
 """wmj.worlds.divergence — how fast nearby trajectories separate (WD-4).
 
-In plain words: start two copies of a world a hair apart, let both
-run with nothing pushing on them, and watch the gap between them at
-every step. For the predator-prey world the gap stays about the same
+In plain words: start two copies of a world a hair apart, give both
+exactly the same kicks at exactly the same moments (the same kind of
+kicks the graded test runs get — design-review-010), and watch the gap
+between them at every step. Because the kicks are identical, any gap is
+still the world's own doing. For the predator-prey world the gap stays about the same
 size (orbits are stable, they just slip out of phase very slowly).
 For the pendulum, from a gentle start the gap stays small, but from a
 near-inverted start it explodes — that is what "chaotic" means, and
 it is the world's own fault, not any model's. The judge uses this
 curve to know how far ahead *anyone* could be expected to predict
 (worlds spec ADR-W3), and it separately checks that the integrator
-itself isn't quietly leaking energy (ADR-W1, TC-WD3-03).
+itself isn't quietly leaking energy (ADR-W1, TC-WD3-03) — that check
+runs with no kicks at all, because the energy (or orbit) is only
+conserved when nothing pushes on the world.
 
 Pure functions only: every routine takes a transition function and
 arrays in, returns arrays out. Seeding and sampling live in the

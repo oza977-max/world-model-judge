@@ -183,3 +183,24 @@ def test_validator_accepts_a_both_axis_region_and_rejects_one_with_trained_kicks
     bad = OutRegion("out-both", "both", real.state_box.copy(), trained.copy())
     with pytest.raises(RegionSpecError, match="§7"):
         module._validate_region_spec(_spec_with(module, bad))
+
+
+@pytest.mark.parametrize("module", [lv, pendulum])
+def test_validator_accepts_a_state_region_lying_below_the_training_box(module):
+    spec = module.regions()
+    below = spec.training_state_box.copy()
+    width = below[0, 1] - below[0, 0]
+    below[0] = [below[0, 0] - 2 * width, below[0, 0] - width]
+    if module is lv:
+        below[0] = [0.06, 0.08]  # below LV's box yet above its floor
+    ok = OutRegion("out-below", "state", below, spec.training_action_interval.copy())
+    module._validate_region_spec(_spec_with(module, ok))
+
+
+@pytest.mark.parametrize("module", [lv, pendulum])
+def test_validator_rejects_a_both_axis_region_whose_state_box_overlaps_training(module):
+    spec = module.regions()
+    bad = OutRegion("out-both", "both", spec.training_state_box.copy(),
+                    2.0 * spec.training_action_interval)
+    with pytest.raises(RegionSpecError, match="not disjoint"):
+        module._validate_region_spec(_spec_with(module, bad))

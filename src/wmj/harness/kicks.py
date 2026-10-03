@@ -13,6 +13,7 @@ ADR-002 rule 2, design-review-010).
 
 from __future__ import annotations
 
+import numbers
 from typing import Any
 
 import numpy as np
@@ -45,9 +46,11 @@ def seeded_kick_sequences(
     horizon: int,
 ) -> np.ndarray:
     """`float64[n, horizon, 1]`: rollout `i` from `seeds.rng_for(world, region, purpose, str(i))`."""
-    if not (isinstance(n, int) and not isinstance(n, bool) and n >= 0):
+    if not (isinstance(n, numbers.Integral) and not isinstance(n, bool) and n >= 0):
         raise KickPurposeError(f"rollout count {n!r} must be a non-negative int (worlds ADR-W2)")
-    if not (isinstance(horizon, int) and not isinstance(horizon, bool) and horizon >= 0):
+    if not (
+        isinstance(horizon, numbers.Integral) and not isinstance(horizon, bool) and horizon >= 0
+    ):
         raise KickPurposeError(f"horizon {horizon!r} must be a non-negative int (worlds ADR-W2)")
     if purpose not in KICK_PURPOSES:
         raise KickPurposeError(

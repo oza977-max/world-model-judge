@@ -49,6 +49,7 @@ Ordered by when they bite. *(D1–D6, D12 and D14 were settled at Round 10 on
 | # | Decision | Recommendation | Source |
 |---|---|---|---|
 | D15 | **New, found while applying Round 10 (not yet reviewed): the climatology reference is still null-action.** JU-6's conditioned climatology comes from one 200,000-step *unkicked* trajectory, binned by the conserved quantity; evaluation trials now carry kicks, which move a trajectory between bins after the switch step. With small, sparse kicks the effect should be modest, but it is unmeasured. Options: disclose it, measure it at P4-C05, or build the climatology from a kicked trajectory. | Measure at P4-C05 and disclose the figure; route any design change through review. | backlog A16; 2026-09-28 |
+| D16 | **New at P3-C09 (backlog A17):** should every `out-large-action` test run be *guaranteed* at least one kick (by construction), rather than checked by a test as now? Without a kick a run in that region would be labelled "fully familiar". Rare (≈0.09% of LV runs) and absent with the pinned seed. Also: two small helper modules and a `kick_rate_per_s` world setting are not yet named in the specs. | Ratify at the next review; guaranteeing a kick is a one-line rule. | backlog A17; 2026-09-29 |
 | D7 | **Registry discovery carve-out:** allow only `wmj/models/registry.py` to import `importlib`/`pkgutil`. | Decide at P6-C01; ratify in review. | backlog A11 |
 | D8 | **BC-4 purity decision** (drop the completeness claim; byte-identity as backstop; no out-of-process sandbox) was delegated to the assistant and is "reversible in the spec text". | Owner ratifies or reverses. | calibration:228 |
 | D9 | **Essay: "No threshold forces a stop" is still unaddressed** — frontier AI labs publish risk policies where crossing a capability threshold triggers mandatory action. Mention it? | Owner's call. | `HANDOVER.md:296` |
@@ -58,16 +59,15 @@ Ordered by when they bite. *(D1–D6, D12 and D14 were settled at Round 10 on
 
 ## 3. Owed work, by stage
 
-**Now — next build step: P3-C09**
+**Now — next build steps: P3-C10 (the one-time lock) and P3-C06 (training data)**
 - **Independent re-check of the v1.8 purity guards and the rewritten ADR-004 orchestration loop** — owed by BC-2 since `calibration.md:249`; Rounds 9 and 10 were scoped elsewhere. Neither is built yet (P4-C06, P6-C01).
 - Fold the remaining spec text corrections listed in §5 into the specs at the next review.
 
-**P3-C09 — batched world step, kicks, `out-large-action`, kicked benchmark (new, Round 10)**
-- Re-opens built Phase-2 code (`lv.py`, `pendulum.py`, `benchmarks.py`, `divergence.py`); re-run their suites. TC-WD1-01's pinned values must still pass after the derivative rewrite.
 
 **P3-C10 — the one-time freeze (new, Round 10)** — must land before P6-C01.
 
 **P3-C06 — training data (after P3-C09 and the fix-check)**
+- Draw kicks with `wmj.harness.kicks.seeded_kick_sequences(..., "train-kicks", ...)` and step with `transition_batch` (both built at P3-C09); then point the training half of `tests/gates/test_kick_safety_full_scale.py` at the real generator.
 - 2,000 kicked full-horizon trajectories per world, then the harness's subsample (12,500 kick pairs + non-kick pairs to M), held-out and grad-check sets — models §4 as revised at Round 10.
 - **Measure runtime** for real and report it against judge ADR-J6's new measured envelope.
 - Start-disjointness (TC-MU7-01), purpose-keyed seeds (TC-MU7-02, TC-NF1-10), subsample (TC-MU7-03), train-twice-identical (TC-MU8-01).
@@ -173,4 +173,5 @@ hardcoded, not auto-discovered.
 | D6 B1 design review | 2026-09-28 | Reviewed in Round 10; no finding against it. |
 | D12 When to run Round 10 | 2026-09-28 | Run 2026-09-27/28; `design-review/design-review-010.html`. |
 | Independent fix-check of the Round 10 edits | 2026-09-28 | Five fresh checkers until clean: passes [(1,5),(2,2),(3,6),(4,2),(final,0)]; commits 1ccf8ce, 3426161, 8d34120, 913231f. `reviews/calibration.md`. |
+| P3-C09 built (batched worlds, kick generator, `out-large-action`, kicked benchmark) | 2026-10-03 | Review passes [(1,1),(2,1),(3,2),(4,0)]; 429 tests; `build/handovers/P3-C09.md`. |
 | D14 How action sequences are drawn | 2026-09-28 | Sparse seeded kicks from one generator; LV kicks shrunk after crash measurements (worlds ADR-W2, §4.1). |

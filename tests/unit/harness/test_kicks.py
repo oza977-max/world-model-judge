@@ -55,3 +55,10 @@ def test_zero_rollouts_give_an_empty_array_of_the_right_shape():
 def test_impossible_counts_or_horizons_are_refused(n, horizon):
     with pytest.raises(KickPurposeError, match="ADR-W2"):
         seeded_kick_sequences(SEEDS, "lv", lv.WORLD, "training", "in", "eval-kicks", n, horizon)
+
+
+def test_numpy_integer_counts_and_horizons_are_accepted():
+    kicks = seeded_kick_sequences(
+        SEEDS, "lv", lv.WORLD, "training", "in", "eval-kicks", np.int64(2), np.int64(5)
+    )
+    assert kicks.shape == (2, 5, 1)

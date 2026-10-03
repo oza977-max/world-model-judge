@@ -100,12 +100,13 @@ src/wmj/                        the code: worlds, models, judge, harness, report
 tests/                          unit tests and gates
 ```
 
-Build state (2026-09-28): Phases 1–2 done; Phase 3 in progress — P3-C01 (MLP
-core), P3-C02 (registry), P3-C07 (pre-registration tooling) done. Round 10
+Build state (2026-10-03): Phases 1–2 done; Phase 3 in progress — P3-C01 (MLP
+core), P3-C02 (registry), P3-C07 (pre-registration tooling), P3-C09 (batched
+worlds, kick generator, `out-large-action` region, kicked benchmark) done. Round 10
 design review (the training-recipe revision) closed 2026-09-28: 20 findings,
 owner-triaged, fixes written into requirements v1.4 and the specs, and an
 independent fix-check of those edits converged clean after five passes.
-Building resumes at P3-C09 → P3-C06 (see `REMEMBER.md` §3). `HANDOVER.md` is a historical record
+Next: P3-C10 (the one-time lock) and P3-C06 (training data) — see `REMEMBER.md` §3. `HANDOVER.md` is a historical record
 up to 2026-08-31.
 
 The dominant risk is not technical: it is that on a clean toy world every model
