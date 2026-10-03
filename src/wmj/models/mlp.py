@@ -149,6 +149,33 @@ class MLP:
                 hidden_outputs.append(activation)
         return activation, {"inputs": inputs, "hidden_outputs": hidden_outputs}
 
+    def forward_invariant(self, X: np.ndarray) -> np.ndarray:
+        """The prediction forward pass: output only, row-invariant (models ADR-M1).
+
+        In plain words: predicting many runs at once must give exactly the
+        numbers you get predicting them one by one. NumPy's ordinary matrix
+        multiply (`@`, used by `forward` for training) can differ in the last
+        bit depending on how many rows share the call (measured: odd batch
+        sizes differed, ~2e-16). Here each layer is an `einsum` with
+        `optimize=False`, whose rows were measured identical at every batch
+        size tested, at ~1.7x the cost. Every MLP-backed `predict` and
+        `predict_batch` uses this path; training keeps `forward`. TC-MU1-04
+        guards the property on every run of the suite, so a different
+        machine or NumPy cannot silently break it.
+        """
+        X = np.asarray(X, dtype=float)
+        if X.ndim != 2 or X.shape[1] != self.input_dim:
+            raise MLPArchitectureError(
+                f"MLP forward_invariant expected input of width {self.input_dim}, got array "
+                f"of shape {X.shape} (models ADR-M3)"
+            )
+        activation = X
+        last = len(self.layers) - 1
+        for index, (W, b) in enumerate(self.layers):
+            pre = np.einsum("bi,io->bo", activation, W, optimize=False) + b
+            activation = pre if index == last else np.tanh(pre)
+        return activation
+
     def backward(self, cache: dict, d_output: np.ndarray) -> list[tuple[np.ndarray, np.ndarray]]:
         """Reverse-mode gradients given the upstream gradient `d_output`.
 

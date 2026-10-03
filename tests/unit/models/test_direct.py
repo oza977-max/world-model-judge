@@ -315,7 +315,8 @@ def test_batches_are_the_pinned_size_and_cover_every_row_each_epoch(data, monkey
     original = direct.beta_nll_loss_and_grad
 
     def spy(Y, target, *, beta):
-        sizes.append(Y.shape[0])
+        if beta == BETA_NLL:  # training batches only (the gradient check uses beta 0)
+            sizes.append(Y.shape[0])
         return original(Y, target, beta=beta)
 
     monkeypatch.setattr(direct, "beta_nll_loss_and_grad", spy)

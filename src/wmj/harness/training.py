@@ -45,7 +45,7 @@ import numpy as np
 from wmj.errors import WmjError
 from wmj.harness.benchmarks import sample_region_starts
 from wmj.harness.kicks import seeded_kick_sequences
-from wmj.models.base import Pairs, SeedSource, TrainingData
+from wmj.models.base import Pairs, SeedSource, TrainingData, WorldContext
 
 TRAINING_REGION = "training"
 TRAINING_PURPOSES = (
@@ -146,6 +146,24 @@ def read_training_recipe(recipe_path: str | Path) -> TrainingRecipe:
             )
         values[key] = int(match.group(1))
     return TrainingRecipe(**values)
+
+
+def make_world_context(world_name: str, world: Any) -> WorldContext:
+    """The one `WorldContext` the harness hands every factory for this world.
+
+    In plain words: the world facts a model is allowed to know — its size,
+    its training box, its trained push range and its scale — gathered from
+    the world's own declarations in one place, so no model re-derives them.
+    """
+    spec = world.regions()
+    return WorldContext(
+        world_name=world_name,
+        state_dim=world.d,
+        action_dim=world.a,
+        training_state_box=spec.training_state_box,
+        training_action_interval=spec.training_action_interval,
+        scale=world.scale,
+    )
 
 
 def _default_horizon(world: Any) -> int:
