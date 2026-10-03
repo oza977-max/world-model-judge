@@ -46,7 +46,9 @@ def _digest(data) -> str:
     return h.hexdigest()
 
 
-# Known answers for seed 20260825 and the frozen recipe (numpy is pinned < 2).
+# Known answers for seed 20260825 and the frozen recipe (numpy 1.26.4 on glibc;
+# the pendulum half also rests on the platform's sin/cos, so a different libm
+# could differ in the last bit — if so, say that, don't call it a recipe revision).
 # If one of these fails the DATA changed: that is a recipe/seed revision to be
 # made openly and re-reported (REMEMBER.md D17, backlog A19), never a number to
 # update quietly. Pass 3 of the P3-C06 review: every other determinism test

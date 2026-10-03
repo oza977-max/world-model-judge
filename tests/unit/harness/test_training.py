@@ -700,9 +700,8 @@ def test_a_world_step_with_a_wrong_shape_or_non_finite_result_is_refused(mode):
 
 
 def test_a_world_step_that_edits_its_input_cannot_corrupt_the_record():
-    clean, noisy = _BadStepWorld(), _BadStepWorld()
-    for w in (clean, noisy):
-        w.kick_rate_per_s = 20.0
+    noisy = _BadStepWorld()
+    noisy.kick_rate_per_s = 20.0
     noisy.mode = "mutate"
     recipe = TrainingRecipe(6, 30, 1, 5, 3)
     # The mutating world steps from start + 1 each time, so its result differs from
@@ -713,7 +712,6 @@ def test_a_world_step_that_edits_its_input_cannot_corrupt_the_record():
         assert np.array_equal(
             data.states[:, t + 1], lv.transition_batch(data.states[:, t] + 1.0, data.actions[:, t])
         )
-    assert build_training_data("lv", clean, SeedSource(SEED, None), recipe, horizon=9).states.shape == data.states.shape
 
 
 def test_a_world_whose_dimension_disagrees_with_its_training_box_is_refused():
@@ -734,3 +732,95 @@ def test_non_finite_eval_starts_are_refused_and_negative_zero_equals_zero():
     patched = TrainingData(states=states, actions=data.actions)
     with pytest.raises(TrainingDataError, match="start 0"):
         assert_eval_starts_disjoint(patched, np.array([[-0.0, 2.0]]))
+
+
+# --- independent review, P3-C06 pass 4 ---
+
+
+class _ActionEditingWorld(_TwoTaskWorld):
+    """A world whose step zeroes the caller's action array in place."""
+
+    kick_rate_per_s = 20.0
+
+    def transition_batch(self, s, a):
+        out = lv.transition_batch(s, a.copy())
+        a *= 0.0
+        return out
+
+
+def test_a_world_step_that_edits_its_action_input_cannot_corrupt_the_recorded_actions():
+    recipe = TrainingRecipe(6, 30, 1, 5, 3)
+    data = build_training_data("lv", _ActionEditingWorld(), SeedSource(SEED, None), recipe, horizon=9)
+    expected = seeded_kick_sequences(
+        SeedSource(SEED, None), "lv", _ActionEditingWorld(), "training", "in", "train-kicks", 6, 9
+    )
+    assert np.array_equal(data.actions, expected)
+    assert np.any(data.actions != 0.0)
+
+
+def _patched_start(row):
+    data = _build("lv")
+    states = data.states.copy()
+    states[0, 0] = row
+    return TrainingData(states=states, actions=data.actions)
+
+
+def test_a_negative_zero_training_start_collides_with_a_positive_zero_eval_start():
+    with pytest.raises(TrainingDataError, match="start 0"):
+        assert_eval_starts_disjoint(_patched_start([-0.0, 2.0]), np.array([[0.0, 2.0]]))
+
+
+@pytest.mark.parametrize("dtype", [np.float32, np.float16, np.int64])
+def test_an_eval_start_of_another_dtype_but_equal_value_still_collides(dtype):
+    with pytest.raises(TrainingDataError, match="start 0"):
+        assert_eval_starts_disjoint(_patched_start([1.0, 2.0]), np.array([[1, 2]], dtype=dtype))
+
+
+def test_an_infinite_eval_start_is_refused():
+    with pytest.raises(TrainingDataError, match="finite"):
+        assert_eval_starts_disjoint(_build("lv"), np.array([[np.inf, 1.0]]))
+
+
+@pytest.mark.parametrize("shape", [(5, 1), (5, 0)])
+def test_eval_starts_narrower_than_the_state_are_refused(shape):
+    with pytest.raises(TrainingDataError, match="shape"):
+        assert_eval_starts_disjoint(_build("lv"), np.zeros(shape))
+
+
+def test_a_recipe_line_without_a_space_after_the_colon_is_read_correctly(tmp_path):
+    text = ("training_trajectories:2000\nsubsample_pairs:50000\nkick_pairs:12500\n"
+            "heldout_pairs:10000\ngradcheck_pairs:64\n")
+    path = tmp_path / "r.md"
+    path.write_text(text)
+    assert read_training_recipe(path) == TrainingRecipe(2000, 50000, 12500, 10000, 64)
+
+
+def test_full_width_digits_are_not_a_plain_integer(tmp_path):
+    with pytest.raises(TrainingDataError, match="kick_pairs"):
+        _read(tmp_path, _recipe_text(kick_pairs="1２５００"))
+
+
+def test_a_numpy_unsigned_horizon_is_accepted():
+    recipe = SMALL["lv"][1]
+    data = build_training_data("lv", lv.WORLD, SeedSource(SEED, None), recipe, horizon=np.uint64(200))
+    assert data.actions.shape[1] == 200
+
+
+def test_a_training_box_wider_than_the_state_is_refused():
+    from dataclasses import replace as _replace
+
+    class _Wide(_TwoTaskWorld):
+        def regions(self):
+            r = lv.regions()
+            return _replace(r, training_state_box=np.vstack([r.training_state_box, r.training_state_box[:1]]))
+
+    with pytest.raises(TrainingDataError, match="state dimensions"):
+        build_training_data("lv", _Wide(), SeedSource(SEED, None), TrainingRecipe(6, 30, 1, 5, 3), horizon=9)
+
+
+def test_a_world_with_no_action_dimension_is_refused():
+    class _NoLever(_TwoTaskWorld):
+        a = 0
+
+    with pytest.raises(TrainingDataError, match="action"):
+        build_training_data("lv", _NoLever(), SeedSource(SEED, None), TrainingRecipe(6, 30, 1, 5, 3), horizon=9)

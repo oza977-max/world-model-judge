@@ -27,8 +27,9 @@ non-kick pairs in permutation order. A set of size `2M` therefore begins
 with the whole of the set of size `M`.
 
 Evaluation never starts from a training start: the two draw from separate
-seed purposes, and `assert_eval_starts_disjoint` checks it at run time too
-(MU-7, TC-MU7-01).
+seed purposes, and `assert_eval_starts_disjoint` is the check that proves it
+(MU-7, TC-MU7-01). It is exercised by the tests and gates; wiring it into the
+judged run is P6-C01's job (REMEMBER.md §3).
 """
 
 from __future__ import annotations

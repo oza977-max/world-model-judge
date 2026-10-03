@@ -99,7 +99,7 @@ Ordered by when they bite. *(D1–D6, D12 and D14 were settled at Round 10 on
 
 **Phase 5** — P5-C03: full Chart-2 caption and switch lines. P5-C04: TC-RP7-02 SVG identity, TC-JU12-04, model card, `writer.py` sole writer to `out/`.
 
-**P6-C01** — registry auto-discovery + D7 carve-out; `wmj run`, `wmj verify`, `wmj list-models` (output format unspecified — pin it); orchestration loop with baseline pre-pass and **batched rollouts** (Round 10); **record the freeze SHA `check_prereg` returns as `meta.prereg_commit`** (TC-MU6-07); TC-MU9-01/02/03, TC-MU2-02 full, TC-NF1-05/09, full TC-WD3-01, full TC-NF1-01/02; wire benchmarks, regions, action_response, fixtures into `wmj run`.
+**P6-C01** — registry auto-discovery + D7 carve-out; `wmj run`, `wmj verify`, `wmj list-models` (output format unspecified — pin it); orchestration loop with baseline pre-pass and **batched rollouts** (Round 10); **record the freeze SHA `check_prereg` returns as `meta.prereg_commit`** (TC-MU6-07); TC-MU9-01/02/03, TC-MU2-02 full, TC-NF1-05/09, full TC-WD3-01, full TC-NF1-01/02; wire benchmarks, regions, action_response, fixtures into `wmj run`. **Also wire `harness.training.assert_eval_starts_disjoint` into the run** (models spec lines 289/313 say the harness asserts start-disjointness at run time; it is built and tested at P3-C06 but no caller in `src/` uses it yet). Read and hold the bytes `check_prereg` verified (P3-C10 residual 6).
 
 **P6-C02** — regenerate the stale `specs/*.html` twins with the parity hash; runtime/dependency/confidentiality gates; README must state the PNG byte-identity exclusion and the SVG reproducibility property.
 

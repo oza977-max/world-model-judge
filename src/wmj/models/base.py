@@ -1,6 +1,11 @@
-"""wmj.models.base — content-addressed seeding, shared by every model.
+"""wmj.models.base — the shared types every model uses: seeding, predictions,
+world context and training data.
 
-In plain words: every trained component (a model, a fixture, a member
+In plain words (types): `Prediction` is what every model says back (a best
+guess and an error bar); `WorldContext` is the world facts a model is handed;
+`Pairs`/`TrainingData` are the shared homework (see their docstrings).
+
+Seeding, in plain words: every trained component (a model, a fixture, a member
 of an ensemble) gets its own random-number stream, derived from its
 *name* rather than from where it happens to sit in a list. That means
 adding a new model never quietly reshuffles another model's training —
