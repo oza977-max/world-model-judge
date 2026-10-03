@@ -854,3 +854,40 @@ would not know about them.
 
 *Where recorded:* `build/handovers/P3-C09.md`; independent review of
 P3-C09, pass 1 (findings 2, 7, 8).
+
+### A18 — found building P3-C10: the lock is stricter than ADR-M5's wording (for the next review)
+
+**In plain words:** ADR-M5 says how the one-time freeze is checked using one
+particular git command. Building it showed that command misses real ways to
+cheat, so the code checks more. The spec text was *not* edited (it is
+reviewed); this note is what the next design review should fold in.
+
+1. **Counting adds and deletes.** ADR-M5 says to count with
+   `git log --diff-filter=A|D`. That cannot see a freeze added or lifted
+   *inside a merge commit* (git shows no diff for a merge). The code instead
+   asks every commit whether `prereg/FREEZE` exists in its tree: an *add* is
+   a commit that has it while none of its parents do; a *delete* is a commit
+   without it while some parent has it.
+2. **Every local ref, not only HEAD.** A branch forked from before the freeze
+   can freeze again without touching the checked-out history. Adds and deletes
+   are counted over all refs (branches, tags, remote-tracking refs; not
+   `refs/replace/*` or `refs/stash`). The single freeze must also be in the
+   checked-out history, else "not frozen on the branch being judged".
+3. **History must be trustworthy first.** The code refuses: a repo that is not
+   at its top level; a shallow clone; a `.git/info/grafts` file; a partial
+   clone (git would run the repo's own fetch program to fill a gap); and
+   anything `git fsck` rejects (forged objects). Git is run with ambient
+   `GIT_*` dropped, replace refs and the commit-graph off, no lazy fetch, and
+   no repo-supplied program (fsmonitor, hooks, clean filters — `git status` is
+   never used; bytes are compared directly).
+4. **The certified set is fixed** (`recipe.md`, `prediction.md`,
+   `thresholds.json`, `FREEZE`); the caller's list can only add to it.
+5. **Line endings.** `.gitattributes` pins `prereg/* -text`; a CRLF-only
+   difference is reported as such (`PreregLineEndingError`).
+6. **Residual #6 (new, disclosed in the module docstring).** The certificate
+   is a commit id, not the bytes the judge later reads. P6-C01 should read
+   and hold the verified bytes (or re-check immediately before use).
+   Residual #7: only the repository on this disk is examined.
+
+*Where recorded:* `build/handovers/P3-C10.md` (to be written at convergence);
+independent review of P3-C10, passes 1–3.
