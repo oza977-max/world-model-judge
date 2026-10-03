@@ -560,3 +560,69 @@ def test_an_infinite_spread_and_a_nan_action_are_each_refused_by_name(trained_ne
         model.predict(np.zeros((2, 2)), np.zeros(1))
     with pytest.raises(DirectTrainingError, match="one state"):
         model.predict(np.zeros(2), np.zeros((1, 1)))
+
+
+# --- independent review, P3-C03 pass 3: the 4-dimensional pendulum, and an asymmetric interval ---
+
+from wmj.harness.training import make_world_context
+from wmj.worlds import pendulum
+
+PEND_RECIPE = TrainingRecipe(
+    training_trajectories=300, subsample_pairs=1000, kick_pairs=40, heldout_pairs=300,
+    gradcheck_pairs=16,
+)
+
+
+@pytest.fixture(scope="module")
+def pend():
+    data = build_training_data("pendulum", pendulum.WORLD, SeedSource(SEED, None), PEND_RECIPE, horizon=300)
+    ctx = make_world_context("pendulum", pendulum.WORLD)
+    net = train_direct(ctx, _seeds(), data, epochs=2)
+    return ctx, data, net
+
+
+def test_pendulum_network_shape_and_output_columns(pend):
+    ctx, data, net = pend
+    assert net.layer_sizes == (5, 64, 64, 8)  # (4 states + 1 action) -> 2 x 64 -> (4 means, 4 log-sigmas)
+    s, a = data.heldout_pairs.state[:10], data.heldout_pairs.action[:10]
+    out = net.forward_invariant(normalise_inputs(ctx, s, a))
+    means, spreads = DirectModel(ctx, net).predict_batch(s, a)
+    assert means.shape == (10, 4) and spreads.shape == (10, 4)
+    assert np.array_equal(means, s + out[:, :4])
+    assert np.array_equal(spreads, np.exp(out[:, 4:]))
+
+
+@pytest.mark.parametrize("n", [1, 7, 200])
+def test_pendulum_batch_rows_are_bit_identical_to_one_at_a_time(pend, n):
+    ctx, data, net = pend
+    model = DirectModel(ctx, net)
+    s = np.resize(data.heldout_pairs.state, (n, 4))
+    a = np.resize(data.heldout_pairs.action, (n, 1))
+    means, spreads = model.predict_batch(s, a)
+    for i in range(n):
+        p = model.predict(s[i], a[i])
+        assert np.array_equal(means[i], p.mean) and np.array_equal(spreads[i], p.spread)
+
+
+def test_pendulum_training_equals_the_independent_reference_trainer(pend):
+    ctx, data, _ = pend
+    net = train_direct(ctx, _seeds(), data, epochs=2, batch_size=64)
+    ref = _reference_train(ctx, _seeds(), data.train_pairs, epochs=2, batch_size=64, beta=0.5)
+    _close(net, ref)
+
+
+def test_the_half_width_is_half_the_interval_for_an_asymmetric_range():
+    ctx = WorldContext(
+        world_name="x", state_dim=2, action_dim=1, training_state_box=np.zeros((2, 2)),
+        training_action_interval=np.array([[0.0, 0.4]]), scale=np.array([1.0, 1.0]),
+    )
+    x = normalise_inputs(ctx, np.zeros((1, 2)), np.array([[0.4]]))
+    assert x[0, 2] == pytest.approx(2.0)  # 0.4 / ((0.4 - 0.0) / 2), not 0.4 / 0.4 or 0.4 / 0.2 by accident
+    x2 = normalise_inputs(ctx, np.zeros((1, 2)), np.array([[-0.2]]))
+    assert x2[0, 2] == pytest.approx(-1.0)
+
+
+def test_predict_returns_arrays_that_do_not_alias_the_batch_buffers(model, data):
+    p = model.predict(data.heldout_pairs.state[0], data.heldout_pairs.action[0])
+    for array in (p.mean, p.spread):
+        assert array.base is None or not array.base.flags.writeable

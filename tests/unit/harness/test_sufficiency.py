@@ -283,3 +283,41 @@ def test_the_kick_error_is_a_mean_not_a_sum():
     pairs = _pairs([[2.0, 0.0], [2.0, 0.0], [0.0, 0.0]], kicks=[True, True, False])
     split = kick_split_error(np.zeros((3, 2)), pairs, SCALE)
     assert split.n_kick == 2 and split.error_kick == pytest.approx(0.5)  # not 1.0
+
+
+# --- independent review, P3-C03 pass 3: the pendulum through check_world ---
+
+
+def test_check_world_on_the_pendulum_uses_the_pendulums_own_data_and_context():
+    from dataclasses import replace
+
+    from wmj.worlds import pendulum
+
+    recipe = TrainingRecipe(
+        training_trajectories=300, subsample_pairs=1000, kick_pairs=40, heldout_pairs=300,
+        gradcheck_pairs=16,
+    )
+    got = check_world("pendulum", pendulum.WORLD, _quick_direct, recipe, SEED, "direct", horizon=300)
+    ctx = make_world_context("pendulum", pendulum.WORLD)
+    seeds = SeedSource(SEED, None)
+    big = build_training_data("pendulum", pendulum.WORLD, seeds, replace(recipe, subsample_pairs=2000), horizon=300)
+    small = build_training_data("pendulum", pendulum.WORLD, seeds, recipe, horizon=300)
+    held, scale = big.heldout_pairs, np.asarray(pendulum.WORLD.scale)
+    errs = []
+    for data in (small, big):
+        m = _quick_direct(ctx, SeedSource(SEED, "direct"), data)
+        means, _ = m.predict_batch(held.state, held.action)
+        errs.append(held_out_error(means, held, scale))
+    assert (got.world, got.err_m, got.err_2m) == ("pendulum", errs[0], errs[1])
+    assert got.split_m.n_kick == int(held.is_kick.sum())
+
+
+def test_the_factory_is_given_the_worlds_own_context():
+    seen = []
+
+    def factory(ctx, seeds, data):
+        seen.append((ctx.world_name, ctx.state_dim))
+        return _BiasedWorldModel(0.01)
+
+    check_world("lv", lv.WORLD, factory, RECIPE, SEED, "x", horizon=100)
+    assert seen == [("lv", 2), ("lv", 2)]
