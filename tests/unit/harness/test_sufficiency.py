@@ -410,3 +410,13 @@ def test_check_world_on_the_pendulum_hands_the_factory_the_pendulums_context():
 
     check_world("pendulum", pendulum.WORLD, factory, recipe, SEED, "x", horizon=300)
     assert seen == [("pendulum", 4), ("pendulum", 4)]
+
+
+def test_a_negative_kick_counts_as_a_kick_in_the_split():
+    action = np.array([[-0.05], [0.05], [0.0]])
+    pairs = Pairs(
+        state=np.zeros((3, 2)), action=action, next_state=np.array([[2.0, 0.0], [2.0, 0.0], [0.0, 0.0]]),
+        is_kick=np.array([True, True, False]),
+    )
+    split = kick_split_error(np.zeros((3, 2)), pairs, SCALE)
+    assert split.n_kick == 2 and split.error_kick == pytest.approx(0.5)

@@ -657,3 +657,59 @@ def test_the_error_classes_are_wmj_errors():
     from wmj.harness.sufficiency import SufficiencyError
 
     assert issubclass(DirectTrainingError, WmjError) and issubclass(SufficiencyError, WmjError)
+
+
+# --- independent review, P3-C03 pass 6: every held-out row, the unfamiliar regions, and 100 epochs ---
+
+
+def _expected_predictions(ctx, net, s, a):
+    hw = (ctx.training_action_interval[:, 1] - ctx.training_action_interval[:, 0]) / 2.0
+    x = np.hstack([s / ctx.scale, a / hw])  # written out here, not via normalise_inputs
+    out = net.forward_invariant(x)
+    d = ctx.state_dim
+    return s + out[:, :d], np.exp(out[:, d:])
+
+
+def test_predictions_equal_the_network_on_every_heldout_row_and_the_unfamiliar_corners(data, trained_net):
+    """The model must not clip, rescale or special-case anything: all held-out rows plus corner
+    rows from the out-high-amplitude region (states 8-12) and out-large-action (|push| 0.2)."""
+    ctx = _ctx()
+    h = data.heldout_pairs
+    corner_s = np.array([[8.0, 4.0], [12.0, 6.0], [12.0, 4.0], [8.0, 6.0], [3.0, 2.0], [3.0, 2.0]])
+    corner_a = np.array([[0.2], [-0.2], [0.15], [-0.15], [0.2], [-0.2]])
+    s = np.vstack([h.state, corner_s])
+    a = np.vstack([h.action, corner_a])
+    means, spreads = DirectModel(ctx, trained_net).predict_batch(s, a)
+    exp_means, exp_spreads = _expected_predictions(ctx, trained_net, s, a)
+    assert np.array_equal(means, exp_means) and np.array_equal(spreads, exp_spreads)
+
+
+def test_pendulum_predictions_equal_the_network_on_heldout_rows_and_large_pushes(pend):
+    ctx, data, net = pend
+    h = data.heldout_pairs
+    corner_s = np.array([[3.0, 0.2, 0.4, -0.4], [2.6, -0.3, -0.5, 0.5], [0.0, 0.0, 0.0, 0.0]])
+    corner_a = np.array([[2.0], [-2.0], [1.5]])
+    s = np.vstack([h.state, corner_s])
+    a = np.vstack([h.action, corner_a])
+    means, spreads = DirectModel(ctx, net).predict_batch(s, a)
+    exp_means, exp_spreads = _expected_predictions(ctx, net, s, a)
+    assert np.array_equal(means, exp_means) and np.array_equal(spreads, exp_spreads)
+
+
+def test_a_hundred_epochs_equal_the_independent_trainer_on_a_small_slice(data):
+    """Epoch-dependent bugs (a schedule, a stream or a reset that only bites after epoch 3,
+    a log-sigma floor) are invisible to the 3-epoch comparisons. With 600 rows a 100-epoch
+    run is quick and the two trainers still agree to ~1e-11 (measured), so a tight tolerance
+    holds; at full scale chaos amplifies rounding to O(0.1) after ~20,000 steps."""
+    from wmj.models.base import Pairs
+
+    p = data.train_pairs
+    rows = np.r_[0:40, 1000:1560]  # 40 kick pairs then 560 non-kick pairs
+    small = Pairs(p.state[rows], p.action[rows], p.next_state[rows], p.is_kick[rows])
+    td = TrainingData(
+        states=data.states, actions=data.actions, train_pairs=small,
+        gradcheck_index=np.arange(16, dtype=np.int64),
+    )
+    net = train_direct(_ctx(), _seeds(), td, epochs=EPOCHS, batch_size=BATCH_SIZE, beta=BETA_NLL)
+    ref = _reference_train(_ctx(), _seeds(), small, epochs=EPOCHS, batch_size=BATCH_SIZE, beta=BETA_NLL)
+    _close(net, ref, rtol=1e-6, atol=1e-8)
