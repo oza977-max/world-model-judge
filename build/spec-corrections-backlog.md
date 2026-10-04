@@ -998,12 +998,15 @@ text of the reviewed specs, which were not edited.
    old single run) instead of single runs. Epochs stay 100.
 3. **Evidence:** `build/measurements/p3-c03-model-a-real-run.md` (sections 3, 5,
    6). Before: seed-to-seed spread of the held-out error up to 20×; after: ~1.3×.
-4. **Still to come:** the sufficiency check for the ensemble (P3-C04) and, by the
-   pre-registered rule, the possible fallback of `subsample_pairs` to 100,000.
-   The pendulum's single-model result is stable and says "not enough" (median
-   ratio ≈ 2.9 > 1.10), so the fallback is expected, but the rule applies only
-   after both models are checked and is enacted in the recipe's revision log, not
-   silently.
+4. **The pre-registered fallback was enacted the same day** (recipe revision
+   log): the official Model A check at the final settings failed on both worlds
+   (median ratios 1.29 and 2.75 against 1.10), and the rule says one failing
+   model switches both worlds and both models to `subsample_pairs: 100000`. No
+   owner choice was involved; the ensemble's later check (P3-C04) is still run
+   and reported but cannot change the outcome. Consequence: ~35 s per Model A
+   training (was ~17 s); LV's held-out + training kick quotas use 13,500 of its
+   ~13,870 kick pairs (a lower kick rate or shorter horizon would now refuse the
+   build, as designed).
 
 *Where recorded:* this entry; `prereg/recipe.md` (keys and revision log);
 `REMEMBER.md` D17, D18 (closed).

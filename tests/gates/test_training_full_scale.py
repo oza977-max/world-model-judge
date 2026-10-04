@@ -1,7 +1,7 @@
 """P3-C06 full-scale gate: the real recipe, the real worlds, the real sizes.
 
 In plain words: the unit tests build small homework sets. This builds the
-real ones — 2,000 full-length histories per world and the 50,000 / 12,500 /
+real ones — 2,000 full-length histories per world and the 100,000 / 12,500 /
 10,000 / 64 picks the frozen recipe names — and checks the promises that
 only show at full size: the worlds really supply enough kicked examples
 (the build refuses otherwise), the numbers are exact, nothing breaches a
@@ -71,7 +71,7 @@ def test_the_real_recipe_builds_the_real_training_set(name, module, capsys):
     n, h = recipe.training_trajectories, module.HORIZON
     assert data.states.shape == (n, h + 1, module.WORLD.d) and data.actions.shape == (n, h, 1)
     assert np.all(np.isfinite(data.states))
-    assert data.train_pairs.state.shape[0] == recipe.subsample_pairs == 50000
+    assert data.train_pairs.state.shape[0] == recipe.subsample_pairs == 100000  # the 2026-10-04 fallback
     assert int(data.train_pairs.is_kick.sum()) == recipe.kick_pairs == 12500
     assert data.heldout_pairs.state.shape[0] == recipe.heldout_pairs == 10000
     assert data.gradcheck_index.shape == (64,)

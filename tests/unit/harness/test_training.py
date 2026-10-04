@@ -63,7 +63,7 @@ def built(request):
 def test_the_real_recipe_gives_the_pinned_counts():
     r = read_training_recipe(REAL_RECIPE)
     assert r == TrainingRecipe(
-        training_trajectories=2000, subsample_pairs=50000, kick_pairs=12500,
+        training_trajectories=2000, subsample_pairs=100000, kick_pairs=12500,
         heldout_pairs=10000, gradcheck_pairs=64, heldout_kick_pairs=1000,
     )
 

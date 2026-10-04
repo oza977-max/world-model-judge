@@ -79,3 +79,73 @@ pendulum — while LV's medians are 0.36 (100) and 1.64 (200), i.e. not stable.
 Spread is roughly 2× the real error on LV (z std 0.38 / 0.27) and mixed on the
 pendulum (ω₁ z mean −1.8: biased and overconfident there). Practice model, not
 a defect — this is the material the judge exists to grade.
+
+## 5. With the cosine learning-rate decay (the D18 change), five seeds, identical data
+
+Same data and seeds 1–5 as section 3, but the learning rate decays from 1e-3 to
+1e-5 (cosine) over the epochs. Held-out set: the 100,000-pair build's, drawn
+before the D17 kick quota (so the numbers are comparable with sections 1–3).
+
+```
+lv cosine 100 seed 1 M=1.596e-08 2M=1.576e-08 ratio=1.01
+lv cosine 100 seed 2 M=1.981e-08 2M=1.730e-08 ratio=1.15
+lv cosine 100 seed 3 M=1.609e-08 2M=1.446e-08 ratio=1.11
+lv cosine 100 seed 4 M=1.501e-08 2M=1.313e-08 ratio=1.14
+lv cosine 100 seed 5 M=1.776e-08 2M=1.585e-08 ratio=1.12
+lv cosine 100 SUMMARY median M 1.609e-08 median 2M 1.576e-08 median-ratio 1.02  spread(max/min) M 1.3 2M 1.3
+pendulum cosine 100 seed 1 M=5.425e-08 2M=2.064e-08 ratio=2.63
+pendulum cosine 100 seed 2 M=5.301e-08 2M=1.812e-08 ratio=2.93
+pendulum cosine 100 seed 3 M=4.963e-08 2M=9.602e-09 ratio=5.17
+pendulum cosine 100 seed 4 M=5.377e-08 2M=2.237e-08 ratio=2.40
+pendulum cosine 100 seed 5 M=4.872e-08 2M=1.194e-08 ratio=4.08
+pendulum cosine 100 SUMMARY median M 5.301e-08 median 2M 1.812e-08 median-ratio 2.93  spread(max/min) M 1.1 2M 2.3
+lv cosine 200 seed 1 M=1.486e-08 2M=1.023e-08 ratio=1.45
+lv cosine 200 seed 2 M=1.752e-08 2M=7.623e-09 ratio=2.30
+lv cosine 200 seed 3 M=1.336e-08 2M=1.091e-08 ratio=1.22
+lv cosine 200 seed 4 M=1.286e-08 2M=8.216e-09 ratio=1.57
+lv cosine 200 seed 5 M=1.511e-08 2M=7.852e-09 ratio=1.92
+lv cosine 200 SUMMARY median M 1.486e-08 median 2M 8.216e-09 median-ratio 1.81  spread(max/min) M 1.4 2M 1.4
+pendulum cosine 200 seed 1 M=2.166e-08 2M=4.528e-09 ratio=4.78
+pendulum cosine 200 seed 2 M=1.757e-08 2M=7.592e-09 ratio=2.31
+pendulum cosine 200 seed 3 M=1.130e-08 2M=1.369e-09 ratio=8.26
+pendulum cosine 200 seed 4 M=2.360e-08 2M=8.276e-09 ratio=2.85
+pendulum cosine 200 seed 5 M=2.197e-08 2M=1.421e-09 ratio=15.46
+pendulum cosine 200 SUMMARY median M 2.166e-08 median 2M 4.528e-09 median-ratio 4.78  spread(max/min) M 2.1 2M 6.0
+```
+
+The seed-to-seed spread of the held-out error fell from up to ~20× (constant
+rate) to **1.1–1.4×** at 50,000 pairs (LV 1.3×, pendulum 1.1×); the error
+itself fell to ~1.6e-8 (LV) and ~5.3e-8 (pendulum) at 100 epochs. 200 epochs lower
+the error further (LV 1.5e-8 → ~8e-9 at 100,000 pairs; pendulum 2.2e-8) but make the
+M-vs-2M gap larger and cost twice as much; epochs stay at 100.
+
+## 6. The official sufficiency check at the final settings (D17 + D18)
+
+Held-out set with the 1,000-kick quota (D17); median over 5 seeds (D18); cosine
+decay; both versions scored on the 100,000-pair build's held-out set. One call
+of `check_world(..., direct_factory, recipe, 20260825, "direct")` per world
+(≈4–5 min each).
+
+```
+lv: median err(M)=1.7054e-08 err(2M)=1.3239e-08 ratio=1.288 sufficient=False seeds=5 time=244s
+  errs_m  ['1.497e-08', '1.852e-08', '1.569e-08', '1.705e-08', '2.087e-08']
+  errs_2m ['1.324e-08', '1.284e-08', '1.388e-08', '1.272e-08', '1.719e-08']
+  split M : KickSplit(n_kick=1000, n_plain=9000, error_kick=2.3840149070454372e-08, error_plain=1.6448906508526735e-08)
+  split 2M: KickSplit(n_kick=1000, n_plain=9000, error_kick=1.973885040028899e-08, error_plain=1.2517216847601596e-08)
+pendulum: median err(M)=5.6582e-08 err(2M)=2.0578e-08 ratio=2.750 sufficient=False seeds=5 time=280s
+  errs_m  ['5.352e-08', '6.069e-08', '5.859e-08', '5.321e-08', '5.658e-08']
+  errs_2m ['2.058e-08', '3.125e-08', '1.986e-08', '1.766e-08', '2.104e-08']
+  split M : KickSplit(n_kick=1000, n_plain=9000, error_kick=5.121222143571175e-08, error_plain=5.717889435062468e-08)
+  split 2M: KickSplit(n_kick=1000, n_plain=9000, error_kick=3.0992576676503744e-08, error_plain=1.963262880210123e-08)
+```
+
+Both worlds say **"50,000 is not enough"** under the pre-registered rule
+(`err(M) ≤ 1.10 × err(2M)`): LV median ratio 1.29, pendulum 2.75, and every
+individual seed agrees in direction. With the held-out set including 1,000 kicked
+pairs, the 100,000-pair models are better on kicked and un-kicked pairs alike.
+The rule says "if either model fails, `subsample_pairs` becomes 100,000 for
+both" — a single failure decides it, so the ensemble's later check cannot change
+the outcome. The recipe's revision log records the switch (2026-10-04).
+Kick-split report (D17): error on the 1,000 held-out kick pairs vs the 9,000
+others — LV 2.4e-8 vs 1.6e-8 (50,000 pairs) and 2.0e-8 vs 1.3e-8 (100,000);
+pendulum 5.1e-8 vs 5.7e-8 and 3.1e-8 vs 2.0e-8.

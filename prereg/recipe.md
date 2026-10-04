@@ -27,7 +27,7 @@ format (a `key: value` line) is fixed so there is one defined source.
 training_trajectories: 2000
 epochs: 100
 batch_size: 256
-subsample_pairs: 50000
+subsample_pairs: 100000
 subsample_pairs_fallback: 100000
 kick_pairs: 12500
 heldout_pairs: 10000
@@ -57,7 +57,8 @@ pendulum_action_max: 1.0
   (P3-C03/C06) — see `build/spec-corrections-backlog.md` A12.
 - `batch_size: 256` — mini-batch training (models ADR-M3). Was 32 until the
   2026-09-28 revision; measured 2.84 µs vs 7.05 µs per example.
-- `subsample_pairs: 50000` — each MLP trains on this many one-step pairs,
+- `subsample_pairs: 100000` (was 50,000 until the 2026-10-04 fallback — see the
+  revision log) — each MLP trains on this many one-step pairs,
   drawn once per world by the harness from the 2,000 trajectories and shared
   by every network (models §4). The full trajectories are kept; training on
   all ~1.4M (LV) / ~10M (pendulum) highly correlated pairs would take ~14
@@ -250,3 +251,15 @@ reason. Earlier versions stay readable in git history.
   seed alone, and error was still falling at 200 epochs. Epochs stay at 100
   (with the decay, 200 epochs lowered error a little more at twice the cost).
   Unchanged: every other key.
+- **2026-10-04 — the pre-registered fallback is enacted: `subsample_pairs`
+  50,000 → 100,000** (the rule in "Is 50,000 pairs enough?"; no owner choice
+  involved). The check was run once for Model A with the final settings (held-out
+  kick quota, cosine decay, median of 5 seeds): predator–prey ratio
+  err(50,000)/err(100,000) = 1.29 and pendulum 2.75, both above 1.10, every seed
+  agreeing in direction (`build/measurements/p3-c03-model-a-real-run.md`, section
+  6). The rule says one failing model switches both worlds and both models, so
+  the ensemble's later check cannot change the outcome; there is no further
+  iteration. `subsample_pairs_fallback: 100000` stays as the record of the only
+  other value. Unchanged: every other key. Consequence: one Model A training now
+  takes about 35 s instead of 17 s, and the held-out kick quota (1,000) plus the
+  training kick quota (12,500) use 13,500 of predator–prey's ~13,870 kick pairs.

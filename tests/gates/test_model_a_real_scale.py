@@ -1,12 +1,12 @@
 """P3-C03 real-scale gate: Model A trained on the frozen recipe, on both worlds.
 
 In plain words: the unit tests train Model A for a few epochs on a couple of thousand
-examples. The real model — 100 epochs on 50,000 examples — lives in a different regime:
+examples. The real model — 100 epochs on 100,000 examples — lives in a different regime:
 error bars around a thousandth, steps of size 2 for the pendulum's biggest push, errors
 around 1e-8. A bug that only acts in that regime (a floor, a cap, a clip, a shortcut in how
 much training is done) would pass every small test. This trains the real thing (~17 s per
 world) and checks only what is true on every machine: the real run consumed exactly 100
-epochs of 50,000 rows in batches of 256; predictions equal the network's own output exactly on
+epochs of 100,000 rows in batches of 256; predictions equal the network's own output exactly on
 every held-out row; and the model is clearly better than "nothing changes" and has learned
 the pendulum's push sizes. Training at this length is chaotic — a different CPU kernel lands
 elsewhere in the measured range (measured: LV held-out error 5e-8 to 1.3e-5 across kernels) —
@@ -50,7 +50,7 @@ def _expected(ctx, net, s, a):
 
 @pytest.mark.slow
 @pytest.mark.parametrize(("name", "module"), [("lv", lv), ("pendulum", pendulum)])
-def test_the_real_run_consumes_100_epochs_of_50000_rows_in_batches_of_256(name, module, monkeypatch):
+def test_the_real_run_consumes_100_epochs_of_100000_rows_in_batches_of_256(name, module, monkeypatch):
     from wmj.models import direct
 
     batches = []
@@ -63,9 +63,9 @@ def test_the_real_run_consumes_100_epochs_of_50000_rows_in_batches_of_256(name, 
 
     monkeypatch.setattr(direct, "beta_nll_loss_and_grad", spy)
     _trained(name, module)
-    per_epoch, last = divmod(50000, 256)
-    assert len(batches) == 100 * (per_epoch + 1)  # 195 full batches + one of 80, 100 times
-    assert sum(batches) == 100 * 50000 and max(batches) == 256 and last == 80
+    per_epoch, last = divmod(100000, 256)
+    assert len(batches) == 100 * (per_epoch + 1)  # 390 full batches + one of 160, 100 times
+    assert sum(batches) == 100 * 100000 and max(batches) == 256 and last == 160
 
 
 @pytest.mark.slow
