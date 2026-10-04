@@ -27,7 +27,6 @@ optimiser writes new values into them in place every step.
 
 from __future__ import annotations
 
-import itertools
 from typing import Callable, Sequence
 
 import numpy as np
@@ -101,7 +100,7 @@ class MLP:
         self.layer_sizes = tuple(sizes)
         # W ~ U(-1/sqrt(fan_in), 1/sqrt(fan_in)); biases 0 (ADR-M3).
         self.layers: list[tuple[np.ndarray, np.ndarray]] = []
-        for fan_in, fan_out in itertools.pairwise(sizes):
+        for fan_in, fan_out in zip(sizes[:-1], sizes[1:]):  # noqa: RUF007 (itertools is not on the models allowlist)
             bound = 1.0 / np.sqrt(fan_in)
             W = rng.uniform(-bound, bound, size=(fan_in, fan_out))
             b = np.zeros(fan_out)
