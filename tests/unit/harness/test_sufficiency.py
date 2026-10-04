@@ -420,3 +420,19 @@ def test_a_negative_kick_counts_as_a_kick_in_the_split():
     )
     split = kick_split_error(np.zeros((3, 2)), pairs, SCALE)
     assert split.n_kick == 2 and split.error_kick == pytest.approx(0.5)
+
+
+def test_four_dimensional_error_uses_every_dimension_and_its_own_scale():
+    """The pendulum has four dimensions; an average over only the first two would drop the
+    angular speeds and could flip the 'M is enough' decision."""
+    scale = np.array([1.0, 2.0, 4.0, 8.0])
+    means = np.zeros((3, 4))
+    means[:, 3] = 8.0  # (8/8)^2 = 1 in the last dimension of every row
+    means[0, 2] = 4.0  # and (4/4)^2 = 1 in dimension 2 of row 0
+    pairs = Pairs(
+        np.zeros((3, 4)), np.array([[0.5], [0.0], [0.0]]), np.zeros((3, 4)),
+        np.array([True, False, False]),
+    )
+    assert held_out_error(means, pairs, scale) == pytest.approx((2 + 1 + 1) / 12)
+    split = kick_split_error(means, pairs, scale)
+    assert split.error_kick == pytest.approx(2 / 4) and split.error_plain == pytest.approx(1 / 4)

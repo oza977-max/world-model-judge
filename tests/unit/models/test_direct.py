@@ -416,7 +416,7 @@ def test_direct_is_registered_under_its_name_with_the_uniform_factory(data):
 # --- independent review, P3-C03 pass 1: an independent reference trainer pins the whole recipe ---
 
 
-def _reference_train(ctx, seeds, pairs, *, epochs, batch_size, beta):
+def _reference_train(ctx, seeds, pairs, *, epochs, batch_size, beta, log_sigma_bias0=0.0):
     """Model A trained straight from the spec text, sharing no code with `train_direct`."""
     d = ctx.state_dim
     hw = (ctx.training_action_interval[:, 1] - ctx.training_action_interval[:, 0]) / 2.0
@@ -426,6 +426,7 @@ def _reference_train(ctx, seeds, pairs, *, epochs, batch_size, beta):
     rng = seeds.rng("weights")
     Ws = [rng.uniform(-1 / np.sqrt(i), 1 / np.sqrt(i), size=(i, o)) for i, o in itertools.pairwise(sizes)]
     bs = [np.zeros(o) for o in sizes[1:]]
+    bs[2][d:] = log_sigma_bias0  # 0 in training; tests start it tiny to reach the small-sigma regime
     m_w = [np.zeros_like(w) for w in Ws]; v_w = [np.zeros_like(w) for w in Ws]
     m_b = [np.zeros_like(b) for b in bs]; v_b = [np.zeros_like(b) for b in bs]
     t = 0
@@ -713,3 +714,64 @@ def test_a_hundred_epochs_equal_the_independent_trainer_on_a_small_slice(data):
     net = train_direct(_ctx(), _seeds(), td, epochs=EPOCHS, batch_size=BATCH_SIZE, beta=BETA_NLL)
     ref = _reference_train(_ctx(), _seeds(), small, epochs=EPOCHS, batch_size=BATCH_SIZE, beta=BETA_NLL)
     _close(net, ref, rtol=1e-6, atol=1e-8)
+
+
+# --- independent review, P3-C03 pass 7: reachable extremes, the small-sigma regime ---
+
+
+def test_predictions_are_exact_in_the_states_the_judged_rollouts_actually_reach(data, trained_net):
+    """True-world zero-push rollouts of out-high-amplitude reach LV states up to (15.5, 8.6)
+    (3.9 in network-input units) — beyond the pass-6 corners; no clip or wrap may touch them."""
+    ctx = _ctx()
+    s = np.array([[15.5, 8.6], [15.5, 1.0], [1.0, 8.6], [14.0, 7.0]])
+    a = np.array([[0.2], [-0.2], [0.0], [0.1]])
+    means, spreads = DirectModel(ctx, trained_net).predict_batch(s, a)
+    exp_means, exp_spreads = _expected_predictions(ctx, trained_net, s, a)
+    assert np.array_equal(means, exp_means) and np.array_equal(spreads, exp_spreads)
+
+
+def test_pendulum_predictions_are_exact_for_angles_and_speeds_the_inverted_region_reaches(pend):
+    """out-near-inverted rollouts reach theta2 ~ 39 rad and speeds ~ 12 rad/s; angles are
+    not wrapped (the network sees the raw state / scale), and nothing is clipped."""
+    ctx, _data, net = pend
+    s = np.array([[8.8, 39.1, 8.9, 12.6], [-8.8, -39.1, -8.9, -12.6], [3.5, 6.5, 0.0, 0.0],
+                  [-3.5, 2.0, 0.0, 0.0]])
+    a = np.array([[0.0], [1.0], [-1.0], [0.0]])
+    means, spreads = DirectModel(ctx, net).predict_batch(s, a)
+    exp_means, exp_spreads = _expected_predictions(ctx, net, s, a)
+    assert np.array_equal(means, exp_means) and np.array_equal(spreads, exp_spreads)
+
+
+def test_training_that_drives_the_error_bar_very_small_matches_the_independent_trainer(data, monkeypatch):
+    """Real training pushes log-sigma below -6 for nearly every row (min about -6.9); a
+    'stability' floor on log-sigma would change what is learned. Start the error-bar output
+    far below any plausible floor (-8) so the closure and the update are exercised there."""
+    original = direct.MLP
+
+    class TinyBar(original):
+        def __init__(self, sizes, rng):
+            super().__init__(sizes, rng)
+            bias = self.layers[-1][1]
+            bias[len(bias) // 2 :] = -8.0
+
+    monkeypatch.setattr(direct, "MLP", TinyBar)
+    net = train_direct(_ctx(), _seeds(), data, epochs=3)
+    ref = _reference_train(
+        _ctx(), _seeds(), data.train_pairs, epochs=3, batch_size=256, beta=0.5, log_sigma_bias0=-8.0
+    )
+    _close(net, ref)
+
+
+def test_the_closure_matches_the_formulas_at_very_small_sigma():
+    rng = np.random.default_rng(11)
+    Y = np.hstack([rng.normal(0, 1e-4, (5, 2)), rng.uniform(-9.0, -7.0, (5, 2))])
+    target = rng.normal(0, 1e-4, (5, 2))
+    loss, grad = beta_nll_loss_and_grad(Y, target, beta=0.5)
+    mu, s = Y[:, :2], Y[:, 2:]
+    sigma = np.exp(s)
+    w = sigma  # beta = 0.5
+    r = target - mu
+    expected_loss = float((w * (0.5 * np.log(2 * np.pi) + s + r**2 / (2 * sigma**2))).sum(axis=1).mean())
+    assert loss == pytest.approx(expected_loss, rel=1e-12)
+    assert np.allclose(grad[:, :2], -w * r / sigma**2 / 5, rtol=1e-12, atol=0)
+    assert np.allclose(grad[:, 2:], w * (1 - r**2 / sigma**2) / 5, rtol=1e-12, atol=0)

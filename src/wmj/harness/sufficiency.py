@@ -65,7 +65,7 @@ def held_out_error(means: np.ndarray, pairs: Pairs, scale: np.ndarray) -> float:
         raise SufficiencyError("the held-out set is empty")
     error = float(np.mean(((means - pairs.next_state) / scale) ** 2))
     if not math.isfinite(error):
-        raise SufficiencyError("the held-out error is not finite (the model's predictions are)")
+        raise SufficiencyError("the held-out error is not finite (check the model's predictions)")
     return error
 
 
