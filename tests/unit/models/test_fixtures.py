@@ -501,11 +501,36 @@ def test_a_fixture_refuses_to_emit_a_non_finite_forecast_or_a_spread_with_no_wid
         model.predict_batch(np.full((3, 2), 0.5), np.zeros((3, 1)))
 
 
-@pytest.mark.parametrize("bad", [1e308, 1e120, 1e-120, 1e-162, 5e-324])
+@pytest.mark.parametrize(
+    "bad",
+    [1e308, 1e120, 1e-120, 1e-162, 5e-324, np.nextafter(1e-100, 0.0), np.nextafter(1e100, np.inf), 0.0, -1.0, np.nan, np.inf],
+)
 def test_honest_rough_refuses_an_error_bar_where_the_widening_is_no_longer_exact(bad):
     model = FxHonestRough(_stub_ctx(), _Stub([0.0, 0.0], [bad, 1.0]), key=1)
     with pytest.raises(FixtureError, match="root-sum-of-squares"):
         model.predict_batch(np.full((2, 2), 0.5), np.zeros((2, 1)))
+
+
+class _PerRow:
+    """Stands in for Model A with a different error bar on every row."""
+
+    def __init__(self, spreads):
+        self.spreads = np.asarray(spreads, float)
+
+    def predict_batch(self, states, actions):
+        return np.zeros_like(self.spreads), self.spreads
+
+
+@pytest.mark.parametrize("bad_row", [0, 1, 2, 3])
+@pytest.mark.parametrize("bad_dim", [0, 1])
+def test_honest_rough_refuses_a_batch_if_any_single_row_or_dimension_is_out_of_range(bad_row, bad_dim):
+    spreads = np.full((4, 2), 0.01)
+    spreads[bad_row, bad_dim] = 1e-120
+    model = FxHonestRough(_stub_ctx(), _PerRow(spreads), key=1)
+    with pytest.raises(FixtureError, match="root-sum-of-squares"):
+        model.predict_batch(np.full((4, 2), 0.5), np.zeros((4, 1)))
+    ok = FxHonestRough(_stub_ctx(), _PerRow(np.full((4, 2), 0.01)), key=1)
+    assert ok.predict_batch(np.full((4, 2), 0.5), np.zeros((4, 1)))[1].shape == (4, 2)
 
 
 @pytest.mark.parametrize("good", [1e-100, 1e-6, 1e-3, 1.0, 1e100])

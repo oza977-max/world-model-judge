@@ -1058,9 +1058,9 @@ normally". Building it showed four things the spec should say out loud.
 
 *Where recorded:* `build/handovers/P3-C05.md`.
 
-*Two further limits (from review):* because the noise is a function of (state, action),
+5. *Two further limits (from review):* because the noise is a function of (state, action),
 an identical repeated input gets identical noise — "honest by construction" holds per
 row, not across repeats of the same input. And `fx-honest-rough` refuses (loudly) an inner error bar outside 1e-100 to 1e100
 (`HONEST_SPREAD_RANGE`): beyond it `sqrt(spread² + σ²)` silently loses precision
-(denormals, measured wrong by up to 24% near 1e-162) or overflows. Real error bars are
+(denormals, measured wrong by up to ~27% near 1.4e-162) or overflows. Real error bars are
 ~1e-4 to 1e-2, so the guard is unreachable in a real run.

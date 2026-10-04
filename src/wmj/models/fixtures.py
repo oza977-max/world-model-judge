@@ -154,9 +154,10 @@ class FxHonestRough(_Fixture):
         low, high = HONEST_SPREAD_RANGE
         if not np.all((spread >= low) & (spread <= high)):
             raise FixtureError(
-                f"fx-honest-rough needs an inner error bar between {low:g} and {high:g} for the exact "
-                f"root-sum-of-squares widening (outside that it loses precision silently); got a range "
-                f"{float(np.min(spread)):g} to {float(np.max(spread)):g}"
+                f"fx-honest-rough needs every inner error bar to be a finite number between {low:g} and "
+                f"{high:g} (outside that the exact root-sum-of-squares widening loses precision silently, "
+                f"or is not defined); got a range {float(np.nanmin(spread)):g} to {float(np.nanmax(spread)):g}"
+                f"{' with a non-number in it' if not np.all(np.isfinite(spread)) else ''}"
             )
         sigma = NOISE_SIGMA_FACTOR * spread
         noise = sigma * hashed_standard_normal(
