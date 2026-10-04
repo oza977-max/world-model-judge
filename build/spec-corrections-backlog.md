@@ -1086,7 +1086,8 @@ required choosing both, so they are written down here for the next design review
 4. **The baselines are flagged:** `persistence` and `linear` ignore the action by
    construction, so the check flags both. The spec says every model faces the check; it does
    not say what the verdict does with a baseline's flag — P6-C01 must decide (REMEMBER).
-5. **`fx-action-blind`'s corruption is "the null action":** Model A's forecast with the
+5. **Known limits (to be stated with any verdict using the check, JU-10 spirit):** three fixed levels can miss a response that is zero at both ends and the middle and non-zero only in between (a pathological shape; every real model responds on all 48 probes); a model with random answers that ignores the action is not flagged (the check does not predict the same input twice; every roster model is deterministic); a response even in the action (e.g. `action²`) is correctly *not* flagged (the middle level differs).
+6. **`fx-action-blind`'s corruption is "the null action":** Model A's forecast with the
    action replaced by zeros (inside every world's trained interval), after the action has
    been checked for shape and finiteness.
 

@@ -29,6 +29,12 @@ that is not a finite number is an error, never "identical". This check scores no
 it takes the model, the world's context and a seed — no evaluation trials, no skill
 scores, no matching margin (MU-6/JU-11).
 
+Known limits (backlog A26, to be stated alongside any verdict that uses it): the three fixed
+action levels can miss a response that is zero at both ends and the middle of the range and
+non-zero only in between (no such model is in the roster; every real model responds on all
+probes); and a model whose answers are random but ignore the action is not flagged, because
+the check does not predict the same input twice (every model in the roster is deterministic).
+
 The check is built and tested here; the run command that calls it is P6-C01.
 """
 
@@ -88,6 +94,12 @@ def _forecast(model: Any, state: np.ndarray, action: np.ndarray) -> tuple[np.nda
     prediction = model.predict(state, action)
     mean = np.asarray(prediction.mean, dtype=float)
     spread = np.asarray(prediction.spread, dtype=float)
+    if mean.shape != state.shape or spread.shape != state.shape:
+        raise ActionResponseError(
+            f"the model returned a guess of shape {tuple(mean.shape)} and an error bar of shape "
+            f"{tuple(spread.shape)} for a state of shape {tuple(state.shape)} — one number per quantity "
+            "is required"
+        )
     if not (np.all(np.isfinite(mean)) and np.all(np.isfinite(spread))):
         raise ActionResponseError(
             "the model returned a guess or an error bar that is not a finite number during the "
@@ -118,6 +130,8 @@ def check_action_response(
         raise ActionResponseError(f"tolerance must be a finite non-negative number, got {tolerance!r}")
     states, levels, pairs = action_response_probes(ctx, run_seed, n_states)
     scale = np.asarray(ctx.scale, dtype=float)
+    if scale.shape != (ctx.state_dim,) or not (np.all(np.isfinite(scale)) and np.all(scale > 0.0)):
+        raise ActionResponseError(f"the world's scale must be one finite positive number per quantity, got {scale!r}")
     responding, largest = 0, 0.0
     for state in states:
         forecasts = [_forecast(model, state, level) for level in levels]

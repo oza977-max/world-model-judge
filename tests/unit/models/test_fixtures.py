@@ -1,4 +1,4 @@
-"""Tests for wmj.models.fixtures — the three deliberately broken models (models ADR-M4,
+"""Tests for wmj.models.fixtures — the four deliberately broken models (models ADR-M4,
 TC-MU3-01/02/03 behavioural halves, TC-MU4-01/02, TC-MU1-04).
 
 In plain words: each broken model must be Model A plus exactly one change, and that
@@ -88,7 +88,7 @@ def _random_rows(ctx, n, seed, *, widen=1.0):
 # --- labels (TC-MU4-01) and registration -------------------------------------------------
 
 
-def test_the_three_fixtures_are_registered_and_labelled_as_fixtures(world):
+def test_the_fixtures_are_registered_and_labelled_as_fixtures(world):
     _, _, models, _ = world
     assert set(NAMES) <= set(all_models())
     for name, model in models.items():
@@ -126,7 +126,7 @@ def test_the_inner_network_is_bit_identical_to_an_independently_trained_direct(l
     assert inside.any() and np.array_equal(spread_b, spread_i)
 
 
-def test_direct_and_all_three_fixtures_share_one_trained_core(lv_world):
+def test_direct_and_all_the_fixtures_share_one_trained_core(lv_world):
     ctx, data, _, _ = lv_world
     first = shared_direct_core(ctx, SeedSource(SEED, "whatever-name"), data)
     again = shared_direct_core(ctx, SeedSource(SEED, "direct"), data)
@@ -669,7 +669,9 @@ def test_action_blind_still_refuses_a_malformed_or_non_finite_action(lv_world):
     _ctx, _, models, _ = lv_world
     model = models["fx-action-blind"]
     s = np.full((3, 2), 3.0)
-    for bad in (np.zeros((3, 2)), np.zeros((2, 1)), np.zeros(3), np.full((3, 1), np.nan), np.full((3, 1), np.inf)):
+    one_nan = np.zeros((3, 1))
+    one_nan[1, 0] = np.nan
+    for bad in (np.zeros((3, 2)), np.zeros((2, 1)), np.zeros(3), np.full((3, 1), np.nan), np.full((3, 1), np.inf), one_nan):
         with pytest.raises(FixtureError, match="one finite action row"):
             model.predict_batch(s, bad)
     with pytest.raises(FixtureError, match="one finite action row"):

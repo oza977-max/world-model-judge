@@ -294,3 +294,107 @@ def test_the_other_fixtures_that_wrap_model_a_respond_to_the_action_too(trained)
 def test_the_persistence_baseline_is_flagged_because_it_ignores_the_action_by_construction(trained):
     ctx, models = trained
     assert check_action_response(models["persistence"], ctx, SEED).action_blind is True
+
+
+# --- pinned details (review pass 1) -----------------------------------------------------
+
+
+def test_sixteen_states_and_forty_eight_probes_are_the_recorded_design():
+    assert PROBE_STATES == 16
+    assert check_action_response(Stub(gain=1.0), _ctx(), SEED).n_probes == 48
+
+
+def test_a_model_already_carrying_memory_is_reset_before_it_is_asked_anything():
+    from wmj.models.baselines import LinearModel
+
+    linear = LinearModel(np.ones(2))
+    linear.predict(np.array([1.0, 1.0]), np.zeros(1))
+    linear.predict(np.array([2.0, 5.0]), np.zeros(1))  # memory left over from an earlier rollout
+    result = check_action_response(linear, _ctx(), SEED)
+    assert result.action_blind is True and result.largest_change == 0.0
+
+
+def test_each_dimension_is_judged_against_its_own_scale_and_the_largest_change_is_reported():
+    class SecondQuantity:
+        def reset(self):
+            pass
+
+        def predict(self, state, action):
+            move = np.array([0.0, 1e-6 * action[0]])  # only the second quantity (scale 5.0) reacts
+            return Prediction(mean=state + move, spread=np.ones_like(state))
+
+    r = check_action_response(SecondQuantity(), _ctx(scale=(2.0, 5.0)), SEED)
+    assert r.largest_change == pytest.approx(1e-6 / 5.0) and r.action_blind is False
+
+
+def test_the_error_bar_movement_is_measured_per_dimension_against_scale_and_takes_the_largest():
+    class SpreadOnly:
+        def reset(self):
+            pass
+
+        def predict(self, state, action):
+            return Prediction(mean=state, spread=np.array([1.0 + 2e-5 * action[0], 1.0 + 1e-5 * action[0]]))
+
+    r = check_action_response(SpreadOnly(), _ctx(scale=(2.0, 5.0)), SEED)
+    assert r.largest_change == pytest.approx(2e-5 / 2.0)  # the larger of 1e-5 and 2e-6, not their sum
+
+
+def test_a_custom_tolerance_is_reported_back_and_applied():
+    r = check_action_response(Stub(gain=1e-3), _ctx(), SEED, tolerance=0.5)
+    assert r.tolerance == 0.5 and r.action_blind is True  # 1e-3/2 is below 0.5 of scale
+
+
+def test_a_prediction_with_one_non_finite_entry_is_an_error():
+    for bad_mean, bad_spread in ((np.array([1.0, np.nan]), np.ones(2)), (np.zeros(2), np.array([np.inf, 1.0]))):
+        class OneBad:
+            def reset(self):
+                pass
+
+            def predict(self, state, action, _m=bad_mean, _s=bad_spread):
+                return Prediction(mean=_m, spread=_s)
+
+        with pytest.raises(ActionResponseError, match="not a finite number"):
+            check_action_response(OneBad(), _ctx(), SEED)
+
+
+def test_a_prediction_of_the_wrong_shape_is_an_error_not_a_quiet_verdict():
+    class Scalar:
+        def reset(self):
+            pass
+
+        def predict(self, state, action):
+            return Prediction(mean=np.array(0.0), spread=np.array(1.0))
+
+    with pytest.raises(ActionResponseError, match="one number per quantity"):
+        check_action_response(Scalar(), _ctx(), SEED)
+
+    class WrongSpreadOnly(Scalar):  # a right-shaped guess but a wrong-shaped error bar
+        def predict(self, state, action):
+            return Prediction(mean=state, spread=np.array(1.0))
+
+    class WrongMeanOnly(Scalar):
+        def predict(self, state, action):
+            return Prediction(mean=np.array(0.0), spread=np.ones_like(state))
+
+    for cls in (WrongSpreadOnly, WrongMeanOnly):
+        with pytest.raises(ActionResponseError, match="one number per quantity"):
+            check_action_response(cls(), _ctx(), SEED)
+
+
+@pytest.mark.parametrize("scale", [(np.nan, 1.0), (-1.0, 1.0), (0.0, 1.0), (np.inf, 1.0)])
+def test_a_world_scale_that_is_not_finite_and_positive_is_refused(scale):
+    with pytest.raises(ActionResponseError, match="scale"):
+        check_action_response(Stub(gain=1.0), _ctx(scale=scale), SEED)
+
+
+def test_an_even_response_is_not_action_blind():
+    """a response like action² is identical at the two ends but differs at the middle: it uses the action."""
+
+    class Even:
+        def reset(self):
+            pass
+
+        def predict(self, state, action):
+            return Prediction(mean=state + action[0] ** 2, spread=np.ones_like(state))
+
+    assert check_action_response(Even(), _ctx(), SEED).action_blind is False

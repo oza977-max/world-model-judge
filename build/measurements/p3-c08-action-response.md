@@ -19,7 +19,7 @@ quantity.)
 |---|---|---|---|---|
 | LV | direct (Model A) | no | 48/48 | 5.04e-2 |
 | LV | ensemble | no | 48/48 | 5.05e-2 |
-| LV | fx-overconfident / fx-honest-rough / fx-brittle | no | 48/48 | 5.04e-2 (honest-rough 5.04e-2) |
+| LV | fx-overconfident / fx-honest-rough / fx-brittle | no | 48/48 | 5.04e-2 |
 | LV | **fx-action-blind** | **yes** | 0/48 | 0 |
 | LV | linear (baseline) | yes | 0/48 | 0 |
 | LV | persistence (baseline) | yes | 0/48 | 0 |
@@ -29,6 +29,8 @@ quantity.)
 | Pendulum | fx-honest-rough | no | 48/48 | 3.19e-1 |
 | Pendulum | **fx-action-blind** | **yes** | 0/48 | 0 |
 | Pendulum | linear / persistence (baselines) | yes | 0/48 | 0 |
+
+**Cross-check against the world itself:** calling the world's own transition at the low and high ends of the action range gives a one-step change of 5.05e-2 (LV) and 3.18e-1 (pendulum) of scale — Model A's response matches the truth, so it has learned the lever rather than reacting to noise. (The fixture's own flag is nearly tautological — an exactly blind model gives exactly 0; this cross-check is the real evidence.)
 
 **Two baselines are flagged, correctly.** `persistence` ("nothing changes") and `linear`
 (extrapolate the last step) take no account of the action *by construction*, so the check

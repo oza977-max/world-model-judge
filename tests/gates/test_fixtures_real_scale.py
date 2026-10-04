@@ -32,7 +32,7 @@ from wmj.worlds import lv, pendulum
 
 SEED = 20260825
 RECIPE = Path(__file__).resolve().parents[2] / "prereg" / "recipe.md"
-NAMES = ("direct", "fx-overconfident", "fx-honest-rough", "fx-brittle")
+NAMES = ("direct", "fx-overconfident", "fx-honest-rough", "fx-brittle", "fx-action-blind")
 
 
 @pytest.fixture(scope="module", params=[("lv", lv), ("pendulum", pendulum)], ids=["lv", "pendulum"])
