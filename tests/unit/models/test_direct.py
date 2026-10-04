@@ -735,8 +735,8 @@ def test_pendulum_predictions_are_exact_for_angles_and_speeds_the_inverted_regio
     not wrapped (the network sees the raw state / scale), and nothing is clipped."""
     ctx, _data, net = pend
     s = np.array([[8.8, 39.1, 8.9, 12.6], [-8.8, -39.1, -8.9, -12.6], [3.5, 6.5, 0.0, 0.0],
-                  [-3.5, 2.0, 0.0, 0.0]])
-    a = np.array([[0.0], [1.0], [-1.0], [0.0]])
+                  [-3.5, 2.0, 0.0, 0.0], [2.0, 60.0, 0.0, 0.0], [1.0, -60.0, 0.0, 0.0]])
+    a = np.array([[0.0], [1.0], [-1.0], [0.0], [0.0], [2.0]])
     means, spreads = DirectModel(ctx, net).predict_batch(s, a)
     exp_means, exp_spreads = _expected_predictions(ctx, net, s, a)
     assert np.array_equal(means, exp_means) and np.array_equal(spreads, exp_spreads)

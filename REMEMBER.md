@@ -61,7 +61,7 @@ Ordered by when they bite. *(D1–D6, D12 and D14 were settled at Round 10 on
 
 ## 3. Owed work, by stage
 
-**Now — next build steps: P3-C03/P3-C04 (the two practice models) — blocked on owner decision D17 for their kick report; P3-C06 is DONE. P3-C10 (the one-time lock) is DONE (2026-10-03, six review passes, handover `build/handovers/P3-C10.md`).**
+**Now — next build steps: P3-C04 (the ensemble) and P3-C05/C08 (fixtures, action-response check). P3-C03 (Model A) and P3-C06 are DONE (handovers in `build/handovers/`); owner decisions D17 and D18 are open and affect the recipe before the freeze. P3-C10 (the one-time lock) is DONE (2026-10-03, six review passes, handover `build/handovers/P3-C10.md`).**
 - **Independent re-check of the v1.8 purity guards and the rewritten ADR-004 orchestration loop** — owed by BC-2 since `calibration.md:249`; Rounds 9 and 10 were scoped elsewhere. Neither is built yet (P4-C06, P6-C01).
 - Fold the remaining spec text corrections listed in §5 into the specs at the next review.
 
@@ -74,7 +74,7 @@ Ordered by when they bite. *(D1–D6, D12 and D14 were settled at Round 10 on
 - **Measure runtime** for real and report it against judge ADR-J6's new measured envelope.
 - Start-disjointness (TC-MU7-01), purpose-keyed seeds (TC-MU7-02, TC-NF1-10), subsample (TC-MU7-03), train-twice-identical (TC-MU8-01).
 
-**P3-C03 / P3-C04 — Models A and B** (P3-C03 built 2026-10-03: `src/wmj/models/direct.py`, `harness/sufficiency.py`; see `build/measurements/p3-c03-model-a-real-run.md` and D18)
+**P3-C03 / P3-C04 — Models A and B** (P3-C03 DONE 2026-10-04, ten review passes, handover `build/handovers/P3-C03.md`; built: `src/wmj/models/direct.py`, `harness/sufficiency.py`; see `build/measurements/p3-c03-model-a-real-run.md` and D18)
 - β-NLL with the written-out gradient (TC-MU5-04); `forward_invariant` + `predict_batch` (TC-MU1-04).
 - **Run the M-sufficiency test** (TC-MU5-05) and report the result, and the kick/non-kick held-out split, to the owner. The test never looks at the MU-5 margin.
 - Report measured convergence + runtime at `epochs: 100`; any change is an open recipe revision, never silent — and only before the freeze.

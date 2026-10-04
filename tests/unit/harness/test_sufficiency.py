@@ -472,13 +472,14 @@ def test_the_kick_split_is_the_exact_mean_of_each_group_not_a_median_or_a_prefix
 
 
 def test_the_kick_split_uses_every_row_of_a_large_held_out_set():
-    n = 3000
+    n = 10000  # the real held-out size
     errs = np.arange(n, dtype=float) / n  # distinct, increasing
     means = np.zeros((n, 2))
     means[:, 0] = np.sqrt(errs * 2) * SCALE[0]
     kicks = np.zeros(n, dtype=bool)
     kicks[::7] = True
-    pairs = Pairs(np.zeros((n, 2)), np.where(kicks[:, None], 0.05, 0.0), np.zeros((n, 2)), kicks)
+    action = np.where(kicks[:, None], 1e-6, 0.0)  # a tiny kick is still a kick
+    pairs = Pairs(np.zeros((n, 2)), action, np.zeros((n, 2)), kicks)
     split = kick_split_error(means, pairs, SCALE)
     assert split.error_kick == pytest.approx(errs[kicks].mean())
     assert split.error_plain == pytest.approx(errs[~kicks].mean())
