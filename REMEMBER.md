@@ -62,7 +62,7 @@ Ordered by when they bite. *(D1–D6, D12 and D14 were settled at Round 10 on
 
 ## 3. Owed work, by stage
 
-**Now — next build steps: P3-C05 and P3-C08 (the fixtures and the action-response check). P3-C04 (the ensemble, with the P3-C02 re-open), P3-C03 (Model A) and P3-C06 are DONE (handovers in `build/handovers/`); owner decisions D17 and D18 are open and affect the recipe before the freeze. P3-C10 (the one-time lock) is DONE (2026-10-03, six review passes, handover `build/handovers/P3-C10.md`).**
+**Now — next build step: P3-C08 (the action-response check and `fx-action-blind`). P3-C05 (the three fixtures, DONE 2026-10-04, five review passes, handover `build/handovers/P3-C05.md`), P3-C04 (the ensemble, with the P3-C02 re-open), P3-C03 (Model A) and P3-C06 are DONE (handovers in `build/handovers/`); owner decisions D17 and D18 are open and affect the recipe before the freeze. P3-C10 (the one-time lock) is DONE (2026-10-03, six review passes, handover `build/handovers/P3-C10.md`).**
 - **Independent re-check of the v1.8 purity guards and the rewritten ADR-004 orchestration loop** — owed by BC-2 since `calibration.md:249`; Rounds 9 and 10 were scoped elsewhere. Neither is built yet (P4-C06, P6-C01).
 - Fold the remaining spec text corrections listed in §5 into the specs at the next review.
 

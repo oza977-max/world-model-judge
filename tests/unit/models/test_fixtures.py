@@ -12,6 +12,8 @@ worlds (2-D and 4-D), on real held-out rows and on extreme states, not on toy nu
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pytest
 
@@ -623,3 +625,22 @@ def test_direct_no_longer_needs_its_own_seed_name_a_recorded_change_a25(lv_world
     named = all_models()["direct"](ctx, SeedSource(SEED, "direct"), data)
     s, a = _random_rows(ctx, 10, 11)
     assert np.array_equal(unnamed.predict_batch(s, a)[0], named.predict_batch(s, a)[0])
+
+
+def test_the_range_refusal_message_names_the_range_and_what_was_seen_even_for_non_numbers():
+    ctx = _stub_ctx()
+
+    def message(spreads):
+        model = FxHonestRough(ctx, _PerRow(np.array([spreads])), key=1)
+        with pytest.raises(FixtureError) as err, warnings.catch_warnings():
+            warnings.simplefilter("error")  # a stray numpy warning must not mask the refusal
+            model.predict_batch(np.full((1, 2), 0.5), np.zeros((1, 1)))
+        return str(err.value)
+
+    assert "between 1e-100 and 1e+100" in message([1e-120, 0.5])
+    assert "the finite values run 1e-120 to 0.5" in message([1e-120, 0.5])
+    assert "some are not finite" not in message([1e-120, 0.5])
+    mixed = message([np.nan, 1.0])
+    assert "the finite values run 1 to 1" in mixed and "some are not finite" in mixed
+    assert "none of them is a finite number" in message([np.nan, np.nan])
+    assert "none of them is a finite number" in message([np.inf, -np.inf])

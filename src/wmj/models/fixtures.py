@@ -153,11 +153,17 @@ class FxHonestRough(_Fixture):
     def _corrupt(self, states, actions, mean, spread):
         low, high = HONEST_SPREAD_RANGE
         if not np.all((spread >= low) & (spread <= high)):
+            finite = spread[np.isfinite(spread)]
+            seen = (
+                f"the finite values run {float(finite.min()):g} to {float(finite.max()):g}"
+                if finite.size
+                else "none of them is a finite number"
+            )
             raise FixtureError(
                 f"fx-honest-rough needs every inner error bar to be a finite number between {low:g} and "
                 f"{high:g} (outside that the exact root-sum-of-squares widening loses precision silently, "
-                f"or is not defined); got a range {float(np.nanmin(spread)):g} to {float(np.nanmax(spread)):g}"
-                f"{' with a non-number in it' if not np.all(np.isfinite(spread)) else ''}"
+                f"or is not defined); {seen}"
+                f"{'; some are not finite' if finite.size != spread.size else ''}"
             )
         sigma = NOISE_SIGMA_FACTOR * spread
         noise = sigma * hashed_standard_normal(
