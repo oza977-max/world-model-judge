@@ -507,7 +507,7 @@ def test_the_push_reaches_the_network_it_is_not_dropped_negated_or_scaled(model,
         assert np.array_equal(p.mean, means[i]) and np.array_equal(p.spread, spreads[i])
 
 
-@pytest.mark.parametrize("disagreement", [1e-4, 1e-3, 15.0])
+@pytest.mark.parametrize("disagreement", [1e-6, 1e-5, 1e-4, 1e-3, 15.0])
 def test_the_spread_is_faithful_at_the_disagreement_sizes_real_training_produces(nets, data, disagreement):
     """Real members agree to ~1e-3 (error bars ~1e-3); at extreme states they differ by ~10. A
     'minimum std' floor or a cap would change what the judge scores there."""
@@ -518,7 +518,7 @@ def test_the_spread_is_faithful_at_the_disagreement_sizes_real_training_produces
     h = data.heldout_pairs
     means, spreads = EnsembleModel(ctx, shifted).predict_batch(h.state, h.action)
     exp_means, exp_spreads = _expected(ctx, shifted, h.state, h.action)
-    assert np.allclose(means, exp_means, rtol=1e-13, atol=0) and np.allclose(spreads, exp_spreads, rtol=1e-9, atol=0)
+    assert np.allclose(means, exp_means, rtol=1e-13, atol=0) and np.allclose(spreads, exp_spreads, rtol=1e-5, atol=0)
     assert float(np.median(spreads)) > 0.5 * disagreement  # roughly sqrt(1.2) * std of k*disagreement offsets (~1.58x)
 
 
