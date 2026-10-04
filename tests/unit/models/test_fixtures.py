@@ -651,14 +651,14 @@ def test_the_range_refusal_message_names_the_range_and_what_was_seen_even_for_no
 
 
 def test_action_blind_gives_models_a_answer_for_the_null_action_whatever_action_it_is_handed(world):
-    ctx, data, models, inner = world
+    ctx, _data, models, inner = world
     s, a = _random_rows(ctx, 300, 12, widen=3.0)
     m_in, sp_in = inner.predict_batch(s, np.zeros_like(a))
     for actions in (a, -a, np.zeros_like(a), np.full_like(a, 7.5)):
         m, sp = models["fx-action-blind"].predict_batch(s, actions)
         assert np.array_equal(m, m_in) and np.array_equal(sp, sp_in)
     # and it is exactly Model A at the null action (the only thing it differs by is the lever)
-    m_a, sp_a = inner.predict_batch(s, np.zeros_like(a))
+    m_a, _ = inner.predict_batch(s, np.zeros_like(a))
     assert np.array_equal(models["fx-action-blind"].predict_batch(s, a)[0], m_a)
     # a model that really uses its action does differ from the blind one away from the null action
     m_real, _ = inner.predict_batch(s, a)
@@ -666,7 +666,7 @@ def test_action_blind_gives_models_a_answer_for_the_null_action_whatever_action_
 
 
 def test_action_blind_still_refuses_a_malformed_or_non_finite_action(lv_world):
-    ctx, _, models, _ = lv_world
+    _ctx, _, models, _ = lv_world
     model = models["fx-action-blind"]
     s = np.full((3, 2), 3.0)
     for bad in (np.zeros((3, 2)), np.zeros((2, 1)), np.zeros(3), np.full((3, 1), np.nan), np.full((3, 1), np.inf)):
@@ -677,7 +677,7 @@ def test_action_blind_still_refuses_a_malformed_or_non_finite_action(lv_world):
 
 
 def test_action_blind_passes_the_inner_states_check_through(lv_world):
-    ctx, _, models, _ = lv_world
+    _ctx, _, models, _ = lv_world
     s = np.full((3, 2), 3.0)
     s[1, 0] = np.nan
     with pytest.raises(DirectTrainingError, match="finite"):

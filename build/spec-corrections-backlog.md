@@ -1064,3 +1064,30 @@ row, not across repeats of the same input. And `fx-honest-rough` refuses (loudly
 (`HONEST_SPREAD_RANGE`): beyond it `sqrt(spread² + σ²)` silently loses precision
 (denormals, measured wrong by up to ~27% near 1.4e-162) or overflows. Real error bars are
 ~1e-4 to 1e-2, so the guard is unreachable in a real run.
+
+### A26 — the action-response check: the one number MU-3 leaves open, and the probe design (found building P3-C08)
+
+**In plain words:** MU-3 fixes the rule ("the two predictions must differ by more than
+floating-point noise for at least one probe; a model that never distinguishes any pair
+fails") but not what "floating-point noise" is, nor which probes. Building the check
+required choosing both, so they are written down here for the next design review.
+
+1. **Noise level:** a difference of more than `1e-9` of the world's own scale
+   (`harness/action_response.py: ACTION_RESPONSE_TOLERANCE`) in any dimension of the guess
+   **or of the error bar**. float64 rounding is ~1e-16 relative; the real Model A's action
+   effect is ≥ 5e-2 of scale, so the choice has seven orders of room either side.
+2. **Probes:** 16 start states uniform in the training box from the harness's own stream
+   `("action-response", "states")`, identical for every model; three action levels — the
+   low end, the middle and the high end of the trained interval (closed ends included) —
+   compared as three pairs. This is a **new seed purpose** for the spec's list.
+3. **Error bar counts as a response** (a model that only changes how sure it is still uses
+   its action); **a stateful model is `reset()` before every prediction**; **a non-finite
+   prediction is an error**, never "identical".
+4. **The baselines are flagged:** `persistence` and `linear` ignore the action by
+   construction, so the check flags both. The spec says every model faces the check; it does
+   not say what the verdict does with a baseline's flag — P6-C01 must decide (REMEMBER).
+5. **`fx-action-blind`'s corruption is "the null action":** Model A's forecast with the
+   action replaced by zeros (inside every world's trained interval), after the action has
+   been checked for shape and finiteness.
+
+*Where recorded:* `build/handovers/P3-C08.md`; measurement `build/measurements/p3-c08-action-response.md`.
