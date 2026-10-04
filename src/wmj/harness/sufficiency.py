@@ -16,7 +16,9 @@ Choosing the amount of data by peeking at that comparison would tune the
 setup against the very result it is meant to leave open. So nothing here
 accepts or reads any of those: the scoring functions take held-out examples
 and predictions only, and `check_world` takes only the world, a model factory,
-the recipe counts and a seed (TC-MU5-05).
+the recipe counts, a seed, the model's name and optional tolerance/horizon —
+nothing that can carry the matching margin, evaluation trials or skill scores
+(TC-MU5-05).
 
 **Which held-out set.** Both versions of a model are scored on the held-out
 set of the *larger* (100,000-example) build. That set is disjoint from both

@@ -775,3 +775,29 @@ def test_the_closure_matches_the_formulas_at_very_small_sigma():
     assert loss == pytest.approx(expected_loss, rel=1e-12)
     assert np.allclose(grad[:, :2], -w * r / sigma**2 / 5, rtol=1e-12, atol=0)
     assert np.allclose(grad[:, 2:], w * (1 - r**2 / sigma**2) / 5, rtol=1e-12, atol=0)
+
+
+# --- independent review, P3-C03 pass 8: faithful at the error-bar sizes real training produces ---
+
+
+@pytest.mark.parametrize("target_median_log_sigma", [-6.5, 2.7])
+def test_predictions_are_faithful_at_the_error_bar_sizes_the_real_recipe_reaches(
+    data, trained_net, target_median_log_sigma
+):
+    """The fixture net is trained for 12 epochs and has error bars of ~0.01-0.06; the real
+    100-epoch net has ~1e-3 (log sigma about -6.5) and, at extreme states, ~15 (log sigma
+    +2.7). A 'minimum std' floor or a cap in the prediction path — a common idiom — would
+    change what the judge scores in exactly that regime, so shift the error-bar output to
+    those sizes and require predict_batch to equal the network's own exp(out), bit for bit."""
+    import copy
+
+    ctx = _ctx()
+    net = copy.deepcopy(trained_net)
+    h = data.heldout_pairs
+    out = net.forward_invariant(normalise_inputs(ctx, h.state, h.action))
+    shift = target_median_log_sigma - float(np.median(out[:, 2:]))
+    net.layers[-1][1][2:] += shift
+    means, spreads = DirectModel(ctx, net).predict_batch(h.state, h.action)
+    exp_means, exp_spreads = _expected_predictions(ctx, net, h.state, h.action)
+    assert np.array_equal(means, exp_means) and np.array_equal(spreads, exp_spreads)
+    assert abs(float(np.median(np.log(spreads))) - target_median_log_sigma) < 1e-6

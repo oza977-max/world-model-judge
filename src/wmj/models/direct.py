@@ -244,7 +244,7 @@ class DirectModel:
         spreads = np.exp(out[:, d:])
         if not (np.all(np.isfinite(means)) and np.all(np.isfinite(spreads)) and np.all(spreads > 0.0)):
             raise DirectTrainingError(
-                "the predicted spread is zero or not finite — a forecast with no width cannot "
+                "the predicted mean or spread is not finite, or the spread is zero — a forecast with no width cannot "
                 "be scored (MU-1, judge ADR-J1)"
             )
         return means, spreads
