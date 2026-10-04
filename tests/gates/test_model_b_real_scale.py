@@ -19,7 +19,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from wmj.harness.training import build_training_data, make_world_context, read_training_recipe
+from wmj.harness.training import (
+    build_training_data,
+    make_world_context,
+    read_training_recipe,
+)
 from wmj.models import ensemble
 from wmj.models.base import SeedSource
 from wmj.models.ensemble import ensemble_factory

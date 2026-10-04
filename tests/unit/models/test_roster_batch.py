@@ -12,8 +12,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-import wmj.models.baselines  # noqa: F401  (importing registers the model)
-import wmj.models.direct  # noqa: F401
+import wmj.models.baselines
+import wmj.models.direct
 import wmj.models.ensemble  # noqa: F401
 from wmj.harness.training import TrainingRecipe, build_training_data, make_world_context
 from wmj.models.base import SeedSource
