@@ -287,9 +287,42 @@ class DirectModel:
         return Prediction(mean=means[0].copy(), spread=spreads[0].copy())
 
 
+_LAST_CORE: tuple | None = None  # (training, run_seed, context key, trained network)
+
+
+def _context_key(ctx: WorldContext) -> tuple:
+    return (
+        ctx.world_name, ctx.state_dim, ctx.action_dim, ctx.scale.tobytes(),
+        ctx.training_state_box.tobytes(), ctx.training_action_interval.tobytes(),
+    )
+
+
+def shared_direct_core(ctx: WorldContext, seeds: SeedSource, training: TrainingData) -> MLP:
+    """The trained network that `direct` and every fixture built on it share.
+
+    In plain words: the three deliberately broken models are each "Model A with
+    one thing broken" (models ADR-M4), so each needs Model A's trained network.
+    Training it four times over would cost minutes and prove nothing — it is the
+    same computation from the same seed on the same data. This trains it once
+    per (run seed, world, data object) and hands the same network to everyone
+    (the harness gives every factory the very same `TrainingData` object, ADR-M1).
+    It is keyed on the name `"direct"` — whatever the caller is called — so a
+    fixture's core is bit-identical to the registered `direct`'s (TC-MU4-02); the
+    network is never modified after training, only read. One slot: the most
+    recent combination, so nothing accumulates.
+    """
+    global _LAST_CORE
+    key = (seeds.run_seed, _context_key(ctx))
+    if _LAST_CORE is not None and _LAST_CORE[0] is training and _LAST_CORE[1] == key:
+        return _LAST_CORE[2]
+    net = train_direct(ctx, SeedSource(seeds.run_seed, "direct"), training)
+    _LAST_CORE = (training, key, net)
+    return net
+
+
 def direct_factory(ctx: WorldContext, seeds: SeedSource, training: TrainingData) -> DirectModel:
     """factory(ctx, seeds, training) -> Model (models ADR-M1)."""
-    return DirectModel(ctx, train_direct(ctx, seeds, training))
+    return DirectModel(ctx, shared_direct_core(ctx, seeds, training))
 
 
 register("direct", direct_factory)

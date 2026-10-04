@@ -14,7 +14,8 @@ import pytest
 
 import wmj.models.baselines
 import wmj.models.direct
-import wmj.models.ensemble  # noqa: F401
+import wmj.models.ensemble
+import wmj.models.fixtures  # noqa: F401
 from wmj.harness.training import TrainingRecipe, build_training_data, make_world_context
 from wmj.models.base import SeedSource
 from wmj.models.registry import all_models
