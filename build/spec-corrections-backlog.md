@@ -1010,3 +1010,22 @@ text of the reviewed specs, which were not edited.
 
 *Where recorded:* this entry; `prereg/recipe.md` (keys and revision log);
 `REMEMBER.md` D17, D18 (closed).
+
+### A24 — found building P3-C04: the ensemble's loss units are unstated (for the next review)
+
+**In plain words:** the spec says the five members train on "mean-squared error of
+the state change", without saying in what units. Implemented so that the loss is
+the same number the project judges by.
+
+ADR-M3 does not say whether the members' mean-squared error is taken in raw state
+units or after dividing by the world's scale. Raw units would let the quantity with
+the biggest numbers (the pendulum's angular speeds) dominate and starve the others;
+the held-out error metric of ADR-M3 divides by the scale. Implemented: the network
+outputs the change in raw state units (as Model A does) and the loss is the mean
+over examples and quantities of `((prediction − truth)/scale)²` — the held-out
+metric itself (`models/ensemble.py`, `mse_loss_and_grad`). Whichever the next review
+picks changes trained bytes, so it belongs in the spec. Also: the members share
+Model A's cosine learning-rate decay (A23), imported from one place
+(`models/direct.py: learning_rates`), not copied.
+
+*Where recorded:* `build/handovers/P3-C04.md` (to be written at convergence).

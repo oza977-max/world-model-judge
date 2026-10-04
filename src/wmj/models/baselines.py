@@ -54,6 +54,7 @@ class PersistenceModel:
     name = "persistence"
     is_fixture = False
     is_baseline = True
+    stateless = True  # predict() depends only on (state, action): batching is safe
 
     def __init__(self, spread: np.ndarray) -> None:
         self._spread = spread
@@ -64,6 +65,30 @@ class PersistenceModel:
     def predict(self, state: np.ndarray, action: np.ndarray) -> Prediction:
         return Prediction(mean=np.array(state, copy=True), spread=self._spread)
 
+    def predict_batch(
+        self, states: np.ndarray, actions: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Row `i` is bit-identical to `predict(states[i], actions[i])` (TC-MU1-04).
+
+        In plain words: "nothing changes" for every row at once — each row's
+        forecast is its own state, each with the same fitted error bar.
+        """
+        states = np.asarray(states, dtype=float)
+        actions = np.asarray(actions, dtype=float)
+        if states.ndim != 2 or states.shape[1] != self._spread.shape[0]:
+            raise WmjError(
+                f"persistence predict_batch needs states of shape [n, {self._spread.shape[0]}], "
+                f"got {tuple(states.shape)}"
+            )
+        if actions.ndim != 2 or actions.shape[0] != states.shape[0]:
+            raise WmjError(
+                f"persistence predict_batch needs one action row per state; got actions of "
+                f"shape {tuple(actions.shape)} for {states.shape[0]} states"
+            )
+        if not np.all(np.isfinite(states)):
+            raise WmjError("persistence predict_batch needs finite states")
+        return states.copy(), np.tile(self._spread, (states.shape[0], 1))
+
 
 class LinearModel:
     """mean = current + (current - previous); persistence on first call."""
@@ -71,6 +96,7 @@ class LinearModel:
     name = "linear"
     is_fixture = False
     is_baseline = True
+    stateless = False  # remembers the previous state: never batched (models ADR-M1)
 
     def __init__(self, spread: np.ndarray) -> None:
         self._spread = spread

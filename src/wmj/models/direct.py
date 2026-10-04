@@ -157,16 +157,22 @@ def gaussian_nll_loss_and_grad(Y: np.ndarray, target: np.ndarray) -> tuple[float
     return beta_nll_loss_and_grad(Y, target, beta=0.0)
 
 
-def _pairs_or_refuse(ctx: WorldContext, training: TrainingData):
+def require_training_pairs(
+    ctx: WorldContext,
+    training: TrainingData,
+    error: type[WmjError] = DirectTrainingError,
+    who: str = "direct",
+):
+    """The harness's shared training pairs, or a named refusal (shared with the ensemble)."""
     pairs = training.train_pairs
     if pairs is None:
-        raise DirectTrainingError(
-            "direct needs training.train_pairs (the harness's shared subsample); this "
-            "TrainingData has none — the MLP models never draw a subsample of their own "
-            "(models ADR-M1, ADR-M3)"
+        raise error(
+            f"{who} needs training.train_pairs (the harness's shared subsample); this "
+            f"TrainingData has none — the MLP models never draw a subsample of their own "
+            f"(models ADR-M1, ADR-M3)"
         )
     if pairs.state.shape[1] != ctx.state_dim or pairs.action.shape[1] != ctx.action_dim:
-        raise DirectTrainingError(
+        raise error(
             f"width mismatch: the world context says state {ctx.state_dim} / action "
             f"{ctx.action_dim} but train_pairs has state {pairs.state.shape[1]} / action "
             f"{pairs.action.shape[1]}"
@@ -191,7 +197,7 @@ def train_direct(
     `seeds.rng("shuffle", str(epoch))`. Weights that stop being finite abort
     the run.
     """
-    pairs = _pairs_or_refuse(ctx, training)
+    pairs = require_training_pairs(ctx, training)
     if isinstance(epochs, bool) or not isinstance(epochs, int) or epochs < 1:
         raise DirectTrainingError(f"epochs must be a positive int, got {epochs!r}")
     if isinstance(batch_size, bool) or not isinstance(batch_size, int) or batch_size < 1:
