@@ -11,9 +11,10 @@ itself — the very same trained network, bit for bit — plus that one change (
 spec ADR-M4).
 
 **These are test equipment, not results (MU-4).** Detecting a failure we engineered is
-a passing unit test, never a discovery; every output surface (code, the verdict
-record, every chart) carries the fixture label (`is_fixture = True`, names starting
-`fx-`), and nothing reported about them may be presented as a finding.
+a passing unit test, never a discovery; the label is `is_fixture = True` and a name starting
+`fx-`; the code surface is built here, and the verdict record and every chart must carry
+it too (built in later chunks, MU-4/RP-8). Nothing reported about them may be presented
+as a finding.
 
 **The noise is a function of the input, not of the order of calls.** A model with no
 memory between steps must give the same numbers for a row whether it is predicted
@@ -59,9 +60,12 @@ def hashed_standard_normal(rows: np.ndarray, key: int, n_out: int) -> np.ndarray
     The row's float bytes are folded into a 64-bit hash with `key`; each output is the
     sum of twelve uniforms (from further mixing) minus six — mean 0, variance 1, range
     ±6. Integer mixing and addition only: no transcendental function, so the result for
-    a row does not depend on how many other rows are in the call.
+    a row does not depend on how many other rows are in the call. The noise is a function
+    of the row's *value* (so `-0.0` and `0.0`, which the network cannot tell apart, get the
+    same noise). Its tails are a little lighter than a true bell curve (measured: 3σ tail
+    0.21% against 0.27%) — the judge discloses elsewhere that tails are not validated (JU-10).
     """
-    rows = np.ascontiguousarray(rows, dtype=np.float64)
+    rows = np.ascontiguousarray(rows, dtype=np.float64) + 0.0  # + 0.0 turns -0.0 into 0.0
     if rows.ndim != 2:
         raise FixtureError(f"noise rows must be 2-D, got shape {tuple(rows.shape)}")
     bits = rows.view(np.uint64)
@@ -174,15 +178,18 @@ def _core(ctx: WorldContext, seeds: SeedSource, training: TrainingData) -> Direc
 
 
 def fx_overconfident_factory(ctx, seeds: SeedSource, training: TrainingData) -> FxOverconfident:
+    """FIXTURE: Model A's shared trained core, error bar x 0.25."""
     return FxOverconfident(ctx, _core(ctx, seeds, training))
 
 
 def fx_honest_rough_factory(ctx, seeds: SeedSource, training: TrainingData) -> FxHonestRough:
+    """FIXTURE: Model A's shared core, seeded noise; the noise key comes from this model's own seed."""
     key = int(seeds.rng("noise").integers(0, 2**63 - 1))
     return FxHonestRough(ctx, _core(ctx, seeds, training), key)
 
 
 def fx_brittle_factory(ctx, seeds: SeedSource, training: TrainingData) -> FxBrittle:
+    """FIXTURE: Model A's shared core, "nothing changes" outside the training region."""
     return FxBrittle(ctx, _core(ctx, seeds, training))
 
 

@@ -17,7 +17,7 @@ import pytest
 
 from wmj.harness.training import TrainingRecipe, build_training_data, make_world_context
 from wmj.models import direct, fixtures
-from wmj.models.base import SeedSource
+from wmj.models.base import SeedSource, WorldContext
 from wmj.models.direct import DirectModel, shared_direct_core, train_direct
 from wmj.models.fixtures import (
     NOISE_SIGMA_FACTOR,
@@ -251,10 +251,63 @@ def test_hashed_noise_is_batch_size_invariant_and_input_layout_invariant():
     full = hashed_standard_normal(rows, 12345, 4)
     for i in (0, 1, 7, 63, 199):
         assert np.array_equal(hashed_standard_normal(rows[i : i + 1], 12345, 4)[0], full[i])
+    # memory layouts that hold the same numbers
     assert np.array_equal(hashed_standard_normal(np.asfortranarray(rows), 12345, 4), full)
-    assert np.array_equal(hashed_standard_normal(rows[::-1][::-1], 12345, 4), full)
-    big = np.hstack([rows, rows])[:, ::2][:, :5]  # a strided view
-    assert np.array_equal(hashed_standard_normal(big, 12345, 4), full) or big.shape == rows.shape
+    wide = np.zeros((200, 10))
+    wide[:, ::2] = rows  # a column-strided view of the same numbers
+    strided = wide[:, ::2]
+    assert not strided.flags["C_CONTIGUOUS"] and np.array_equal(strided, rows)
+    assert np.array_equal(hashed_standard_normal(strided, 12345, 4), full)
+    reversed_rows = rows[::-1]  # a negative-stride view: row i of it is row 199-i
+    assert np.array_equal(hashed_standard_normal(reversed_rows, 12345, 4), full[::-1])
+    # other number types give the noise of the same values, not of their raw bytes
+    ints = np.arange(30).reshape(10, 3)
+    assert np.array_equal(
+        hashed_standard_normal(ints, 5, 2), hashed_standard_normal(ints.astype(np.float64), 5, 2)
+    )
+    f32 = rows.astype(np.float32)
+    assert np.array_equal(
+        hashed_standard_normal(f32, 5, 2), hashed_standard_normal(f32.astype(np.float64), 5, 2)
+    )
+
+
+def test_hashed_noise_known_answers_pin_the_exact_bits():
+    """Changing any step of the hash would silently change every recorded fx-honest-rough
+    result (MU-8); these values were produced once and are pinned exactly."""
+    rows = np.array([[1.0, 2.0, -0.5], [0.0, 0.0, 0.0], [3.25, -7.5, 1e-3]])
+    assert hashed_standard_normal(rows, 1, 2).tolist() == [
+        [-0.9428008877453253, -2.143575420712338],
+        [1.6829023589716687, 0.6735365380239111],
+        [0.950612124876125, 0.9502725667178957],
+    ]
+    assert hashed_standard_normal(rows, 123456789, 2).tolist() == [
+        [0.27356271815904964, -1.3172804733270818],
+        [-0.45637518812011635, -0.8420024094152208],
+        [0.2907030509169406, 1.4062934494323711],
+    ]
+
+
+def test_hashed_noise_treats_negative_zero_and_zero_alike():
+    assert np.array_equal(
+        hashed_standard_normal(np.array([[0.0, 1.0]]), 1, 3),
+        hashed_standard_normal(np.array([[-0.0, 1.0]]), 1, 3),
+    )
+
+
+def test_noise_reads_the_whole_row_every_state_column_and_every_action_column(lv_world):
+    _ctx, _data, models, inner = lv_world
+    model = models["fx-honest-rough"]
+    s = np.array([[3.0, 2.0]] * 4)
+    a = np.zeros((4, 1))
+    s[1, 1] += 1e-9  # differs only in the last state column
+    s[2, 0] += 1e-9  # differs only in the first state column
+    a[3, 0] = 1e-9  # differs only in the action
+    m, _ = model.predict_batch(s, a)
+    m_in, sp = inner.predict_batch(s, a)
+    z = (m - m_in) / (2.0 * sp)
+    for i in range(4):
+        for j in range(i + 1, 4):  # the rows are 1e-9 apart, the noise must be unrelated
+            assert np.max(np.abs(z[i] - z[j])) > 1e-2, (i, j)
 
 
 def test_hashed_noise_depends_on_the_key_the_row_and_the_column():
@@ -387,3 +440,82 @@ def test_a_non_finite_input_is_refused_not_passed_through(lv_world):
     for model in models.values():
         with pytest.raises(Exception, match="finite|not finite"):
             model.predict_batch(s, a)
+
+
+# --- the fixture's own safety checks and refusals (with a stand-in for Model A) ----------
+
+
+class _Stub:
+    """Stands in for Model A: returns whatever mean and spread it was loaded with."""
+
+    def __init__(self, mean, spread):
+        self.mean, self.spread = np.asarray(mean, float), np.asarray(spread, float)
+
+    def predict_batch(self, states, actions):
+        n = len(states)
+        return np.tile(self.mean, (n, 1)), np.tile(self.spread, (n, 1))
+
+
+def _stub_ctx(action_dim=1):
+    return WorldContext(
+        world_name="stub", state_dim=2, action_dim=action_dim,
+        training_state_box=np.array([[0.0, 1.0], [0.0, 1.0]]),
+        training_action_interval=np.array([[-1.0, 1.0]] * action_dim),
+        scale=np.ones(2),
+    )
+
+
+@pytest.mark.parametrize(
+    ("cls", "mean", "spread"),
+    [
+        (FxOverconfident, [0.0, 0.0], [5e-324, 1.0]),  # a quarter of the tiniest number is zero
+        (FxOverconfident, [np.nan, 0.0], [1.0, 1.0]),
+        (FxOverconfident, [0.0, np.inf], [1.0, 1.0]),
+        (FxOverconfident, [0.0, 0.0], [np.inf, 1.0]),
+        (FxOverconfident, [0.0, 0.0], [-1.0, 1.0]),
+        (FxBrittle, [np.nan, 0.0], [1.0, 1.0]),
+        (FxBrittle, [0.0, 0.0], [0.0, 1.0]),
+    ],
+)
+def test_a_fixture_refuses_to_emit_a_non_finite_forecast_or_a_spread_with_no_width(cls, mean, spread):
+    model = cls(_stub_ctx(), _Stub(mean, spread))
+    with pytest.raises(FixtureError, match="non-finite|no width"):
+        model.predict_batch(np.full((3, 2), 0.5), np.zeros((3, 1)))
+
+
+def test_honest_rough_refuses_a_spread_so_large_its_square_overflows():
+    model = FxHonestRough(_stub_ctx(), _Stub([0.0, 0.0], [1e308, 1.0]), key=1)
+    with pytest.raises(FixtureError, match="non-finite|no width"), np.errstate(all="ignore"):
+        model.predict_batch(np.full((2, 2), 0.5), np.zeros((2, 1)))
+
+
+@pytest.mark.parametrize(
+    ("state", "action"),
+    [
+        (np.zeros((1, 2)), np.zeros((1,))),  # batched state, single action
+        (np.zeros(2), np.zeros((1, 1))),  # single state, batched action
+        (np.zeros((1, 2)), np.zeros((1, 1))),
+        (np.zeros((1, 1, 2)), np.zeros(1)),
+    ],
+)
+def test_predict_refuses_anything_but_one_state_and_one_action(state, action):
+    model = FxOverconfident(_stub_ctx(), _Stub([0.0, 0.0], [1.0, 1.0]))
+    with pytest.raises(FixtureError, match="predict_batch"):
+        model.predict(state, action)
+
+
+def test_brittle_is_away_if_any_one_of_several_action_dimensions_is_outside():
+    ctx = _stub_ctx(action_dim=2)
+    model = FxBrittle(ctx, _Stub([9.0, 9.0], [1.0, 1.0]))
+    s = np.full((4, 2), 0.5)
+    a = np.array([[0.0, 0.0], [1.0, -1.0], [0.0, 1.5], [-1.5, 0.0]])
+    mean, spread = model.predict_batch(s, a)
+    assert mean[0].tolist() == [9.0, 9.0] and mean[1].tolist() == [9.0, 9.0]  # home (edges count)
+    assert mean[2].tolist() == [0.5, 0.5] and mean[3].tolist() == [0.5, 0.5]  # away
+    assert np.array_equal(spread, np.ones((4, 2)))
+
+
+def test_every_fixture_holds_the_very_same_network_as_direct(world):
+    _, _, models, inner = world
+    for name in NAMES:
+        assert models[name]._inner._net is inner._net, name

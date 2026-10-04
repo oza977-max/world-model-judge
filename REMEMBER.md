@@ -93,6 +93,7 @@ Ordered by when they bite. *(D1–D6, D12 and D14 were settled at Round 10 on
   - *The fallback count lives in the recipe* (`subsample_pairs_fallback: 100000`) and the sufficiency tolerance in `sufficiency_tolerance:`; `read_training_recipe` does not read them — add one shared reader rather than hard-coding either.
 
 - **NF-2 runtime (new, from P3-C04):** training the two practice models on both worlds takes ≈ 6 min (ensemble ≈ 150 s/world, Model A ≈ 33 s/world) against a 600 s run target that must also include evaluation (≈ 5–6 min est.). P6-C01 re-measures end to end; revise NF-2's number openly if it does not fit.
+- **Shared-core cache is one slot (from P3-C05, backlog A25):** `shared_direct_core` holds the most recent (data, seed, world) network. P6-C01 must build models world-by-world (or widen the slot) or training doubles/quadruples; `fx-action-blind` (P3-C08) must also use `shared_direct_core`.
 - **Fixtures must join the roster test:** add each new model module's import to `tests/unit/models/test_roster_batch.py` (auto-discovery lands at P6-C01), declare `stateless`, implement `predict_batch`.
 
 **P3-C05, P3-C08 — fixtures, action-blind check** (TC-MU3-01..04, TC-MU4-01/02, TC-MU1-04). **P3-C08 must report whether the smaller LV lever (kicks ≤ 0.1, Round 10) is still enough for the action-blind fixture to be caught.**

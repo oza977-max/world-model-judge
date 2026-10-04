@@ -1029,3 +1029,31 @@ Model A's cosine learning-rate decay (A23), imported from one place
 (`models/direct.py: learning_rates`), not copied.
 
 *Where recorded:* `build/handovers/P3-C04.md` (to be written at convergence).
+
+## A25 — fixtures (P3-C05): a shared core, row-hashed noise, one new seed purpose (found building P3-C05)
+
+**In plain words:** the spec says each broken model "wraps a copy of Model A, trained
+normally". Building it showed four things the spec should say out loud.
+
+1. **One trained network, not four.** `direct` and the three fixtures all get *the
+   same* network object, trained once (`models/direct.py: shared_direct_core`, keyed
+   on the run seed, the world's numbers and the identity of the training data, with the
+   name `"direct"` — so it is bit-identical to a separately trained `direct`, which a
+   test checks). Training four times costs minutes per world and proves nothing. One
+   slot only; a harness that builds model-by-model across both worlds would retrain
+   (8 trainings instead of 2) — build world-by-world, or widen the slot (P6-C01 note).
+   Consequence: `direct_factory` no longer reads its own seed name (before, a
+   `SeedSource(seed, None)` raised; now it trains from the `"direct"` seed regardless).
+2. **"Seeded noise" is a function of the input row, not a stream.** A stateless model
+   must give a row the same numbers alone or in a batch of 200 (TC-MU1-04). A noise
+   stream consumed call by call cannot do that. So `fx-honest-rough`'s noise is hashed
+   from the row's value and a seed-derived key (integer mixing; sum of twelve uniforms
+   ≈ N(0,1); no transcendental function). Its tails are slightly lighter than a true
+   normal (3σ tail 0.21% vs 0.27%). `-0.0` and `0.0` get the same noise.
+3. **A new seed purpose:** `(name, "noise")` for `fx-honest-rough` — add it to the
+   spec's purpose list.
+4. **"Honest by construction" needs a qualifier:** `fx-honest-rough`'s error bar is
+   honest *relative to Model A's own error bar being right*. Measured on the real LV
+   run, Model A's held-out z-std was 0.85–0.90 and the fixture's 0.97–0.98.
+
+*Where recorded:* `build/handovers/P3-C05.md`.
