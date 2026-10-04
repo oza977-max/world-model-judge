@@ -575,3 +575,28 @@ def test_it_learns_something_real_and_is_a_different_model_from_direct(model, da
     err = float(np.mean(((means - h.next_state) / lv.WORLD.scale) ** 2))
     persistence = float(np.mean(((h.state - h.next_state) / lv.WORLD.scale) ** 2))
     assert err < 0.5 * persistence
+
+
+# --- author's mutation check: defaults and the single-member entry point ---
+
+
+def test_a_member_trained_directly_without_pairs_is_refused_by_name():
+    bare = TrainingData(states=np.zeros((2, 4, 2)), actions=np.zeros((2, 3, 1)))
+    with pytest.raises(EnsembleTrainingError, match="train_pairs"):
+        train_member(_lv_ctx(), _seeds(), bare, 0, epochs=1)
+
+
+def test_the_factory_and_the_defaults_train_exactly_the_recipes_100_epochs_of_batches_of_256(data):
+    """What the registry and P6-C01 call must be the recipe: compared bit-exactly with an explicit
+    run, so an off-by-one epoch or a batch of 255 anywhere in the defaults changes the bytes."""
+    built = ensemble_factory(_lv_ctx(), _seeds(), data)
+    explicit = train_ensemble(
+        _lv_ctx(), _seeds(), data, members=5, epochs=direct.EPOCHS, batch_size=direct.BATCH_SIZE
+    )
+    assert len(built._nets) == 5
+    for a, b in zip(built._nets, explicit):
+        assert all(W.tobytes() == W2.tobytes() and x.tobytes() == x2.tobytes()
+                   for (W, x), (W2, x2) in zip(a.layers, b.layers))
+    single = train_member(_lv_ctx(), _seeds(), data, 2)
+    assert all(W.tobytes() == W2.tobytes() for (W, _), (W2, _) in zip(single.layers, explicit[2].layers))
+    assert (direct.EPOCHS, direct.BATCH_SIZE) == (100, 256)
