@@ -1092,3 +1092,33 @@ required choosing both, so they are written down here for the next design review
    been checked for shape and finiteness.
 
 *Where recorded:* `build/handovers/P3-C08.md`; measurement `build/measurements/p3-c08-action-response.md`.
+
+### A27 — Phase 3 wiring audit (Hard Gate 7): the matrix is missing rows and one wrong name (found at the Phase 3 end audit, 2026-10-04)
+
+**In plain words:** at the end of each build phase the wiring matrix is checked against the
+code: for every row whose wiring chunk was in the phase, does the code really call what the
+row says? Phase 3 passes that check, but the check also showed the matrix itself is
+incomplete.
+
+*Row audit (mechanical greps, all pass):* `harness.derive_thresholds` imports and calls
+`harness.serialize.canonical_serialize`; `check_prereg` exists (`harness/prereg.py`);
+`worlds.actions.kick_sequence` is called by `harness/kicks.py`, which `harness/training.py`
+calls; `World.transition_batch` is called by `harness/training.py` and `harness/benchmarks.py`;
+`models.mlp` is imported by `models/direct.py` and `models/ensemble.py`; `predict_batch` exists
+on persistence, direct, ensemble and all four fixtures (and is roster-tested for bit-identity).
+Rows whose consumer is P6-C01 (`harness.action_response`, `models.fixtures`, `Model.predict_batch`
+consumed by trials) cannot be verified until P6-C01 and are re-audited then.
+
+*Corrections for the next design review:*
+1. The row `harness.check_prereg` names a module; the code is `harness/prereg.py` (function `check_prereg`).
+2. **No row exists for `harness.training`** (`build_training_data`, `make_world_context`,
+   `assert_eval_starts_disjoint`) — it is consumed by `wmj run` at P6-C01 and should have one
+   (wiring chunk P6-C01; `assert_eval_starts_disjoint` must be called there, MU-7).
+3. **No row for `harness.sufficiency`** — it is deliberately a build-time, one-time tool (its
+   decision is recorded in `prereg/recipe.md`, not read by `wmj run`); it should be listed as an
+   allow-listed internal tool, not left implicit.
+4. No row for `harness.kicks` (consumed by `training` and, at P6-C01, `trials`) or
+   `harness.thread_guard`.
+5. The GVM `_module_audit.py` helper assumes `scripts/_shared/*.py` and stem names; this project's
+   `src/wmj/<package>/<module>.py` layout makes it flag 28 false positives (e.g. every `base.py`), so
+   the audit was done by hand above. A project-specific audit (dotted module names) is worth a P6 chunk.
