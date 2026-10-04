@@ -71,6 +71,10 @@ def _recipe_value(key):
 
 
 def test_the_code_constants_equal_the_frozen_recipe():
+    assert direct.LR_FINAL == _recipe_value("lr_final")
+    assert direct.LEARNING_RATE == _recipe_value("lr_initial")
+    text = RECIPE_PATH.read_text()
+    assert re.findall(r"^lr_schedule:[ \t]*([^#\s]*)", text, re.MULTILINE) == ["cosine"]
     assert EPOCHS == _recipe_value("epochs")
     assert BATCH_SIZE == _recipe_value("batch_size")
     assert BETA_NLL == _recipe_value("beta_nll")
@@ -430,7 +434,12 @@ def _reference_train(ctx, seeds, pairs, *, epochs, batch_size, beta, log_sigma_b
     m_w = [np.zeros_like(w) for w in Ws]; v_w = [np.zeros_like(w) for w in Ws]
     m_b = [np.zeros_like(b) for b in bs]; v_b = [np.zeros_like(b) for b in bs]
     t = 0
+    # cosine decay 1e-3 -> 1e-5 over the epochs (D18), written out here independently
+    lrs = [1e-3] if epochs == 1 else [
+        1e-5 + 0.5 * (1e-3 - 1e-5) * (1 + np.cos(np.pi * e / (epochs - 1))) for e in range(epochs)
+    ]
     for epoch in range(epochs):
+        lr = lrs[epoch]
         order = seeds.rng("shuffle", str(epoch)).permutation(X.shape[0])
         for start in range(0, X.shape[0], batch_size):
             rows = order[start : start + batch_size]
@@ -456,7 +465,7 @@ def _reference_train(ctx, seeds, pairs, *, epochs, batch_size, beta, log_sigma_b
                 for p, gr, mm, vv in ((Ws[k], dW[k], m_w[k], v_w[k]), (bs[k], db[k], m_b[k], v_b[k])):
                     mm *= 0.9; mm += 0.1 * gr
                     vv *= 0.999; vv += 0.001 * gr**2
-                    p -= 1e-3 * (mm / (1 - 0.9**t)) / (np.sqrt(vv / (1 - 0.999**t)) + 1e-8)
+                    p -= lr * (mm / (1 - 0.9**t)) / (np.sqrt(vv / (1 - 0.999**t)) + 1e-8)
     return list(zip(Ws, bs))
 
 
@@ -844,3 +853,47 @@ def test_training_targets_are_not_clipped_at_the_size_of_a_kick():
     means, _ = DirectModel(ctx, net).predict_batch(s, a)
     assert np.abs(means[:, 2] - ns[:, 2]).max() < 0.5  # it learned the lever...
     assert np.abs(means[:, 2] - s[:, 2]).max() > 1.5  # ...including changes near 2.0
+
+
+# --- D18 (owner-approved 2026-10-04): cosine learning-rate decay ---
+
+
+def test_the_learning_rate_schedule_is_a_cosine_from_start_to_final():
+    rates = direct.learning_rates(100)
+    assert len(rates) == 100 and rates[0] == direct.LEARNING_RATE == 1e-3
+    assert rates[-1] == pytest.approx(direct.LR_FINAL, rel=1e-12, abs=0) and direct.LR_FINAL == 1e-5
+    assert all(a > b for a, b in itertools.pairwise(rates))  # strictly decreasing
+    assert rates[49] == pytest.approx(1e-5 + 0.5 * (1e-3 - 1e-5) * (1 + np.cos(np.pi * 49 / 99)), rel=1e-12)
+    mid = direct.learning_rates(3)
+    assert mid[1] == pytest.approx((1e-3 + 1e-5) / 2, rel=1e-12)  # halfway through a 3-epoch run
+
+
+def test_a_one_epoch_run_uses_the_initial_rate():
+    assert direct.learning_rates(1) == [direct.LEARNING_RATE]
+
+
+def test_each_epoch_trains_with_its_own_rate(data, monkeypatch):
+    seen = []
+    original = direct.Adam
+
+    class Spy(original):
+        def step(self, params, grads):
+            seen.append(self.lr)
+            return super().step(params, grads)
+
+    monkeypatch.setattr(direct, "Adam", Spy)
+    train_direct(_ctx(), _seeds(), data, epochs=4, batch_size=1000)
+    per_epoch = [len(range(0, data.train_pairs.state.shape[0], 1000))] * 4
+    expected = [r for r, n in zip(direct.learning_rates(4), per_epoch) for _ in range(n)]
+    assert seen == expected
+
+
+def test_the_seed_to_seed_spread_is_small_with_the_decay(data):
+    """Why the decay exists (D18): different seeds on identical data should land close together."""
+    errors = []
+    for seed in (1, 2, 3):
+        net = train_direct(_ctx(), SeedSource(seed, "direct"), data, epochs=30, batch_size=256)
+        h = data.heldout_pairs
+        means, _ = DirectModel(_ctx(), net).predict_batch(h.state, h.action)
+        errors.append(float(np.mean(((means - h.next_state) / lv.WORLD.scale) ** 2)))
+    assert max(errors) < 5 * min(errors)

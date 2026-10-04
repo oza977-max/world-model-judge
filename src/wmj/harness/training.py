@@ -17,7 +17,7 @@ design-review-010).
 Every count comes from `prereg/recipe.md`'s `key: value` lines, so the
 numbers that were frozen are the numbers used. Every random choice has its
 own named stream (`train-starts`, `train-kicks`, `subsample-kick`,
-`subsample-nonkick`, `heldout`, `gradcheck-batch`), so changing one never
+`subsample-nonkick`, `heldout`, `heldout-kick`, `gradcheck-batch`), so changing one never
 shifts another and the same seed always gives the same bytes
 (cross-cutting ADR-002 rule 2, TC-MU8-01, TC-NF1-10).
 
@@ -54,6 +54,7 @@ TRAINING_PURPOSES = (
     "subsample-kick",
     "subsample-nonkick",
     "heldout",
+    "heldout-kick",  # drawn only when the recipe asks for a held-out kick quota (D17)
     "gradcheck-batch",
 )
 
@@ -64,6 +65,7 @@ _RECIPE_KEYS = (
     "heldout_pairs",
     "gradcheck_pairs",
 )
+_QUOTA_KEY = "heldout_kick_pairs"  # required in the recipe; optional (0) on the dataclass
 _PLAIN_POSITIVE_INT = re.compile(r"[1-9][0-9]*")
 _RECIPE_LINE = re.compile(r"[ \t]*([^#\s]*)[ \t]*(?:#.*)?")
 
@@ -79,13 +81,21 @@ class TrainingDataError(WmjError):
 
 @dataclass(frozen=True)
 class TrainingRecipe:
-    """The five counts the harness reads from `prereg/recipe.md`."""
+    """The six counts the harness reads from `prereg/recipe.md`.
+
+    `heldout_kick_pairs` is how many of the held-out pairs must be kick pairs
+    (D17: without a quota the held-out set has almost no kicks, because the
+    training quota uses most of them). The recipe always pins it; 0 here means
+    "no quota — draw the held-out set from whatever is left", which small
+    tests use.
+    """
 
     training_trajectories: int
     subsample_pairs: int
     kick_pairs: int
     heldout_pairs: int
     gradcheck_pairs: int
+    heldout_kick_pairs: int = 0
 
     def __post_init__(self) -> None:
         for key in _RECIPE_KEYS:
@@ -93,6 +103,17 @@ class TrainingRecipe:
             if isinstance(value, bool) or not isinstance(value, numbers.Integral) or value < 1:
                 raise TrainingDataError(f"recipe key {key!r} must be a positive integer, got {value!r}")
             object.__setattr__(self, key, int(value))  # plain ints: mixed numpy widths must not mix
+        quota = self.heldout_kick_pairs
+        if isinstance(quota, bool) or not isinstance(quota, numbers.Integral) or quota < 0:
+            raise TrainingDataError(
+                f"recipe key {_QUOTA_KEY!r} must be a non-negative integer, got {quota!r}"
+            )
+        object.__setattr__(self, _QUOTA_KEY, int(quota))
+        if self.heldout_kick_pairs > self.heldout_pairs:
+            raise TrainingDataError(
+                f"heldout_kick_pairs ({self.heldout_kick_pairs}) cannot exceed heldout_pairs "
+                f"({self.heldout_pairs}) — the quota is part of the held-out set"
+            )
         if self.kick_pairs > self.subsample_pairs:
             raise TrainingDataError(
                 f"kick_pairs ({self.kick_pairs}) cannot exceed subsample_pairs "
@@ -106,7 +127,7 @@ class TrainingRecipe:
 
 
 def read_training_recipe(recipe_path: str | Path) -> TrainingRecipe:
-    """Read the five pinned counts from `prereg/recipe.md`.
+    """Read the six pinned counts from `prereg/recipe.md`.
 
     In plain words: the numbers that were locked in the recipe are the numbers
     the training data is built from — read here, never typed in code.
@@ -126,7 +147,7 @@ def read_training_recipe(recipe_path: str | Path) -> TrainingRecipe:
     except OSError as exc:
         raise TrainingDataError(f"the recipe {path} cannot be read: {exc}") from exc
     values: dict[str, int] = {}
-    for key in _RECIPE_KEYS:
+    for key in (*_RECIPE_KEYS, _QUOTA_KEY):
         lines = [
             line.rstrip("\r")
             for line in re.findall(rf"^{re.escape(key)}:.*$", text, re.MULTILINE)
@@ -293,9 +314,7 @@ def build_training_data(
             f"{recipe.heldout_pairs} — the held-out set must not overlap training and the "
             f"count is never shrunk"
         )
-    held = pool[seeds.rng_for(world_name, TRAINING_REGION, "heldout").permutation(pool.size)][
-        : recipe.heldout_pairs
-    ]
+    held = _draw_heldout(seeds, world_name, recipe, pool, is_kick)
     gradcheck = (
         seeds.rng_for(world_name, TRAINING_REGION, "gradcheck-batch")
         .permutation(chosen.size)[: recipe.gradcheck_pairs]
@@ -309,6 +328,41 @@ def build_training_data(
         heldout_pairs=_gather_pairs(states, actions, held, horizon),
         gradcheck_index=gradcheck,
     )
+
+
+def _draw_heldout(
+    seeds: SeedSource, world_name: str, recipe: TrainingRecipe, pool: np.ndarray, is_kick: np.ndarray
+) -> np.ndarray:
+    """The held-out pairs, as flat indices, from the pairs the training set did not take.
+
+    Without a quota: the first `heldout_pairs` of one permutation of the whole
+    pool (stream `heldout`). With one (D17): the first `heldout_kick_pairs` of
+    a permutation of the pool's kick pairs (stream `heldout-kick`), then the
+    first `heldout_pairs − heldout_kick_pairs` of a permutation of its non-kick
+    pairs (stream `heldout`) — kicks first, like the training set. A shortfall
+    in either group is refused, never shrunk.
+    """
+    if recipe.heldout_kick_pairs == 0:
+        order = seeds.rng_for(world_name, TRAINING_REGION, "heldout").permutation(pool.size)
+        return pool[order][: recipe.heldout_pairs]
+    pool_kicks, pool_plain = pool[is_kick[pool]], pool[~is_kick[pool]]
+    want_kicks = recipe.heldout_kick_pairs
+    want_plain = recipe.heldout_pairs - want_kicks
+    if pool_kicks.size < want_kicks:
+        raise TrainingDataError(
+            f"only {pool_kicks.size} kick pairs are left after the training set but "
+            f"heldout_kick_pairs is {want_kicks} — held-out kick pairs must not overlap "
+            f"training and the count is never shrunk"
+        )
+    if pool_plain.size < want_plain:
+        raise TrainingDataError(
+            f"only {pool_plain.size} non-kick pairs are left after the training set but the "
+            f"held-out set needs {want_plain} (heldout_pairs {recipe.heldout_pairs} minus "
+            f"heldout_kick_pairs {want_kicks}) — held-out non-kick pairs are never shrunk"
+        )
+    kick_order = seeds.rng_for(world_name, TRAINING_REGION, "heldout-kick").permutation(pool_kicks.size)
+    plain_order = seeds.rng_for(world_name, TRAINING_REGION, "heldout").permutation(pool_plain.size)
+    return np.concatenate([pool_kicks[kick_order[:want_kicks]], pool_plain[plain_order[:want_plain]]])
 
 
 def assert_eval_starts_disjoint(training: TrainingData, eval_starts: np.ndarray) -> None:

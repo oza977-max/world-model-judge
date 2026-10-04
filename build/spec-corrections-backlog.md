@@ -973,3 +973,37 @@ Recommended: median-of-5-seeds plus a longer/decayed schedule, then re-measure.
 `REMEMBER.md` D18.
 
 *Where recorded:* `build/measurements/p3-c03-model-a-real-run.md`; A20/A21 above for the other two P3-C03 findings.
+
+### A23 — owner decisions D17 and D18 implemented (2026-10-04): what changed relative to the reviewed specs
+
+**In plain words:** the owner said "go ahead with your recommendations" on the
+two open decisions. This records exactly what was changed in the code and the
+pre-registered recipe (both still unfrozen), and where it departs from the
+text of the reviewed specs, which were not edited.
+
+1. **D17 — a held-out kick quota.** New recipe key `heldout_kick_pairs: 1000`.
+   The held-out set is now 1,000 kick pairs (drawn first, from the kick pairs
+   the training set did not take, stream `heldout-kick`) plus 9,000 non-kick
+   pairs (stream `heldout`), kicks first. Spec departures: models §4's "held-out
+   = 10,000 from those not selected" now carries a quota; a **new seed purpose
+   `heldout-kick`** (the spec counts ten purposes in TC-NF1-10; there are now
+   eleven); the held-out kick share is 10% against ~1% / 0.2% in evaluation
+   (disclosed in the recipe). Training data and the gradient-check batch are
+   byte-identical to before.
+2. **D18 — a cosine learning-rate decay and a median-of-5-seeds sufficiency
+   test.** New recipe keys `lr_initial: 0.001`, `lr_final: 0.00001`,
+   `lr_schedule: cosine`, `sufficiency_seeds: 5`. Spec departures: ADR-M3 pins
+   Adam at a constant lr 1e-3 (now decayed per epoch); the sufficiency test
+   compares medians over five seeds (seed `k` = run seed + `k`; `k = 0` is the
+   old single run) instead of single runs. Epochs stay 100.
+3. **Evidence:** `build/measurements/p3-c03-model-a-real-run.md` (sections 3, 5,
+   6). Before: seed-to-seed spread of the held-out error up to 20×; after: ~1.3×.
+4. **Still to come:** the sufficiency check for the ensemble (P3-C04) and, by the
+   pre-registered rule, the possible fallback of `subsample_pairs` to 100,000.
+   The pendulum's single-model result is stable and says "not enough" (median
+   ratio ≈ 2.9 > 1.10), so the fallback is expected, but the rule applies only
+   after both models are checked and is enacted in the recipe's revision log, not
+   silently.
+
+*Where recorded:* this entry; `prereg/recipe.md` (keys and revision log);
+`REMEMBER.md` D17, D18 (closed).

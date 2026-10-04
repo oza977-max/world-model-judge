@@ -49,6 +49,7 @@ from wmj.harness.training import TrainingRecipe, build_training_data, make_world
 from wmj.models.base import Pairs, SeedSource, TrainingData
 
 SUFFICIENCY_TOLERANCE = 0.10  # prereg/recipe.md `sufficiency_tolerance`
+SUFFICIENCY_SEEDS = 5  # prereg/recipe.md `sufficiency_seeds` (D18: the median over this many seeds)
 
 
 class SufficiencyError(WmjError):
@@ -120,12 +121,17 @@ def decide_subsample_pairs(recipe_m: int, fallback: int, sufficient: list[bool])
 
 @dataclass(frozen=True)
 class SufficiencyResult:
+    """The decision inputs: `err_m` / `err_2m` are the medians over `n_seeds` runs."""
+
     world: str
     err_m: float
     err_2m: float
     sufficient: bool
     split_m: KickSplit
     split_2m: KickSplit
+    errs_m: tuple[float, ...] = ()
+    errs_2m: tuple[float, ...] = ()
+    n_seeds: int = 1
 
 
 Factory = Callable[[Any, SeedSource, TrainingData], Any]
@@ -141,8 +147,16 @@ def check_world(
     *,
     tolerance: float = SUFFICIENCY_TOLERANCE,
     horizon: int | None = None,
+    n_seeds: int = SUFFICIENCY_SEEDS,
 ) -> SufficiencyResult:
-    """Train one model at M and at 2M and compare held-out error (models ADR-M3).
+    """Train one model at M and at 2M, `n_seeds` times each, and compare the *median*
+    held-out error (models ADR-M3, with the D18 revision).
+
+    In plain words: one training run is partly luck (measured: on identical data the
+    ratio of the 50,000-example error to the 100,000-example error swung between 0.15
+    and 39 from the seed alone). So each size is trained from `n_seeds` different
+    starting points and the middle result of each is compared; one unlucky run cannot
+    flip the answer. Seed `k` is `run_seed + k`, so seed 0 is the old single run.
 
     The 2M build is the same recipe with `subsample_pairs` doubled (the same
     kick pairs plus more non-kick pairs of the same permutation — the M set is
@@ -151,6 +165,8 @@ def check_world(
     evaluation trials, skill scores or matching margin exist in this
     function's world (TC-MU5-05).
     """
+    if isinstance(n_seeds, bool) or not isinstance(n_seeds, int) or n_seeds < 1:
+        raise SufficiencyError(f"n_seeds must be a positive int, got {n_seeds!r}")
     ctx = make_world_context(world_name, world)
     data_seeds = SeedSource(run_seed, None)
     big_recipe = replace(recipe, subsample_pairs=2 * recipe.subsample_pairs)
@@ -159,18 +175,38 @@ def check_world(
     heldout = data_big.heldout_pairs
     scale = np.asarray(world.scale, dtype=float)
 
-    model_small = factory(ctx, SeedSource(run_seed, model_name), data_small)
-    means_small, _ = model_small.predict_batch(heldout.state, heldout.action)
-    model_big = factory(ctx, SeedSource(run_seed, model_name), data_big)
-    means_big, _ = model_big.predict_batch(heldout.state, heldout.action)
+    errs_m, errs_2m, splits_m, splits_2m = [], [], [], []
+    for k in range(n_seeds):
+        for data, errs, splits in ((data_small, errs_m, splits_m), (data_big, errs_2m, splits_2m)):
+            model = factory(ctx, SeedSource(run_seed + k, model_name), data)
+            means, _ = model.predict_batch(heldout.state, heldout.action)
+            errs.append(held_out_error(means, heldout, scale))
+            splits.append(kick_split_error(means, heldout, scale))
 
-    err_m = held_out_error(means_small, heldout, scale)
-    err_2m = held_out_error(means_big, heldout, scale)
+    err_m, err_2m = float(np.median(errs_m)), float(np.median(errs_2m))
     return SufficiencyResult(
         world=world_name,
         err_m=err_m,
         err_2m=err_2m,
         sufficient=m_is_sufficient(err_m, err_2m, tolerance),
-        split_m=kick_split_error(means_small, heldout, scale),
-        split_2m=kick_split_error(means_big, heldout, scale),
+        split_m=_median_split(splits_m),
+        split_2m=_median_split(splits_2m),
+        errs_m=tuple(errs_m),
+        errs_2m=tuple(errs_2m),
+        n_seeds=n_seeds,
+    )
+
+
+def _median_split(splits: list[KickSplit]) -> KickSplit:
+    """The median over seeds of each group's error (the counts are the same for every seed)."""
+
+    def middle(values: list[float | None]) -> float | None:
+        present = [v for v in values if v is not None]
+        return float(np.median(present)) if present else None
+
+    return KickSplit(
+        n_kick=splits[0].n_kick,
+        n_plain=splits[0].n_plain,
+        error_kick=middle([x.error_kick for x in splits]),
+        error_plain=middle([x.error_plain for x in splits]),
     )

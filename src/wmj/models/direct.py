@@ -20,7 +20,7 @@ automatic differentiation) and is tested against brute-force numbers. Before
 any learning, the network's backprop is checked once against finite
 differences on 64 fixed training rows (plain Gaussian loss — the check
 validates backprop, not the loss). Learning is mini-batch (256 rows), Adam,
-a fixed number of epochs and no early stopping (early stopping would peek at
+a fixed number of epochs with a cosine learning-rate decay (D18), no early stopping (early stopping would peek at
 validation loss, a tuning channel the pre-registration exists to close).
 
 **Units.** The network's inputs are the state divided by the world's scale
@@ -59,8 +59,26 @@ BATCH_SIZE = 256
 BETA_NLL = 0.5
 
 HIDDEN_UNITS = 64  # 2 hidden layers x 64, tanh (models ADR-M3 shared architecture)
-LEARNING_RATE = ADAM_LR
+LEARNING_RATE = ADAM_LR  # the learning rate of the first epoch
+LR_FINAL = 1e-5  # prereg/recipe.md `lr_final`: where the cosine decay ends (D18)
 GRADIENT_TOLERANCE = 1e-5  # models ADR-M3, A10 ratified
+
+
+def learning_rates(epochs: int) -> list[float]:
+    """The learning rate of each epoch: a cosine decay from `LEARNING_RATE` to `LR_FINAL`.
+
+    In plain words: big steps early, tiny steps at the end. Measured (D18): with
+    a constant rate the final error of the *same* network on the *same* data
+    swung by a factor of 20 from the random seed alone; the decay settles every
+    run into about the same answer. Constant within an epoch; the first epoch
+    uses `LEARNING_RATE` exactly and the last uses `LR_FINAL` exactly.
+    """
+    if epochs == 1:
+        return [LEARNING_RATE]
+    span = LEARNING_RATE - LR_FINAL
+    return [
+        LR_FINAL + 0.5 * span * (1.0 + math.cos(math.pi * e / (epochs - 1))) for e in range(epochs)
+    ]
 
 
 class DirectTrainingError(WmjError):
@@ -201,9 +219,11 @@ def train_direct(
         tolerance=GRADIENT_TOLERANCE,
     )
 
-    adam = Adam(net.param_shapes(), lr=LEARNING_RATE)
+    rates = learning_rates(epochs)
+    adam = Adam(net.param_shapes(), lr=rates[0])
     m = X.shape[0]
     for epoch in range(epochs):
+        adam.lr = rates[epoch]
         order = seeds.rng("shuffle", str(epoch)).permutation(m)
         for start in range(0, m, batch_size):
             rows = order[start : start + batch_size]

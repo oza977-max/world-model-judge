@@ -64,14 +64,14 @@ def test_the_real_recipe_gives_the_pinned_counts():
     r = read_training_recipe(REAL_RECIPE)
     assert r == TrainingRecipe(
         training_trajectories=2000, subsample_pairs=50000, kick_pairs=12500,
-        heldout_pairs=10000, gradcheck_pairs=64,
+        heldout_pairs=10000, gradcheck_pairs=64, heldout_kick_pairs=1000,
     )
 
 
 def _recipe_text(**overrides):
     values = {
         "training_trajectories": "2000", "subsample_pairs": "50000", "kick_pairs": "12500",
-        "heldout_pairs": "10000", "gradcheck_pairs": "64",
+        "heldout_pairs": "10000", "gradcheck_pairs": "64", "heldout_kick_pairs": "1000",
     }
     values.update(overrides)
     lines = [f"{k}: {v}" for k, v in values.items() if v is not None]
@@ -300,14 +300,15 @@ def _recorded(name):
 def test_only_the_pinned_training_purposes_are_drawn(name):
     log = _recorded(name)
     purposes = {parts[2] for parts in log}
-    assert purposes == set(TRAINING_PURPOSES)
+    # "heldout-kick" is drawn only when the recipe asks for a held-out kick quota (D17)
+    assert purposes == set(TRAINING_PURPOSES) - {"heldout-kick"}
     assert all(parts[0] == name and parts[1] == "training" for parts in log)
 
 
-def test_training_purposes_are_the_six_pinned_ones():
+def test_training_purposes_are_the_seven_pinned_ones():
     assert set(TRAINING_PURPOSES) == {
         "train-starts", "train-kicks", "subsample-kick", "subsample-nonkick", "heldout",
-        "gradcheck-batch",
+        "heldout-kick", "gradcheck-batch",
     }
 
 
@@ -789,10 +790,10 @@ def test_eval_starts_narrower_than_the_state_are_refused(shape):
 
 def test_a_recipe_line_without_a_space_after_the_colon_is_read_correctly(tmp_path):
     text = ("training_trajectories:2000\nsubsample_pairs:50000\nkick_pairs:12500\n"
-            "heldout_pairs:10000\ngradcheck_pairs:64\n")
+            "heldout_pairs:10000\ngradcheck_pairs:64\nheldout_kick_pairs:1000\n")
     path = tmp_path / "r.md"
     path.write_text(text)
-    assert read_training_recipe(path) == TrainingRecipe(2000, 50000, 12500, 10000, 64)
+    assert read_training_recipe(path) == TrainingRecipe(2000, 50000, 12500, 10000, 64, 1000)
 
 
 def test_full_width_digits_are_not_a_plain_integer(tmp_path):
@@ -853,3 +854,149 @@ def test_make_world_context_known_values():
     pend = make_world_context("pendulum", pendulum.WORLD)
     assert (pend.state_dim, pend.action_dim) == (4, 1)
     assert pend.training_action_interval.tolist() == [[-1.0, 1.0]]
+
+
+# --- D17 (owner-approved 2026-10-04): the held-out set has its own kick quota ---
+
+QUOTA = {"lv": 40, "pendulum": 15}
+
+
+def _quota_build(name, quota=None, *, recipe=None, seed=SEED):
+    module, small, horizon = SMALL[name]
+    base = recipe or replace(small, heldout_kick_pairs=QUOTA[name] if quota is None else quota)
+    return build_training_data(name, module.WORLD, SeedSource(seed, None), base, horizon=horizon)
+
+
+def test_the_real_recipe_pins_the_heldout_kick_quota():
+    assert read_training_recipe(REAL_RECIPE).heldout_kick_pairs == 1000
+
+
+def test_a_missing_heldout_kick_pairs_key_is_refused_and_named(tmp_path):
+    text = _recipe_text(heldout_kick_pairs=None)  # the five older keys only
+    with pytest.raises(TrainingDataError, match="heldout_kick_pairs"):
+        _read(tmp_path, text)
+
+
+@pytest.mark.parametrize("bad", [-1, 2.5, True, "3"])
+def test_a_bad_heldout_kick_quota_object_is_refused(bad):
+    with pytest.raises(TrainingDataError, match="heldout_kick_pairs"):
+        replace(SMALL["lv"][1], heldout_kick_pairs=bad)
+
+
+def test_a_quota_larger_than_the_heldout_set_is_refused():
+    with pytest.raises(TrainingDataError, match="heldout_kick_pairs"):
+        replace(SMALL["lv"][1], heldout_kick_pairs=SMALL["lv"][1].heldout_pairs + 1)
+
+
+@pytest.mark.parametrize("name", WORLDS)
+def test_the_heldout_set_has_exactly_the_quota_of_kick_pairs_kicks_first(name):
+    data = _quota_build(name)
+    q, total = QUOTA[name], SMALL[name][1].heldout_pairs
+    flags = data.heldout_pairs.is_kick
+    assert flags.shape == (total,) and int(flags.sum()) == q
+    assert flags[:q].all() and not flags[q:].any()
+
+
+@pytest.mark.parametrize("name", WORLDS)
+def test_the_quota_does_not_change_the_training_set(name):
+    with_quota, without = _quota_build(name), _quota_build(name, 0)
+    for field in ("state", "action", "next_state", "is_kick"):
+        assert getattr(with_quota.train_pairs, field).tobytes() == getattr(without.train_pairs, field).tobytes()
+    assert with_quota.gradcheck_index.tobytes() == without.gradcheck_index.tobytes()
+    assert with_quota.states.tobytes() == without.states.tobytes()
+
+
+@pytest.mark.parametrize("name", WORLDS)
+def test_quota_heldout_pairs_are_disjoint_from_training_and_one_true_step(name):
+    module = SMALL[name][0]
+    data = _quota_build(name)
+    train = {r.tobytes() + a.tobytes() for r, a in zip(data.train_pairs.state, data.train_pairs.action)}
+    held = {r.tobytes() + a.tobytes() for r, a in zip(data.heldout_pairs.state, data.heldout_pairs.action)}
+    assert train.isdisjoint(held) and len(held) == SMALL[name][1].heldout_pairs
+    for i in range(0, data.heldout_pairs.state.shape[0], 9):
+        expected = module.transition(data.heldout_pairs.state[i], data.heldout_pairs.action[i])
+        assert np.array_equal(data.heldout_pairs.next_state[i], expected)
+
+
+@pytest.mark.parametrize("name", WORLDS)
+def test_the_quota_draw_is_the_first_of_the_named_seeded_permutations(name):
+    """Independent recompute: kicks from 'heldout-kick', the rest from 'heldout'."""
+    recipe = replace(SMALL[name][1], heldout_kick_pairs=QUOTA[name])
+    data = _quota_build(name)
+    seeds = SeedSource(SEED, None)
+    mask = _flat_kick_mask(data)
+    kicks, plain = np.flatnonzero(mask), np.flatnonzero(~mask)
+    k_perm = seeds.rng_for(name, "training", "subsample-kick").permutation(kicks.size)
+    p_perm = seeds.rng_for(name, "training", "subsample-nonkick").permutation(plain.size)
+    chosen = np.concatenate(
+        [kicks[k_perm[: recipe.kick_pairs]], plain[p_perm[: recipe.subsample_pairs - recipe.kick_pairs]]]
+    )
+    left = np.ones(mask.size, dtype=bool)
+    left[chosen] = False
+    pool = np.flatnonzero(left)
+    pk, pp = pool[mask[pool]], pool[~mask[pool]]
+    hk = pk[seeds.rng_for(name, "training", "heldout-kick").permutation(pk.size)][: recipe.heldout_kick_pairs]
+    hp = pp[seeds.rng_for(name, "training", "heldout").permutation(pp.size)][
+        : recipe.heldout_pairs - recipe.heldout_kick_pairs
+    ]
+    state, action, nxt = _pairs_at(data, np.concatenate([hk, hp]))
+    assert np.array_equal(data.heldout_pairs.state, state)
+    assert np.array_equal(data.heldout_pairs.action, action)
+    assert np.array_equal(data.heldout_pairs.next_state, nxt)
+
+
+@pytest.mark.parametrize("name", WORLDS)
+def test_the_quota_build_is_deterministic_and_seed_sensitive(name):
+    a, b = _quota_build(name), _quota_build(name)
+    assert a.heldout_pairs.state.tobytes() == b.heldout_pairs.state.tobytes()
+    assert _quota_build(name, seed=SEED + 1).heldout_pairs.state.tobytes() != a.heldout_pairs.state.tobytes()
+
+
+def test_only_the_quota_build_draws_the_heldout_kick_stream():
+    module, small, horizon = SMALL["lv"]
+    for quota, expected in ((0, False), (QUOTA["lv"], True)):
+        seeds = _RecordingSeeds(SEED, None)
+        object.__setattr__(seeds, "log", [])
+        build_training_data(
+            "lv", module.WORLD, seeds, replace(small, heldout_kick_pairs=quota), horizon=horizon
+        )
+        assert ("heldout-kick" in {parts[2] for parts in seeds.log}) is expected
+
+
+def test_too_few_kick_pairs_left_for_the_heldout_quota_is_refused_not_shrunk():
+    module, small, horizon = SMALL["lv"]
+    data = _quota_build("lv", 0)
+    leftover_kicks = int(_flat_kick_mask(data).sum()) - small.kick_pairs
+    ok = replace(small, heldout_kick_pairs=leftover_kicks)
+    assert int(build_training_data("lv", module.WORLD, SeedSource(SEED, None), ok, horizon=horizon)
+               .heldout_pairs.is_kick.sum()) == leftover_kicks
+    with pytest.raises(TrainingDataError, match="held-out kick pairs"):
+        build_training_data("lv", module.WORLD, SeedSource(SEED, None),
+                            replace(small, heldout_kick_pairs=leftover_kicks + 1), horizon=horizon)
+
+
+def test_too_few_non_kick_pairs_left_for_the_heldout_set_is_refused():
+    module, small, horizon = SMALL["lv"]
+    total = small.training_trajectories * horizon
+    n_kick = int(_flat_kick_mask(_quota_build("lv", 0)).sum())
+    n_plain = total - n_kick
+    plain_left = n_plain - (small.subsample_pairs - small.kick_pairs)
+    ok = replace(small, heldout_pairs=plain_left + QUOTA["lv"], heldout_kick_pairs=QUOTA["lv"])
+    assert build_training_data("lv", module.WORLD, SeedSource(SEED, None), ok, horizon=horizon)
+    with pytest.raises(TrainingDataError, match="held-out non-kick pairs"):
+        build_training_data("lv", module.WORLD, SeedSource(SEED, None),
+                            replace(ok, heldout_pairs=ok.heldout_pairs + 1), horizon=horizon)
+
+
+def test_the_m_set_is_still_a_prefix_of_the_2m_set_with_a_quota():
+    module, small, horizon = SMALL["lv"]
+    base = replace(small, heldout_kick_pairs=QUOTA["lv"])
+    doubled = build_training_data(
+        "lv", module.WORLD, SeedSource(SEED, None),
+        replace(base, subsample_pairs=2 * base.subsample_pairs), horizon=horizon,
+    )
+    first = build_training_data("lv", module.WORLD, SeedSource(SEED, None), base, horizon=horizon)
+    m = base.subsample_pairs
+    for field in ("state", "action", "next_state", "is_kick"):
+        assert np.array_equal(getattr(doubled.train_pairs, field)[:m], getattr(first.train_pairs, field))
+    assert int(doubled.heldout_pairs.is_kick.sum()) == QUOTA["lv"]

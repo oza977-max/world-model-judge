@@ -19,7 +19,7 @@ import pytest
 from wmj.harness import sufficiency
 from wmj.harness.sufficiency import (
     SufficiencyError,
-    check_world,
+    check_world as _check_world,
     decide_subsample_pairs,
     held_out_error,
     kick_split_error,
@@ -31,6 +31,14 @@ from wmj.models.direct import DirectModel, train_direct
 from wmj.worlds import lv
 
 SEED = 20260825
+
+
+def check_world(*args, **kwargs):
+    """Single-seed by default in these tests (the real default is the recipe's 5 seeds)."""
+    kwargs.setdefault("n_seeds", 1)
+    return _check_world(*args, **kwargs)
+
+
 SCALE = np.array([2.0, 4.0])
 
 
@@ -483,3 +491,92 @@ def test_the_kick_split_uses_every_row_of_a_large_held_out_set():
     split = kick_split_error(means, pairs, SCALE)
     assert split.error_kick == pytest.approx(errs[kicks].mean())
     assert split.error_plain == pytest.approx(errs[~kicks].mean())
+
+
+# --- D18 (owner-approved 2026-10-04): the decision uses the median over several seeds ---
+
+
+def _seeded_factory(base, outliers):
+    """A model whose bias is `base` except for the model seeds named in `outliers`, which get a
+    huge one — a stand-in for an unlucky training run."""
+
+    def factory(ctx, seeds, data):
+        small = data.train_pairs.state.shape[0] == KICKED.subsample_pairs
+        bias = outliers.get((seeds.run_seed, small), base if small else base)
+        return _BiasedWorldModel(bias)
+
+    return factory
+
+
+def test_the_default_number_of_seeds_is_the_recipes_five():
+    import inspect
+    import re
+    from pathlib import Path
+
+    assert inspect.signature(_check_world).parameters["n_seeds"].default == sufficiency.SUFFICIENCY_SEEDS == 5
+    text = (Path(__file__).resolve().parents[3] / "prereg" / "recipe.md").read_text()
+    found = re.findall(r"^sufficiency_seeds:[ \t]*([^#\s]*)", text, re.MULTILINE)
+    assert len(found) == 1 and int(found[0]) == sufficiency.SUFFICIENCY_SEEDS
+
+
+def test_the_models_seeds_are_the_run_seed_plus_the_seed_index_and_k_zero_is_the_old_single_run():
+    seen = []
+
+    def factory(ctx, seeds, data):
+        seen.append((seeds.run_seed, seeds.my_name, data.train_pairs.state.shape[0]))
+        return _BiasedWorldModel(0.01)
+
+    _check_world("lv", lv.WORLD, factory, KICKED, SEED, "direct", horizon=100, n_seeds=3)
+    big = 2 * KICKED.subsample_pairs
+    assert seen == [(SEED + k, "direct", n) for k in range(3) for n in (KICKED.subsample_pairs, big)]
+    one = []
+
+    def factory1(ctx, seeds, data):
+        one.append(seeds.run_seed)
+        return _BiasedWorldModel(0.01)
+
+    _check_world("lv", lv.WORLD, factory1, KICKED, SEED, "direct", horizon=100, n_seeds=1)
+    assert one == [SEED, SEED]
+
+
+def test_one_unlucky_seed_cannot_flip_the_decision_the_median_ignores_it():
+    # seed index 1's 50,000-pair model is wildly bad; the other four are equal to the big ones
+    outliers = {(SEED + 1, True): 0.5}
+    result = _check_world(
+        "lv", lv.WORLD, _seeded_factory(0.01, outliers), KICKED, SEED, "x", horizon=100, n_seeds=5
+    )
+    assert result.sufficient is True
+    assert max(result.errs_m) > 100 * min(result.errs_m)  # the outlier really is in the data
+    assert result.err_m == pytest.approx(np.median(result.errs_m)) == pytest.approx(min(result.errs_m))
+
+
+def test_the_median_still_fails_a_world_where_most_seeds_say_not_enough():
+    outliers = {(SEED + k, True): 0.03 for k in (0, 1, 2)}  # 3 of 5 small models far worse than the big ones
+    result = _check_world(
+        "lv", lv.WORLD, _seeded_factory(0.01, outliers), KICKED, SEED, "x", horizon=100, n_seeds=5
+    )
+    assert result.sufficient is False and result.err_m > 5 * result.err_2m
+
+
+def test_the_per_seed_errors_are_reported_with_the_medians():
+    result = _check_world(
+        "lv", lv.WORLD, _seeded_factory(0.01, {}), KICKED, SEED, "x", horizon=100, n_seeds=3
+    )
+    assert result.n_seeds == 3 and len(result.errs_m) == len(result.errs_2m) == 3
+    assert result.err_m == np.median(result.errs_m) and result.err_2m == np.median(result.errs_2m)
+
+
+@pytest.mark.parametrize("bad", [0, -1, 2.0, True, None])
+def test_a_bad_seed_count_is_refused(bad):
+    with pytest.raises(SufficiencyError, match="n_seeds"):
+        _check_world("lv", lv.WORLD, _seeded_factory(0.01, {}), KICKED, SEED, "x", horizon=100, n_seeds=bad)
+
+
+def test_the_kick_split_reports_the_median_over_seeds_too():
+    outliers = {(SEED + 1, True): 0.5}
+    result = _check_world(
+        "lv", lv.WORLD, _seeded_factory(0.01, outliers), KICKED, SEED, "x", horizon=100, n_seeds=5
+    )
+    want = np.mean((0.01 / np.asarray(lv.WORLD.scale)) ** 2)
+    assert result.split_m.error_plain == pytest.approx(want, rel=1e-9)
+    assert result.split_m.n_kick > 0 and result.split_m.error_kick == pytest.approx(want, rel=1e-9)

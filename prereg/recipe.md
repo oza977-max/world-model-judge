@@ -32,6 +32,11 @@ subsample_pairs_fallback: 100000
 kick_pairs: 12500
 heldout_pairs: 10000
 gradcheck_pairs: 64
+heldout_kick_pairs: 1000
+lr_initial: 0.001
+lr_final: 0.00001
+lr_schedule: cosine
+sufficiency_seeds: 5
 sufficiency_tolerance: 0.10
 beta_nll: 0.5
 matching_margin: 0.05
@@ -65,9 +70,24 @@ pendulum_action_max: 1.0
 - `heldout_pairs: 10000` — pairs *not* used for training, kept for the
   sufficiency test and the kick/non-kick report only — never for early
   stopping or tuning.
+- `heldout_kick_pairs: 1000` — exactly this many of the `heldout_pairs` are kick
+  pairs (added 2026-10-04, owner decision D17, before any model was judged).
+  Without it the held-out set held 6 (predator–prey) / 10 (pendulum) kick pairs
+  out of 10,000, because the training quota takes most of the kicks the worlds
+  supply, so the "held-out error split by kick and non-kick" report would have
+  rested on a handful of examples. They are drawn from the kick pairs the
+  training set did not take (predator–prey has about 1,370 of them, the
+  pendulum about 7,400); fewer available → the harness refuses, as for the
+  training quota. Held-out kick pairs are 10% of the held-out set against ~1%
+  (predator–prey) / ~0.2% (pendulum) of evaluation steps — a shift disclosed,
+  not hidden, and the split report names both counts.
 - `gradcheck_pairs: 64` — the one-time backprop check runs on this many
   pairs (models ADR-M3; tolerance 1e-5, backlog A10 ratified).
 - `sufficiency_tolerance: 0.10` — see "Is 50,000 pairs enough?" below.
+- `sufficiency_seeds: 5` — how many training seeds the sufficiency test takes
+  the median over (D18).
+- `lr_initial`, `lr_final`, `lr_schedule` — the cosine learning-rate decay (D18;
+  see "Shared MLP architecture").
 - `beta_nll: 0.5` — Model A's loss weight (β-NLL; see Model A).
 - `lv_kick_rate_per_s`, `lv_action_max`, `pendulum_kick_rate_per_s`,
   `pendulum_action_max` — how often the lever is pulled (kicks per second
@@ -87,9 +107,16 @@ pendulum_action_max: 1.0
   state change / log-spread / mean — unbounded), hand-rolled in NumPy.
 - Weight init: `W ~ U(-1/√fan_in, 1/√fan_in)`, biases 0, drawn from a seeded
   `Generator`.
-- Optimiser: Adam, lr `1e-3`, β₁ `0.9`, β₂ `0.999`, ε `1e-8` (all pinned — two
+- Optimiser: Adam, β₁ `0.9`, β₂ `0.999`, ε `1e-8` (all pinned — two
   implementers picking different defaults would get bit-different weights
-  under NF-1 determinism).
+  under NF-1 determinism), with a **cosine learning-rate decay** from
+  `lr_initial: 0.001` to `lr_final: 0.00001` over the fixed epochs
+  (`lr_schedule: cosine`; the rate is constant within an epoch, epoch `e` of `E`
+  uses `lr_final + ½(lr_initial − lr_final)(1 + cos(π·e/(E−1)))`). Added
+  2026-10-04 (owner decision D18): with a constant rate the final error of the
+  *same* network on the *same* data swung by a factor of 20 from the random seed
+  alone; with the decay every seed lands within a factor of ~1.3
+  (`build/measurements/p3-c03-model-a-real-run.md`, section 5).
 - Gradient check: one finite-difference check of backprop on the fixed
   64-pair batch, run once before training — `direct`'s network under plain
   Gaussian NLL, each ensemble member under MSE; relative-error denominator
@@ -158,7 +185,11 @@ independent of. For each unrigged model, train at `subsample_pairs` and at
 twice that (the same 12,500 kick pairs plus more non-kick pairs, everything
 else identical); held-out error = mean over the held-out pairs of the mean
 over dimensions of `((prediction − truth) / scale)²`. **Enough iff
-`err(50,000) ≤ 1.10 × err(100,000)` for both models.** If either fails,
+`err(50,000) ≤ 1.10 × err(100,000)` for both models, each error being the
+**median over `sufficiency_seeds: 5` training seeds** (seed `k` is the run seed
+plus `k`; added 2026-10-04, owner decision D18 — a single run is partly luck).**
+Both versions are scored on the held-out set of the 100,000-pair build (disjoint
+from both training sets). If either fails,
 `subsample_pairs` becomes 100,000 for both — the only fallback — recorded
 in the revision log below; there is no further iteration. The test never
 reads evaluation trials, skill scores or `matching_margin`.
@@ -206,3 +237,16 @@ reason. Earlier versions stay readable in git history.
   `training_trajectories`, `epochs`, `matching_margin`, `ensemble_members`,
   the architecture, the ensemble rules, the baselines, the uncertainty
   format.
+- **2026-10-04 — one open revision, before any model was judged** (owner
+  decision D17; `build/spec-corrections-backlog.md` A19, A23). Added
+  `heldout_kick_pairs: 1000`. Why: the measured held-out kick share was 6 / 10
+  in 10,000. Unchanged: every other key.
+- **2026-10-04 — a second open revision the same day, before any model was
+  judged** (owner decision D18; `build/spec-corrections-backlog.md` A22, A23).
+  Added `lr_initial`, `lr_final`, `lr_schedule: cosine` (Model A and every
+  ensemble member) and `sufficiency_seeds: 5`; the sufficiency test now uses the
+  median over seeds and the larger build's held-out set. Why: measured on
+  identical data, the ratio err(50,000)/err(100,000) ranged from 0.15 to 39 by
+  seed alone, and error was still falling at 200 epochs. Epochs stay at 100
+  (with the decay, 200 epochs lowered error a little more at twice the cost).
+  Unchanged: every other key.

@@ -55,8 +55,8 @@ def _digest(data) -> str:
 # compares a build with another build of the same code, so none would notice
 # `rng_for` switching generator or entropy order.
 GOLDEN = {
-    "lv": {"states": "510476bc873b", "available": 13874, "held_kicks": 6},
-    "pendulum": {"states": "0aed9d76c286", "available": 19900, "held_kicks": 10},
+    "lv": {"states": "510476bc873b", "available": 13874, "held_kicks": 1000},
+    "pendulum": {"states": "0aed9d76c286", "available": 19900, "held_kicks": 1000},
 }
 
 
