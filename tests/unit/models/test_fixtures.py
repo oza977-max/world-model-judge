@@ -189,7 +189,7 @@ def test_honest_rough_error_bar_is_the_exact_root_sum_of_squares(world):
 
 
 def test_honest_rough_noise_is_standard_normal_in_units_of_two_error_bars(world):
-    ctx, data, models, inner = world
+    ctx, _data, models, inner = world
     s, a = _random_rows(ctx, 20000, 5, widen=1.0)
     m_in, base = inner.predict_batch(s, a)
     m, _ = models["fx-honest-rough"].predict_batch(s, a)
@@ -229,6 +229,17 @@ def test_honest_rough_is_a_function_of_the_row_and_the_seed_only(lv_world):
     other = all_models()["fx-honest-rough"](ctx, SeedSource(SEED + 1, "fx-honest-rough"), data)
     m4, _ = other.predict_batch(s, a)
     assert not np.array_equal(m4, m1)
+    # ...and the *noise itself* differs, not just the network under it
+    inner_a = shared_direct_core(ctx, SeedSource(SEED + 1, "direct"), data)
+    z_other = (m4 - DirectModel(ctx, inner_a).predict_batch(s, a)[0]) / (
+        2.0 * DirectModel(ctx, inner_a).predict_batch(s, a)[1]
+    )
+    inner_b = shared_direct_core(ctx, SeedSource(SEED, "direct"), data)
+    z_here = (m1 - DirectModel(ctx, inner_b).predict_batch(s, a)[0]) / (
+        2.0 * DirectModel(ctx, inner_b).predict_batch(s, a)[1]
+    )
+    assert not np.allclose(z_other, z_here, atol=1e-6)
+    assert abs(np.corrcoef(z_other.ravel(), z_here.ravel())[0, 1]) < 0.3
     # same seed, rebuilt -> identical
     again = all_models()["fx-honest-rough"](ctx, SeedSource(SEED, "fx-honest-rough"), data)
     assert np.array_equal(again.predict_batch(s, a)[0], m1)
