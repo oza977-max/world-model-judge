@@ -18,7 +18,12 @@ import pytest
 from wmj.harness.training import TrainingRecipe, build_training_data, make_world_context
 from wmj.models import direct, fixtures
 from wmj.models.base import SeedSource, WorldContext
-from wmj.models.direct import DirectModel, shared_direct_core, train_direct
+from wmj.models.direct import (
+    DirectModel,
+    DirectTrainingError,
+    shared_direct_core,
+    train_direct,
+)
 from wmj.models.fixtures import (
     NOISE_SIGMA_FACTOR,
     OVERCONFIDENCE_FACTOR,
@@ -438,7 +443,7 @@ def test_a_non_finite_input_is_refused_not_passed_through(lv_world):
     s, a = _random_rows(ctx, 3, 10)
     s[1, 0] = np.nan
     for model in models.values():
-        with pytest.raises(Exception, match="finite|not finite"):
+        with pytest.raises(DirectTrainingError, match="finite"):  # refused by Model A, before any fixture rule
             model.predict_batch(s, a)
 
 
@@ -483,7 +488,7 @@ def test_a_fixture_refuses_to_emit_a_non_finite_forecast_or_a_spread_with_no_wid
         model.predict_batch(np.full((3, 2), 0.5), np.zeros((3, 1)))
 
 
-def test_honest_rough_refuses_a_spread_so_large_its_square_overflows():
+def test_honest_rough_refuses_a_spread_so_large_its_noise_overflows():
     model = FxHonestRough(_stub_ctx(), _Stub([0.0, 0.0], [1e308, 1.0]), key=1)
     with pytest.raises(FixtureError, match="non-finite|no width"), np.errstate(all="ignore"):
         model.predict_batch(np.full((2, 2), 0.5), np.zeros((2, 1)))
@@ -519,3 +524,48 @@ def test_every_fixture_holds_the_very_same_network_as_direct(world):
     _, _, models, inner = world
     for name in NAMES:
         assert models[name]._inner._net is inner._net, name
+
+
+# --- the noise wiring and the key derivation are pinned (same seed => same recorded numbers, MU-8)
+
+
+def test_honest_rough_is_exactly_mean_plus_two_bars_times_the_hashed_row_noise():
+    ctx = _stub_ctx()
+    mean, spread = np.array([0.3, -0.7]), np.array([0.02, 0.5])
+    model = FxHonestRough(ctx, _Stub(mean, spread), key=987654321)
+    s = np.array([[0.1, 0.2], [0.9, 0.4], [0.5, 0.5]])
+    a = np.array([[0.3], [-0.6], [0.0]])
+    got_mean, got_spread = model.predict_batch(s, a)
+    noise = hashed_standard_normal(np.hstack([s, a]), 987654321, 2)  # states first, then actions
+    assert np.array_equal(got_mean, mean + (2.0 * spread) * noise)  # (mean and spread tile over rows)  # plus, not minus
+    assert np.array_equal(got_spread, np.tile(np.sqrt(spread**2 + (2.0 * spread) ** 2), (3, 1)))
+
+
+def test_the_honest_rough_key_comes_from_the_models_own_noise_seed(lv_world):
+    ctx, data, _, _ = lv_world
+    for seed in (SEED, SEED + 7):
+        model = all_models()["fx-honest-rough"](ctx, SeedSource(seed, "fx-honest-rough"), data)
+        expected = int(SeedSource(seed, "fx-honest-rough").rng("noise").integers(0, 2**63 - 1))
+        assert model._key == expected
+    # different seed -> different key; and not derived from another model's name
+    k1 = all_models()["fx-honest-rough"](ctx, SeedSource(SEED, "fx-honest-rough"), data)._key
+    k2 = all_models()["fx-honest-rough"](ctx, SeedSource(SEED + 7, "fx-honest-rough"), data)._key
+    assert k1 != k2
+    assert k1 != int(SeedSource(SEED, "direct").rng("noise").integers(0, 2**63 - 1))
+    assert k1 > 2**8  # the full 63-bit range, not a small one
+
+
+def test_the_core_cache_is_keyed_on_the_worlds_box_scale_and_interval(lv_world):
+    ctx, _, _, _ = lv_world
+    d = build_training_data("lv", lv.WORLD, SeedSource(SEED, None), LV_RECIPE, horizon=100)
+    names = ("world_name", "state_dim", "action_dim", "training_state_box",
+             "training_action_interval", "scale")
+    for field, value in (
+        ("scale", ctx.scale * 2.0),
+        ("training_state_box", ctx.training_state_box + 0.5),
+        ("training_action_interval", ctx.training_action_interval * 2.0),
+    ):
+        changed = WorldContext(**{**{n: getattr(ctx, n) for n in names}, field: value})
+        first = shared_direct_core(ctx, SeedSource(SEED, "direct"), d)
+        assert shared_direct_core(ctx, SeedSource(SEED, "direct"), d) is first  # a real hit
+        assert shared_direct_core(changed, SeedSource(SEED, "direct"), d) is not first, field

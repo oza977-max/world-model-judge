@@ -1030,7 +1030,7 @@ Model A's cosine learning-rate decay (A23), imported from one place
 
 *Where recorded:* `build/handovers/P3-C04.md` (to be written at convergence).
 
-## A25 — fixtures (P3-C05): a shared core, row-hashed noise, one new seed purpose (found building P3-C05)
+### A25 — fixtures (P3-C05): a shared core, row-hashed noise, one new seed purpose (found building P3-C05)
 
 **In plain words:** the spec says each broken model "wraps a copy of Model A, trained
 normally". Building it showed four things the spec should say out loud.
@@ -1057,3 +1057,8 @@ normally". Building it showed four things the spec should say out loud.
    run, Model A's held-out z-std was 0.85–0.90 and the fixture's 0.97–0.98.
 
 *Where recorded:* `build/handovers/P3-C05.md`.
+
+*Two further limits (from review):* because the noise is a function of (state, action),
+an identical repeated input gets identical noise — "honest by construction" holds per
+row, not across repeats of the same input. And `sqrt(spread² + σ²)` is refused loudly
+(not silently wrong) for spreads below ~1.5e-162 or above ~1e154; real spreads are ~1e-3.
