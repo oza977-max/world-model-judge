@@ -1049,7 +1049,7 @@ normally". Building it showed four things the spec should say out loud.
    stream consumed call by call cannot do that. So `fx-honest-rough`'s noise is hashed
    from the row's value and a seed-derived key (integer mixing; sum of twelve uniforms
    ≈ N(0,1); no transcendental function). Its tails are slightly lighter than a true
-   normal (3σ tail 0.21% vs 0.27%). `-0.0` and `0.0` get the same noise.
+   normal (3σ tail 0.20% vs 0.27%). `-0.0` and `0.0` get the same noise.
 3. **A new seed purpose:** `(name, "noise")` for `fx-honest-rough` — add it to the
    spec's purpose list.
 4. **"Honest by construction" needs a qualifier:** `fx-honest-rough`'s error bar is
@@ -1060,5 +1060,7 @@ normally". Building it showed four things the spec should say out loud.
 
 *Two further limits (from review):* because the noise is a function of (state, action),
 an identical repeated input gets identical noise — "honest by construction" holds per
-row, not across repeats of the same input. And `sqrt(spread² + σ²)` is refused loudly
-(not silently wrong) for spreads below ~1.5e-162 or above ~1e154; real spreads are ~1e-3.
+row, not across repeats of the same input. And `fx-honest-rough` refuses (loudly) an inner error bar outside 1e-100 to 1e100
+(`HONEST_SPREAD_RANGE`): beyond it `sqrt(spread² + σ²)` silently loses precision
+(denormals, measured wrong by up to 24% near 1e-162) or overflows. Real error bars are
+~1e-4 to 1e-2, so the guard is unreachable in a real run.

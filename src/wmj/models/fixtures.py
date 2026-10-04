@@ -36,6 +36,9 @@ from wmj.models.registry import register
 
 OVERCONFIDENCE_FACTOR = 0.25  # fx-overconfident: spread x 0.25 (ADR-M4 table)
 NOISE_SIGMA_FACTOR = 2.0  # fx-honest-rough: noise sigma = 2 x the model's spread (ADR-M4 table)
+# fx-honest-rough refuses error bars outside this range: beyond it `sqrt(spread² + σ²)` loses
+# precision silently (denormals) or overflows. Real error bars are ~1e-4 to 1e-2.
+HONEST_SPREAD_RANGE = (1e-100, 1e100)
 
 _MASK = np.uint64(0xFFFFFFFFFFFFFFFF)
 _GOLDEN = np.uint64(0x9E3779B97F4A7C15)
@@ -63,7 +66,7 @@ def hashed_standard_normal(rows: np.ndarray, key: int, n_out: int) -> np.ndarray
     a row does not depend on how many other rows are in the call. The noise is a function
     of the row's *value* (so `-0.0` and `0.0`, which the network cannot tell apart, get the
     same noise). Its tails are a little lighter than a true bell curve (measured: 3σ tail
-    0.21% against 0.27%) — the judge discloses elsewhere that tails are not validated (JU-10).
+    0.20% against 0.27%) — the judge discloses elsewhere that tails are not validated (JU-10).
     """
     rows = np.ascontiguousarray(rows, dtype=np.float64) + 0.0  # + 0.0 turns -0.0 into 0.0
     if rows.ndim != 2:
@@ -148,6 +151,13 @@ class FxHonestRough(_Fixture):
         self._key = int(key)
 
     def _corrupt(self, states, actions, mean, spread):
+        low, high = HONEST_SPREAD_RANGE
+        if not np.all((spread >= low) & (spread <= high)):
+            raise FixtureError(
+                f"fx-honest-rough needs an inner error bar between {low:g} and {high:g} for the exact "
+                f"root-sum-of-squares widening (outside that it loses precision silently); got a range "
+                f"{float(np.min(spread)):g} to {float(np.max(spread)):g}"
+            )
         sigma = NOISE_SIGMA_FACTOR * spread
         noise = sigma * hashed_standard_normal(
             np.hstack([states, actions]), self._key, states.shape[1]

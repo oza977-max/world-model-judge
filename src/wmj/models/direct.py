@@ -287,7 +287,7 @@ class DirectModel:
         return Prediction(mean=means[0].copy(), spread=spreads[0].copy())
 
 
-_LAST_CORE: tuple | None = None  # (training, run_seed, context key, trained network)
+_LAST_CORE: tuple | None = None  # (training, (run_seed, context key), trained network)
 
 
 def _context_key(ctx: WorldContext) -> tuple:

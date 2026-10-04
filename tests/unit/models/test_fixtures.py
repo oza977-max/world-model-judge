@@ -425,6 +425,19 @@ def test_every_fixture_batches_bit_identically_on_both_worlds(world, n):
             assert np.array_equal(spreads[i], p.spread), name
 
 
+def test_predict_hands_back_copies_even_if_the_inner_model_reuses_its_arrays():
+    mean, spread = np.array([[0.5, 0.5]]), np.array([[1.0, 1.0]])
+
+    class Reusing:  # an inner model that returns the very same arrays every time
+        def predict_batch(self, states, actions):
+            return mean, spread
+
+    # overconfident hands the mean through untouched; brittle (at home) hands the spread through
+    for cls in (FxOverconfident, FxBrittle):
+        p = cls(_stub_ctx(), Reusing()).predict(np.full(2, 0.5), np.zeros(1))
+        assert not np.shares_memory(p.mean, mean) and not np.shares_memory(p.spread, spread), cls
+
+
 def test_predict_returns_copies_and_refuses_batches(lv_world):
     ctx, _, models, _ = lv_world
     s, a = _home_mid(ctx)
@@ -488,10 +501,18 @@ def test_a_fixture_refuses_to_emit_a_non_finite_forecast_or_a_spread_with_no_wid
         model.predict_batch(np.full((3, 2), 0.5), np.zeros((3, 1)))
 
 
-def test_honest_rough_refuses_a_spread_so_large_its_noise_overflows():
-    model = FxHonestRough(_stub_ctx(), _Stub([0.0, 0.0], [1e308, 1.0]), key=1)
-    with pytest.raises(FixtureError, match="non-finite|no width"), np.errstate(all="ignore"):
+@pytest.mark.parametrize("bad", [1e308, 1e120, 1e-120, 1e-162, 5e-324])
+def test_honest_rough_refuses_an_error_bar_where_the_widening_is_no_longer_exact(bad):
+    model = FxHonestRough(_stub_ctx(), _Stub([0.0, 0.0], [bad, 1.0]), key=1)
+    with pytest.raises(FixtureError, match="root-sum-of-squares"):
         model.predict_batch(np.full((2, 2), 0.5), np.zeros((2, 1)))
+
+
+@pytest.mark.parametrize("good", [1e-100, 1e-6, 1e-3, 1.0, 1e100])
+def test_honest_rough_accepts_error_bars_in_range_and_the_widening_is_exact(good):
+    model = FxHonestRough(_stub_ctx(), _Stub([0.0, 0.0], [good, 1.0]), key=1)
+    _, spread = model.predict_batch(np.full((2, 2), 0.5), np.zeros((2, 1)))
+    assert np.allclose(spread[:, 0], good * np.sqrt(5.0), rtol=1e-12)
 
 
 @pytest.mark.parametrize(
@@ -537,7 +558,7 @@ def test_honest_rough_is_exactly_mean_plus_two_bars_times_the_hashed_row_noise()
     a = np.array([[0.3], [-0.6], [0.0]])
     got_mean, got_spread = model.predict_batch(s, a)
     noise = hashed_standard_normal(np.hstack([s, a]), 987654321, 2)  # states first, then actions
-    assert np.array_equal(got_mean, mean + (2.0 * spread) * noise)  # (mean and spread tile over rows)  # plus, not minus
+    assert np.array_equal(got_mean, mean + (2.0 * spread) * noise)  # plus, not minus
     assert np.array_equal(got_spread, np.tile(np.sqrt(spread**2 + (2.0 * spread) ** 2), (3, 1)))
 
 
@@ -569,3 +590,11 @@ def test_the_core_cache_is_keyed_on_the_worlds_box_scale_and_interval(lv_world):
         first = shared_direct_core(ctx, SeedSource(SEED, "direct"), d)
         assert shared_direct_core(ctx, SeedSource(SEED, "direct"), d) is first  # a real hit
         assert shared_direct_core(changed, SeedSource(SEED, "direct"), d) is not first, field
+
+
+def test_direct_no_longer_needs_its_own_seed_name_a_recorded_change_a25(lv_world):
+    ctx, data, _, _ = lv_world
+    unnamed = all_models()["direct"](ctx, SeedSource(SEED, None), data)
+    named = all_models()["direct"](ctx, SeedSource(SEED, "direct"), data)
+    s, a = _random_rows(ctx, 10, 11)
+    assert np.array_equal(unnamed.predict_batch(s, a)[0], named.predict_batch(s, a)[0])
