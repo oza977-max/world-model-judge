@@ -1075,9 +1075,9 @@ required choosing both, so they are written down here for the next design review
 1. **Noise level:** a difference of more than `1e-9` of the world's own scale
    (`harness/action_response.py: ACTION_RESPONSE_TOLERANCE`) in any dimension of the guess
    **or of the error bar**. float64 rounding is ~1e-16 relative; the real Model A's action
-   effect is ≥ 5e-2 of scale, so the choice has seven orders of room either side.
+   effect is 2.4e-2 to 5.0e-2 of scale on LV (3.2e-1 at most on the pendulum), so the choice has seven orders of room either side.
 2. **Probes:** 16 start states uniform in the training box from the harness's own stream
-   `("action-response", "states")`, identical for every model; three action levels — the
+   `("action-response", <world>, "states")`, identical for every model; three action levels — the
    low end, the middle and the high end of the trained interval (closed ends included) —
    compared as three pairs. This is a **new seed purpose** for the spec's list.
 3. **Error bar counts as a response** (a model that only changes how sure it is still uses
@@ -1086,7 +1086,7 @@ required choosing both, so they are written down here for the next design review
 4. **The baselines are flagged:** `persistence` and `linear` ignore the action by
    construction, so the check flags both. The spec says every model faces the check; it does
    not say what the verdict does with a baseline's flag — P6-C01 must decide (REMEMBER).
-5. **Known limits (to be stated with any verdict using the check, JU-10 spirit):** three fixed levels can miss a response that is zero at both ends and the middle and non-zero only in between (a pathological shape; every real model responds on all 48 probes); a model with random answers that ignores the action is not flagged (the check does not predict the same input twice; every roster model is deterministic); a response even in the action (e.g. `action²`) is correctly *not* flagged (the middle level differs).
+5. **Known limits (to be stated with any verdict using the check, JU-10 spirit):** three fixed levels can miss a response that is zero at both ends and the middle and non-zero only in between (a pathological shape; every model that uses its action responds on all 48 probes — Model A and the models built on it do; `persistence` and `linear` respond on none, by construction); a model with random answers that ignores the action is not flagged (the check does not predict the same input twice; every roster model is deterministic); a response even in the action (e.g. `action²`) is correctly *not* flagged (the middle level differs).
 6. **`fx-action-blind`'s corruption is "the null action":** Model A's forecast with the
    action replaced by zeros (inside every world's trained interval), after the action has
    been checked for shape and finiteness.

@@ -104,11 +104,11 @@ Build state (2026-10-04): Phases 1–2 done; Phase 3 in progress — P3-C01 (MLP
 core), P3-C02 (registry), P3-C07 (pre-registration tooling), P3-C09 (batched
 worlds, kick generator, `out-large-action` region, kicked benchmark) and P3-C10
 (the one-time lock, six review passes), P3-C06 (training data, five review
-passes) P3-C03 (Model A, ten review passes), P3-C04 (the ensemble, one clean pass) and P3-C05 (the three fixtures, five review passes) done. Round 10
+passes) P3-C03 (Model A, ten review passes), P3-C04 (the ensemble, one clean pass) P3-C05 (the three fixtures, five review passes) and P3-C08 (the action-response check and the fourth fixture, two review passes) done — **Phase 3 build chunks are complete** (the phase-end wiring audit and the progress page remain). Round 10
 design review (the training-recipe revision) closed 2026-09-28: 20 findings,
 owner-triaged, fixes written into requirements v1.4 and the specs, and an
 independent fix-check of those edits converged clean after five passes.
-Next: P3-C08 (the action-response check and the fourth fixture); D17 and D18 were applied on 2026-10-04 (recipe revised, `subsample_pairs` now 100,000) — see `REMEMBER.md` §3. `HANDOVER.md` is a historical record
+Next: the Phase 3 wiring audit, then Phase 4; D17 and D18 were applied on 2026-10-04 (recipe revised, `subsample_pairs` now 100,000) — see `REMEMBER.md` §3. `HANDOVER.md` is a historical record
 up to 2026-08-31.
 
 The dominant risk is not technical: it is that on a clean toy world every model

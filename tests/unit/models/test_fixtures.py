@@ -684,3 +684,10 @@ def test_action_blind_passes_the_inner_states_check_through(lv_world):
     s[1, 0] = np.nan
     with pytest.raises(DirectTrainingError, match="finite"):
         models["fx-action-blind"].predict_batch(s, np.zeros((3, 1)))
+
+
+def test_action_blind_refuses_states_that_are_not_two_dimensional_even_with_matching_actions(lv_world):
+    _, _, models, _ = lv_world
+    for states, actions in ((np.zeros(2), np.zeros((2, 1))), (np.zeros((2, 1, 2)), np.zeros((2, 1)))):
+        with pytest.raises(FixtureError, match="one finite action row"):
+            models["fx-action-blind"].predict_batch(states, actions)

@@ -76,15 +76,15 @@ def test_the_probes_are_in_the_training_region_with_the_ends_included_and_seeded
     assert interval.shape == (1, 2)
     # known answers: the stream name and the way states are drawn are part of the recorded probes
     assert states[:3].tolist() == [
-        [1.660340344706178, -0.11388843145846383],
-        [1.971374566056359, -0.7516906576621993],
-        [2.928286599785886, 2.1018048056809615],
+        [2.7595204723199958, 3.410008027792032],
+        [2.7661886455955926, -2.8066360256350116],
+        [1.9059273060248128, 2.1460571715377394],
     ]
 
 
 @pytest.mark.parametrize("bad", [0, -1, 2.5, True, None])
 def test_the_number_of_probe_states_must_be_a_positive_integer(bad):
-    with pytest.raises(ActionResponseError, match="n_states"):
+    with pytest.raises(ActionResponseError, match="n_states must be a positive Python int"):
         action_response_probes(_ctx(), SEED, bad)
 
 
@@ -398,3 +398,26 @@ def test_an_even_response_is_not_action_blind():
             return Prediction(mean=state + action[0] ** 2, spread=np.ones_like(state))
 
     assert check_action_response(Even(), _ctx(), SEED).action_blind is False
+
+
+def test_one_probe_state_is_allowed_an_int_tolerance_works_and_the_stream_depends_on_the_world():
+    assert action_response_probes(_ctx(), SEED, 1)[0].shape == (1, 2)
+    assert check_action_response(Stub(gain=1.0), _ctx(), SEED, n_states=1).n_probes == 3
+    assert check_action_response(Stub(gain=0.0), _ctx(), SEED, tolerance=0).action_blind is True
+    other = WorldContext(
+        world_name="other", state_dim=2, action_dim=1,
+        training_state_box=np.array([[1.0, 3.0], [-4.0, 4.0]]),
+        training_action_interval=np.array([[-0.5, 0.5]]), scale=np.array([2.0, 5.0]),
+    )
+    assert not np.array_equal(action_response_probes(_ctx(), SEED)[0], action_response_probes(other, SEED)[0])
+
+
+def test_a_world_scale_of_the_wrong_length_is_refused_not_broadcast():
+    ctx = _ctx()
+    short = WorldContext(
+        world_name="stub", state_dim=2, action_dim=1,
+        training_state_box=ctx.training_state_box,
+        training_action_interval=ctx.training_action_interval, scale=np.array([2.0]),
+    )
+    with pytest.raises(ActionResponseError, match="scale"):
+        check_action_response(Stub(gain=1.0), short, SEED)

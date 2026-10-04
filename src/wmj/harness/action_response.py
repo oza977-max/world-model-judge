@@ -31,7 +31,7 @@ scores, no matching margin (MU-6/JU-11).
 
 Known limits (backlog A26, to be stated alongside any verdict that uses it): the three fixed
 action levels can miss a response that is zero at both ends and the middle of the range and
-non-zero only in between (no such model is in the roster; every real model responds on all
+non-zero only in between (no such model is in the roster; every model that uses the action responds on all
 probes); and a model whose answers are random but ignore the action is not flagged, because
 the check does not predict the same input twice (every model in the roster is deterministic).
 
@@ -79,10 +79,10 @@ def action_response_probes(
     (middle, high).
     """
     if isinstance(n_states, bool) or not isinstance(n_states, int) or n_states < 1:
-        raise ActionResponseError(f"n_states must be a positive int, got {n_states!r}")
+        raise ActionResponseError(f"n_states must be a positive Python int, got {n_states!r}")
     box = ctx.training_state_box
     interval = ctx.training_action_interval
-    rng = SeedSource(run_seed, None).rng_for("action-response", "states")
+    rng = SeedSource(run_seed, None).rng_for("action-response", ctx.world_name, "states")
     states = box[:, 0] + (box[:, 1] - box[:, 0]) * rng.random((n_states, box.shape[0]))
     levels = np.stack([interval[:, 0], interval.mean(axis=1), interval[:, 1]])
     pairs = np.array([[0, 2], [0, 1], [1, 2]])
