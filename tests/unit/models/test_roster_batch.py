@@ -38,6 +38,7 @@ def roster():
 
 def test_every_expected_model_is_registered():
     assert {"persistence", "linear", "direct", "ensemble"} <= set(all_models())
+    assert {"fx-overconfident", "fx-honest-rough", "fx-brittle", "fx-action-blind"} <= set(all_models())
 
 
 def test_every_registered_model_declares_whether_it_is_stateless(roster):

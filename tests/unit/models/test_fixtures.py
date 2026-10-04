@@ -30,6 +30,7 @@ from wmj.models.fixtures import (
     NOISE_SIGMA_FACTOR,
     OVERCONFIDENCE_FACTOR,
     FixtureError,
+    FxActionBlind,
     FxBrittle,
     FxHonestRough,
     FxOverconfident,
@@ -47,7 +48,7 @@ PEND_RECIPE = TrainingRecipe(
     training_trajectories=300, subsample_pairs=2000, kick_pairs=60, heldout_pairs=500,
     gradcheck_pairs=16,
 )
-NAMES = ("fx-overconfident", "fx-honest-rough", "fx-brittle")
+NAMES = ("fx-overconfident", "fx-honest-rough", "fx-brittle", "fx-action-blind")
 
 
 def _build(world_name, world, recipe, horizon):
@@ -102,7 +103,7 @@ def test_the_registered_direct_is_not_a_fixture(world):
     assert inner.is_fixture is False
 
 
-@pytest.mark.parametrize("cls", [FxOverconfident, FxHonestRough, FxBrittle])
+@pytest.mark.parametrize("cls", [FxOverconfident, FxHonestRough, FxBrittle, FxActionBlind])
 def test_every_fixture_says_so_in_its_own_words(cls):
     assert "FIXTURE" in (cls.__doc__ or "")
     assert cls.is_fixture is True
@@ -644,3 +645,40 @@ def test_the_range_refusal_message_names_the_range_and_what_was_seen_even_for_no
     assert "the finite values run 1 to 1" in mixed and "some are not finite" in mixed
     assert "none of them is a finite number" in message([np.nan, np.nan])
     assert "none of them is a finite number" in message([np.inf, -np.inf])
+
+
+# --- fx-action-blind (P3-C08, TC-MU3-04) ---------------------------------------------------
+
+
+def test_action_blind_gives_models_a_answer_for_the_null_action_whatever_action_it_is_handed(world):
+    ctx, data, models, inner = world
+    s, a = _random_rows(ctx, 300, 12, widen=3.0)
+    m_in, sp_in = inner.predict_batch(s, np.zeros_like(a))
+    for actions in (a, -a, np.zeros_like(a), np.full_like(a, 7.5)):
+        m, sp = models["fx-action-blind"].predict_batch(s, actions)
+        assert np.array_equal(m, m_in) and np.array_equal(sp, sp_in)
+    # and it is exactly Model A at the null action (the only thing it differs by is the lever)
+    m_a, sp_a = inner.predict_batch(s, np.zeros_like(a))
+    assert np.array_equal(models["fx-action-blind"].predict_batch(s, a)[0], m_a)
+    # a model that really uses its action does differ from the blind one away from the null action
+    m_real, _ = inner.predict_batch(s, a)
+    assert not np.array_equal(m_real, m_in)
+
+
+def test_action_blind_still_refuses_a_malformed_or_non_finite_action(lv_world):
+    ctx, _, models, _ = lv_world
+    model = models["fx-action-blind"]
+    s = np.full((3, 2), 3.0)
+    for bad in (np.zeros((3, 2)), np.zeros((2, 1)), np.zeros(3), np.full((3, 1), np.nan), np.full((3, 1), np.inf)):
+        with pytest.raises(FixtureError, match="one finite action row"):
+            model.predict_batch(s, bad)
+    with pytest.raises(FixtureError, match="one finite action row"):
+        model.predict_batch(np.zeros(2), np.zeros((1, 1)))
+
+
+def test_action_blind_passes_the_inner_states_check_through(lv_world):
+    ctx, _, models, _ = lv_world
+    s = np.full((3, 2), 3.0)
+    s[1, 0] = np.nan
+    with pytest.raises(DirectTrainingError, match="finite"):
+        models["fx-action-blind"].predict_batch(s, np.zeros((3, 1)))

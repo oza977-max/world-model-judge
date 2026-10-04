@@ -1,4 +1,4 @@
-"""wmj.models.fixtures — three deliberately broken test models. FIXTURES, NEVER FINDINGS.
+"""wmj.models.fixtures — four deliberately broken test models. FIXTURES, NEVER FINDINGS.
 
 In plain words: to show the judge catches what it should, we build models that are
 broken on purpose, each in exactly one way, and check the judge notices exactly that
@@ -6,7 +6,8 @@ way. (1) `fx-overconfident` is right but cocky: its guesses are Model A's, its e
 bars are a quarter the size. (2) `fx-honest-rough` is rougher but honest: its guesses
 are jittered, and its error bar is widened by exactly the amount that makes it honest
 again. (3) `fx-brittle` is excellent at home and catastrophic away: inside the region it
-was trained on it is Model A; outside it just says "nothing changes". Each is Model A
+was trained on it is Model A; outside it just says "nothing changes". (4) `fx-action-blind` ignores its action: it gives
+Model A's answer for "no push" whatever push it is handed. Each is Model A
 itself — the very same trained network, bit for bit — plus that one change (models
 spec ADR-M4).
 
@@ -101,6 +102,12 @@ class _Fixture:
     def reset(self) -> None:
         """Stateless: nothing to clear between rollouts."""
 
+    def _base_forecast(
+        self, states: np.ndarray, actions: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Model A's forecast for these inputs (the action-blind fixture overrides this)."""
+        return self._inner.predict_batch(states, actions)
+
     def _corrupt(
         self, states: np.ndarray, actions: np.ndarray, mean: np.ndarray, spread: np.ndarray
     ) -> tuple[np.ndarray, np.ndarray]:
@@ -110,7 +117,7 @@ class _Fixture:
         self, states: np.ndarray, actions: np.ndarray
     ) -> tuple[np.ndarray, np.ndarray]:
         """Row `i` is bit-identical to `predict(states[i], actions[i])` (TC-MU1-04)."""
-        mean, spread = self._inner.predict_batch(states, actions)
+        mean, spread = self._base_forecast(states, actions)
         states = np.asarray(states, dtype=float)
         actions = np.asarray(actions, dtype=float)
         mean, spread = self._corrupt(states, actions, mean, spread)
@@ -190,6 +197,29 @@ class FxBrittle(_Fixture):
         return np.where(at_home[:, None], mean, states), spread
 
 
+class FxActionBlind(_Fixture):
+    """FIXTURE — ignores its action: Model A's forecast for the null action, whatever action
+    it is given (MU-3's fourth failure mode, TC-MU3-04). The action is checked (right shape,
+    finite) and then thrown away, so the failure is exactly "never uses the lever" — the thing
+    the harness's action-response check exists to catch."""
+
+    name = "fx-action-blind"
+
+    def _base_forecast(self, states, actions):
+        states = np.asarray(states, dtype=float)
+        actions = np.asarray(actions, dtype=float)
+        rows = states.shape[0] if states.ndim == 2 else -1  # -1: no real action array can match
+        if actions.shape != (rows, self._ctx.action_dim) or not np.all(np.isfinite(actions)):
+            raise FixtureError(
+                f"fx-action-blind needs one finite action row of width {self._ctx.action_dim} per state; "
+                f"got states {tuple(states.shape)} and actions {tuple(actions.shape)}"
+            )
+        return self._inner.predict_batch(states, np.zeros_like(actions))
+
+    def _corrupt(self, states, actions, mean, spread):
+        return mean, spread
+
+
 def _core(ctx: WorldContext, seeds: SeedSource, training: TrainingData) -> DirectModel:
     return DirectModel(ctx, shared_direct_core(ctx, seeds, training))
 
@@ -210,6 +240,12 @@ def fx_brittle_factory(ctx, seeds: SeedSource, training: TrainingData) -> FxBrit
     return FxBrittle(ctx, _core(ctx, seeds, training))
 
 
+def fx_action_blind_factory(ctx, seeds: SeedSource, training: TrainingData) -> FxActionBlind:
+    """FIXTURE: Model A's shared core, fed the null action whatever it is asked."""
+    return FxActionBlind(ctx, _core(ctx, seeds, training))
+
+
 register("fx-overconfident", fx_overconfident_factory)
 register("fx-honest-rough", fx_honest_rough_factory)
 register("fx-brittle", fx_brittle_factory)
+register("fx-action-blind", fx_action_blind_factory)
