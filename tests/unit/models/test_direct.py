@@ -801,3 +801,46 @@ def test_predictions_are_faithful_at_the_error_bar_sizes_the_real_recipe_reaches
     exp_means, exp_spreads = _expected_predictions(ctx, net, h.state, h.action)
     assert np.array_equal(means, exp_means) and np.array_equal(spreads, exp_spreads)
     assert abs(float(np.median(np.log(spreads))) - target_median_log_sigma) < 1e-6
+
+
+# --- independent review, P3-C03 pass 9: the sizes the pendulum's kicks produce ---
+
+
+@pytest.mark.parametrize("shift", [1.0, -1.5, 2.0])
+def test_predictions_are_faithful_at_the_change_sizes_a_kicked_pendulum_reaches(pend, shift):
+    """The real pendulum net predicts changes of ~1.0 for a push of 1 and ~2.0 for a push of 2
+    (out-large-action); a clip on the predicted change would hide that. Shift the change
+    outputs to those sizes and require bit-equality with the network's own output."""
+    import copy
+
+    ctx, data, net0 = pend
+    net = copy.deepcopy(net0)
+    net.layers[-1][1][:4] += shift
+    h = data.heldout_pairs
+    means, spreads = DirectModel(ctx, net).predict_batch(h.state, h.action)
+    exp_means, exp_spreads = _expected_predictions(ctx, net, h.state, h.action)
+    assert np.array_equal(means, exp_means) and np.array_equal(spreads, exp_spreads)
+    assert np.abs(means - h.state).max() > 0.9
+
+
+def test_training_targets_are_not_clipped_at_the_size_of_a_kick():
+    """Train on pairs whose change is up to 2.0 in one dimension: a clip on the targets would
+    stop the network ever learning the size of a large push."""
+    from wmj.models.base import Pairs
+
+    rng = np.random.default_rng(0)
+    n = 300
+    ctx = make_world_context("pendulum", pendulum.WORLD)
+    s = rng.normal(0, 0.3, (n, 4))
+    a = rng.uniform(-1, 1, (n, 1))
+    ns = s.copy()
+    ns[:, 2] += 2.0 * a[:, 0]
+    pairs = Pairs(s, a, ns, np.abs(a[:, 0]) > 0)
+    td = TrainingData(
+        states=np.zeros((2, 4, 4)), actions=np.zeros((2, 3, 1)), train_pairs=pairs,
+        gradcheck_index=np.arange(16, dtype=np.int64),
+    )
+    net = train_direct(ctx, _seeds(), td, epochs=60, batch_size=64)
+    means, _ = DirectModel(ctx, net).predict_batch(s, a)
+    assert np.abs(means[:, 2] - ns[:, 2]).max() < 0.5  # it learned the lever...
+    assert np.abs(means[:, 2] - s[:, 2]).max() > 1.5  # ...including changes near 2.0

@@ -436,3 +436,49 @@ def test_four_dimensional_error_uses_every_dimension_and_its_own_scale():
     assert held_out_error(means, pairs, scale) == pytest.approx((2 + 1 + 1) / 12)
     split = kick_split_error(means, pairs, scale)
     assert split.error_kick == pytest.approx(2 / 4) and split.error_plain == pytest.approx(1 / 4)
+
+
+# --- independent review, P3-C03 pass 9: the error sizes the real recipe produces ---
+
+
+@pytest.mark.parametrize(
+    ("bias_small", "bias_big", "expected"),
+    [
+        (8.7e-4, 3.5e-4, False),  # errors ~8.4e-8 vs ~1.4e-8 (the real pendulum result): not enough
+        (2.8e-4, 1.0e-4, False),  # ~8.7e-9 vs ~1.1e-9
+        (3.0e-4, 3.0e-4, True),  # equal errors: enough
+        (3.0e-4, 2.9e-4, True),  # 3% apart: enough
+    ],
+)
+def test_the_decision_is_correct_at_the_error_sizes_the_real_recipe_produces(bias_small, bias_big, expected):
+    """Real held-out errors are 1e-8 to 2e-7; a 'minimum error' floor or an isclose-style
+    tolerance in the rule would flip exactly these decisions."""
+    r = check_world("lv", lv.WORLD, _bias_by_size(bias_small, bias_big), KICKED, SEED, "x", horizon=100)
+    assert 1e-10 < r.err_2m < 3e-7 and r.sufficient is expected
+
+
+def test_the_kick_split_is_the_exact_mean_of_each_group_not_a_median_or_a_prefix():
+    errs_kick = [0.0, 1.0, 1.0, 4.0, 9.0, 25.0]  # mean 6.667, median 2.5
+    errs_plain = [1.0, 7.0]
+    nxt = np.zeros((8, 2))
+    means = np.zeros((8, 2))
+    means[:, 0] = np.sqrt(np.array(errs_kick + errs_plain) * 2) * SCALE[0]  # row error = e
+    kicks = np.array([True] * 6 + [False] * 2)
+    pairs = Pairs(np.zeros((8, 2)), np.where(kicks[:, None], 0.05, 0.0), nxt, kicks)
+    split = kick_split_error(means, pairs, SCALE)
+    assert split.error_kick == pytest.approx(np.mean(errs_kick))
+    assert split.error_plain == pytest.approx(np.mean(errs_plain))
+    assert split.n_kick == 6 and split.n_plain == 2
+
+
+def test_the_kick_split_uses_every_row_of_a_large_held_out_set():
+    n = 3000
+    errs = np.arange(n, dtype=float) / n  # distinct, increasing
+    means = np.zeros((n, 2))
+    means[:, 0] = np.sqrt(errs * 2) * SCALE[0]
+    kicks = np.zeros(n, dtype=bool)
+    kicks[::7] = True
+    pairs = Pairs(np.zeros((n, 2)), np.where(kicks[:, None], 0.05, 0.0), np.zeros((n, 2)), kicks)
+    split = kick_split_error(means, pairs, SCALE)
+    assert split.error_kick == pytest.approx(errs[kicks].mean())
+    assert split.error_plain == pytest.approx(errs[~kicks].mean())
