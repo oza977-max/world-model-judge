@@ -456,7 +456,7 @@ def test_copying_and_pickling_go_back_through_the_checks_and_keep_the_arrays_rea
 
 def test_equality_and_hashing_are_by_identity_so_comparing_inputs_never_crashes():
     a, b = make_input(), make_input()
-    assert a != b and not (a == b)  # equality is identity: comparing two inputs never raises
+    assert a != b and (a == b) is False  # equality is identity: comparing two inputs never raises
     assert len({a, b}) == 2 and len({a.predictions, b.predictions}) == 2
     assert forecasts(1) != forecasts(1)  # identical content, still not "equal": compare the arrays explicitly
 
