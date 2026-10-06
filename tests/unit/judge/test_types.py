@@ -14,7 +14,14 @@ import dataclasses
 import numpy as np
 import pytest
 
-from tests.unit.judge._builders import D, H, N, forecasts, judge_input_kwargs, make_input
+from tests.unit.judge._builders import (
+    D,
+    H,
+    N,
+    forecasts,
+    judge_input_kwargs,
+    make_input,
+)
 from wmj.judge.errors import JudgeInputError, MissingBaselineError
 from wmj.judge.types import (
     Bands,
@@ -219,11 +226,11 @@ def test_tasks_must_be_valid_unique_and_fit_inside_the_rollouts():
 def test_thresholds_bands_must_nest_and_hedge_vector_must_match_the_quantities():
     Bands(n=200, p=0.1, green=(12, 29), amber_outer=(8, 35))
     for kwargs in (
-        dict(green=(12, 29), amber_outer=(13, 35)),  # amber starts inside green
-        dict(green=(12, 29), amber_outer=(8, 28)),  # amber ends inside green
-        dict(green=(30, 29), amber_outer=(8, 35)),  # green inverted
-        dict(green=(12, 29), amber_outer=(8, 201)),  # beyond n
-        dict(green=(12, 29), amber_outer=(-1, 35)),
+        {"green": (12, 29), "amber_outer": (13, 35)},  # amber starts inside green
+        {"green": (12, 29), "amber_outer": (8, 28)},  # amber ends inside green
+        {"green": (30, 29), "amber_outer": (8, 35)},  # green inverted
+        {"green": (12, 29), "amber_outer": (8, 201)},  # beyond n
+        {"green": (12, 29), "amber_outer": (-1, 35)},
     ):
         with pytest.raises(JudgeInputError, match="nest"):
             Bands(n=200, p=0.1, **kwargs)
