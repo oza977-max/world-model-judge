@@ -1122,3 +1122,17 @@ consumed by trials) cannot be verified until P6-C01 and are re-audited then.
 5. The GVM `_module_audit.py` helper assumes `scripts/_shared/*.py` and stem names; this project's
    `src/wmj/<package>/<module>.py` layout makes it flag 28 false positives (e.g. every `base.py`), so
    the audit was done by hand above. A project-specific audit (dotted module names) is worth a P6 chunk.
+
+### A28 — judge input/verdict: choices made building P4-C01 that the spec should state (found 2026-10-06)
+
+**In plain words:** the judge spec describes the input and the verdict in prose and one example.
+Building the two doors in code needed a few exact rules; they are written here for the next review.
+
+1. **`JudgeInput.world`** (the world's name) is not in §4's "JudgeInput (complete)" list, yet `Verdict.world` needs it. Added as the one free-text field a run must supply, alongside region and task names. No field names a model.
+2. **The verdict's entries are closed schemas.** Every entry of every group has the spec's own fields and no others (unknown fields are refused so identity cannot ride along); only `climatology.switch_step` / `agreement_mean_abs_z` / `agrees` and `trust_horizons.natural_units` may be null; `exceptions.bands` is optional. P4-C02..C05 must produce exactly these (`verdict.py: ENTRY_FIELDS`).
+3. **Completeness across groups:** skill, calibration, sharpness, climatology, trust_horizons, exceptions and trials must cover the same (task, region) pairs, and `error_vs_horizon` the same regions; `exceptions.n_trials` must equal the number of trial points, `observed` the sum of their flags (TC-JU9-03 enforced at assembly as well as in P4-C04).
+4. **A built verdict is read-only** (frozen maps, tuples); copying or pickling a `JudgeInput` goes back through every check.
+5. **Equality on judge input types is identity**, never value (arrays would make `==` raise); label-swap tests (TC-JU1-02, P4-C06) must compare the produced verdicts' `to_dict()`, not the inputs.
+6. **What no type can prevent:** a person writing a model's name into a free-text field (world, region, task name). The harness supplies only these three; a test pins that these are the only text fields.
+
+*Where recorded:* `build/handovers/P4-C01.md`.

@@ -280,3 +280,198 @@ def test_numpy_integer_and_float_inputs_are_accepted_and_normalised_to_python_nu
     assert type(task.tolerance) is float and type(task.horizon) is int
     bands = Bands(n=np.int64(200), p=0.1, green=(np.int64(12), 29), amber_outer=(8, 35))
     assert type(bands.n) is int and bands.green == (12, 29)
+
+
+# --- review pass 1 ----------------------------------------------------------------------------------
+
+EXACT_FIELDS = {
+    RegionLabel: ["region_name", "axis"],
+    TaskSpec: ["name", "kind", "tolerance", "horizon"],
+    Forecasts: ["mean", "spread"],
+    Bands: ["n", "p", "green", "amber_outer"],
+    Thresholds: ["bands", "sharpness_hedge_threshold", "agreement_threshold"],
+    ClimatologyBin: ["invariant_lo", "invariant_hi", "mean", "sd", "n_samples"],
+    RegionClimatology: ["region_name", "bins"],
+    RegionCurve: ["region_name", "curve"],
+}
+
+
+@pytest.mark.parametrize("cls", list(EXACT_FIELDS))
+def test_tc_ju1_01_every_judge_input_type_has_exactly_its_documented_fields(cls):
+    assert [f.name for f in dataclasses.fields(cls)] == EXACT_FIELDS[cls]
+
+
+def test_the_only_text_fields_anywhere_in_the_input_are_the_world_region_task_names_kind_and_axis():
+    text_fields = set()
+    for cls in (JudgeInput, *EXACT_FIELDS):
+        for f in dataclasses.fields(cls):
+            if "str" in str(f.type):
+                text_fields.add((cls.__name__, f.name))
+    assert text_fields == {
+        ("JudgeInput", "world"), ("RegionLabel", "region_name"), ("RegionLabel", "axis"), ("TaskSpec", "name"),
+        ("TaskSpec", "kind"), ("RegionClimatology", "region_name"), ("RegionCurve", "region_name"),
+    }
+
+
+def test_a_subclass_or_a_str_subclass_cannot_carry_extra_state_into_the_judge():
+    class F(Forecasts):
+        pass
+
+    class S(str):
+        pass
+
+    base = forecasts(1)
+    with pytest.raises(JudgeInputError, match="predictions must be a Forecasts"):
+        make_input(predictions=F(base.mean, base.spread))
+    for kwargs in ({"world": S("lv")},):
+        with pytest.raises(JudgeInputError, match="plain non-blank string"):
+            make_input(**kwargs)
+    with pytest.raises(JudgeInputError, match="plain non-blank string"):
+        TaskSpec(S("a"), "control", 0.1, 3)
+    with pytest.raises(JudgeInputError, match="plain non-blank string"):
+        RegionLabel(S("r"), None)
+    with pytest.raises(JudgeInputError, match="plain non-blank string"):
+        RegionCurve(S("r"), np.zeros(3))
+    with pytest.raises(JudgeInputError, match="plain non-blank string"):
+        RegionClimatology(S("r"), (ClimatologyBin(0.0, 1.0, np.zeros(2), np.ones(2), 3),))
+    with pytest.raises(JudgeInputError, match="axis"):
+        RegionLabel("r", S("state"))
+    with pytest.raises(JudgeInputError, match="thresholds.bands"):
+        class B(Bands):
+            pass
+
+        Thresholds(B(n=200, p=0.1, green=(12, 29), amber_outer=(8, 35)), np.ones(2), 1.0)
+    with pytest.raises(JudgeInputError, match="ClimatologyBin"):
+        class CB(ClimatologyBin):
+            pass
+
+        RegionClimatology("r", (CB(0.0, 1.0, np.zeros(2), np.ones(2), 3),))
+
+
+@pytest.mark.parametrize("name", ["", "  ", "\t"])
+def test_blank_names_are_refused_everywhere(name):
+    with pytest.raises(JudgeInputError):
+        make_input(world=name)
+    with pytest.raises(JudgeInputError):
+        TaskSpec(name, "control", 0.1, 3)
+    with pytest.raises(JudgeInputError):
+        RegionLabel(name, None)
+    with pytest.raises(JudgeInputError):
+        RegionCurve(name, np.zeros(3))
+    with pytest.raises(JudgeInputError):
+        RegionClimatology(name, (ClimatologyBin(0.0, 1.0, np.zeros(2), np.ones(2), 3),))
+
+
+def test_every_guard_inside_the_small_types_can_fail():
+    with pytest.raises(JudgeInputError, match="non-empty in every dimension"):
+        make_input(outcomes=np.zeros((0, H, D)))
+    with pytest.raises(JudgeInputError, match="same number of quantities"):
+        RegionClimatology("r", (
+            ClimatologyBin(0.0, 1.0, np.zeros(2), np.ones(2), 3),
+            ClimatologyBin(1.0, 2.0, np.zeros(3), np.ones(3), 3),
+        ))
+    for pair in ((12,), (12, 29, 30), "ab", None, 5):
+        with pytest.raises(JudgeInputError, match="pair"):
+            Bands(n=200, p=0.1, green=pair, amber_outer=(8, 35))
+        with pytest.raises(JudgeInputError, match="pair"):
+            Bands(n=200, p=0.1, green=(12, 29), amber_outer=pair)
+    with pytest.raises(JudgeInputError, match="thresholds.bands must be a Bands"):
+        Thresholds("bands", np.ones(2), 1.0)
+    with pytest.raises(JudgeInputError, match="non-empty vector"):
+        Thresholds(Bands(n=200, p=0.1, green=(12, 29), amber_outer=(8, 35)), np.array([]), 1.0)
+    with pytest.raises(JudgeInputError, match="at least one ClimatologyBin"):
+        RegionClimatology("r", ())
+    with pytest.raises(JudgeInputError, match="at least one ClimatologyBin"):
+        RegionClimatology("r", ("bin",))
+
+
+def test_boundary_values_are_accepted_exactly_at_the_edge():
+    TaskSpec("a", "planning", 1e-12, 1)
+    Bands(n=1, p=0.5, green=(0, 1), amber_outer=(0, 1))
+    Bands(n=200, p=0.1, green=(12, 12), amber_outer=(12, 12))  # every edge may coincide
+    Bands(n=200, p=0.1, green=(12, 29), amber_outer=(12, 29))
+    Bands(n=200, p=0.1, green=(0, 29), amber_outer=(0, 200))
+    ClimatologyBin(0.0, 1e-9, np.zeros(1), np.ones(1), 1)
+    RegionCurve("r", np.array([0.0, 0.0]))  # two points, zero allowed (a distance is never negative)
+    Thresholds(Bands(n=200, p=0.1, green=(12, 29), amber_outer=(8, 35)), np.array([1e-9]), 1e-9)
+
+
+def test_values_are_normalised_to_plain_tuples_and_numbers_and_locked():
+    inp = make_input(
+        region_labels=list(judge_input_kwargs()["region_labels"]),
+        divergence_curves=list(judge_input_kwargs()["divergence_curves"]),
+        climatology=list(judge_input_kwargs()["climatology"]),
+        tasks=list(judge_input_kwargs()["tasks"]),
+    )
+    for field in (inp.region_labels, inp.divergence_curves, inp.climatology, inp.tasks):
+        assert type(field) is tuple
+    assert type(inp.climatology[0].bins) is tuple
+    bands = Bands(n=200, p=0.1, green=[12, 29], amber_outer=[8, 35])
+    assert bands.green == (12, 29) and type(bands.green) is tuple and type(bands.amber_outer) is tuple
+    cb = inp.climatology[0].bins[0]
+    assert cb.sd.flags.writeable is False and type(cb.n_samples) is int
+    reg = RegionClimatology("r", [ClimatologyBin(0.0, 1.0, np.zeros(2), np.ones(2), np.int64(7))])
+    assert type(reg.bins) is tuple and type(reg.bins[0].n_samples) is int
+
+
+def test_no_silent_coercion_of_the_wrong_kind_of_number():
+    for green in ((12.9, 29), ("12", "29"), (True, 29), (None, 29), (float("nan"), 29), (float("inf"), 29)):
+        with pytest.raises(JudgeInputError):
+            Bands(n=200, p=0.1, green=green, amber_outer=(8, 35))
+    for bad in (np.full((N, H), 1.9), np.full((N, H), "1"), np.full((N, H), True), np.full((N, H), np.inf)):
+        with pytest.raises(JudgeInputError):
+            make_input(invariant_bins=bad)
+    with pytest.raises(JudgeInputError, match="too large"):
+        make_input(invariant_bins=np.full((N, H), 2**63, dtype=np.uint64))
+    for outcomes in (np.full((N, H, D), "1.0"), np.full((N, H, D), True), np.full((N, H, D), 1j)):
+        with pytest.raises(JudgeInputError, match="numbers"):
+            make_input(outcomes=outcomes)
+    for lo, hi in (("0", "1"), (None, 1.0), (True, 2.0), (0.0, "1")):
+        with pytest.raises(JudgeInputError, match="must be a number"):
+            ClimatologyBin(lo, hi, np.zeros(2), np.ones(2), 3)
+    for tol in (10**400, 10**308 * 10):
+        with pytest.raises(JudgeInputError, match="too large"):
+            TaskSpec("a", "control", tol, 3)
+    for n in (2.5, "3", None, True):
+        with pytest.raises(JudgeInputError, match="whole number"):
+            ClimatologyBin(0.0, 1.0, np.zeros(2), np.ones(2), n)
+
+
+def test_copying_and_pickling_go_back_through_the_checks_and_keep_the_arrays_read_only():
+    import copy
+    import pickle
+
+    inp = make_input()
+    for clone in (copy.deepcopy(inp), pickle.loads(pickle.dumps(inp)), copy.copy(inp)):
+        assert clone is not inp
+        assert clone.world == inp.world and np.array_equal(clone.outcomes, inp.outcomes)
+        for arr in (clone.outcomes, clone.predictions.mean, clone.persistence.spread, clone.linear.mean,
+                    clone.invariant_bins, clone.divergence_curves[0].curve, clone.thresholds.sharpness_hedge_threshold,
+                    clone.climatology[0].bins[0].mean, clone.climatology[0].bins[0].sd):
+            assert arr.flags.writeable is False
+    for part in (inp.predictions, inp.thresholds, inp.climatology[0].bins[0], inp.divergence_curves[0]):
+        clone = copy.deepcopy(part)
+        assert type(clone) is type(part)
+
+
+def test_equality_and_hashing_are_by_identity_so_comparing_inputs_never_crashes():
+    a, b = make_input(), make_input()
+    assert a != b and not (a == b)  # equality is identity: comparing two inputs never raises
+    assert len({a, b}) == 2 and len({a.predictions, b.predictions}) == 2
+    assert forecasts(1) != forecasts(1)  # identical content, still not "equal": compare the arrays explicitly
+
+
+def test_the_smallest_possible_input_one_trial_one_step_one_quantity_is_accepted():
+    bin_ = ClimatologyBin(0.0, 1.0, np.zeros(1), np.ones(1), 1)
+    inp = JudgeInput(
+        world="w", dt=0.1, natural_cycle_length=None,
+        predictions=forecasts(0, n=1, h=1, d=1), outcomes=np.zeros((1, 1, 1)),
+        persistence=forecasts(1, n=1, h=1, d=1), linear=forecasts(2, n=1, h=1, d=1),
+        region_labels=(RegionLabel("r", None),),
+        divergence_curves=(RegionCurve("r", np.array([0.0, 1.0])),),
+        climatology=(RegionClimatology("r", (bin_,)),),
+        invariant_bins=np.zeros((1, 1), dtype=int),
+        tasks=(TaskSpec("t", "control", 0.1, 1),),
+        thresholds=Thresholds(Bands(n=200, p=0.1, green=(12, 29), amber_outer=(8, 35)), np.ones(1), 1.0),
+    )
+    assert inp.outcomes.shape == (1, 1, 1)

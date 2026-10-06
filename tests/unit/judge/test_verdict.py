@@ -20,7 +20,7 @@ from wmj.judge.errors import VerdictIncompleteError
 from wmj.judge.limitations import JU10_DISCLOSURES, NOT_TESTED
 from wmj.judge.verdict import BLOCK_KEYS, VERDICT_SCHEMA, Verdict, assemble_verdict
 
-NINE_GROUPS = [
+TEN_FIELDS = [  # the nine JU-9 groups (calibration and sharpness count as one) as ten record fields
     "skill", "error_vs_horizon", "calibration", "sharpness", "exceptions", "trials", "climatology",
     "trust_horizons", "not_tested", "limitations",
 ]
@@ -35,7 +35,7 @@ def build(blocks=None, world="lv"):
 
 def test_tc_ju9_01_a_complete_verdict_has_every_group_and_nothing_that_identifies_a_model():
     record = build().to_dict()
-    assert list(record) == ["schema", "world"] + NINE_GROUPS
+    assert list(record) == ["schema", "world"] + TEN_FIELDS
     assert record["schema"] == VERDICT_SCHEMA == "wmj-verdict/1"
     assert record["limitations"] == list(JU10_DISCLOSURES) and record["not_tested"] == list(NOT_TESTED)
 
@@ -191,11 +191,13 @@ def test_suffix_encoded_axes_are_banned_anywhere_in_a_group(suffix):
         build(blocks)
 
 
-def test_a_key_that_merely_contains_in_or_out_is_fine():
-    blocks = blocks_copy()
-    blocks["calibration"]["per_task"][0]["input_count"] = 4
-    blocks["calibration"]["per_task"][0]["outcome_rate"] = 0.1
-    build(blocks)
+def test_a_key_that_merely_contains_in_or_out_is_fine_only_a_trailing_suffix_is_banned():
+    from wmj.judge.verdict import _plain
+
+    assert _plain({"input_count": 1, "outcome_rate": 0.1, "in_range": 2, "n_trials": 3}, "x")
+    for bad in ("coverage_in", "coverage_out", "x_in_region", "x_out_region"):
+        with pytest.raises(VerdictIncompleteError, match="suffix"):
+            _plain({bad: 1}, "x")
 
 
 # --- error_vs_horizon's own contract -----------------------------------------------------------
@@ -257,6 +259,7 @@ def test_tc_ju9_03_property_holds_over_many_random_verdicts():
         trial = blocks["trials"]["per_task"][0]
         trial.update(outcome_distance=[0.1] * n, band_lo=[0.0] * n, band_hi=[0.2] * n, is_exception=flags)
         blocks["exceptions"]["per_task"][0]["observed"] = sum(flags)
+        blocks["exceptions"]["per_task"][0]["n_trials"] = n
         record = build(blocks).to_dict()
         for e in record["exceptions"]["per_task"]:
             matching = [t for t in record["trials"]["per_task"]
@@ -276,14 +279,14 @@ def test_exceptions_and_trials_must_pair_up_one_to_one():
 
 
 def test_observed_must_be_a_whole_number_and_is_exception_must_be_booleans():
-    for bad in (2.0, "2", True, None):
+    for bad in (2.0, "2", True, None, -1):
         blocks = blocks_copy()
         blocks["exceptions"]["per_task"][0]["observed"] = bad
-        with pytest.raises(VerdictIncompleteError, match="whole number"):
+        with pytest.raises(VerdictIncompleteError, match="observed must be nonnegint"):
             build(blocks)
     blocks = blocks_copy()
     blocks["trials"]["per_task"][0]["is_exception"] = [1, 0, 1, 0]
-    with pytest.raises(VerdictIncompleteError, match="true/false"):
+    with pytest.raises(VerdictIncompleteError, match="is_exception must be boollist"):
         build(blocks)
 
 
@@ -338,3 +341,327 @@ def test_the_verdict_holds_its_own_copy_and_to_dict_returns_fresh_copies():
     out["limitations"].append("extra")
     assert verdict.skill["per_task_region"][0]["crps"] == 0.03 and len(verdict.limitations) == 7
     assert verdict.to_dict() != out
+
+
+# --- review pass 1: a built verdict is read-only (I1) --------------------------------------------
+
+
+def test_a_built_verdict_cannot_be_edited_into_an_incomplete_or_inconsistent_one():
+    v = build()
+    with pytest.raises(TypeError):
+        v.skill["extra"] = 1
+    with pytest.raises(TypeError):
+        v.skill.clear()
+    with pytest.raises(TypeError):
+        del v.skill["per_task_region"]
+    with pytest.raises(TypeError):
+        v.skill.update({"x": 1})
+    with pytest.raises(TypeError):
+        v.skill.pop("per_task_region")
+    with pytest.raises(TypeError):
+        v.skill.popitem()
+    with pytest.raises(TypeError):
+        v.skill.setdefault("x", 1)
+    with pytest.raises(TypeError):
+        v.skill["per_task_region"][0]["crps"] = 5.0  # entries are read-only too
+    with pytest.raises(TypeError):
+        v.skill["per_task_region"][0] |= {"x": 1}
+    with pytest.raises(TypeError):
+        v.trials["per_task"][0]["is_exception"][0] = False  # lists became tuples
+    with pytest.raises(AttributeError):
+        v.calibration["per_task"].clear()
+    with pytest.raises(AttributeError):
+        v.trials["per_task"][0]["is_exception"].append(True)
+    assert v.to_dict() == build().to_dict()  # nothing changed
+
+
+def test_the_frozen_maps_survive_copying_and_pickling_still_read_only():
+    import copy
+    import pickle
+
+    v = build()
+    for clone in (copy.deepcopy(v.skill), pickle.loads(pickle.dumps(v.skill))):
+        assert clone == v.skill
+        with pytest.raises(TypeError):
+            clone["x"] = 1
+
+
+def test_a_verdict_can_be_rebuilt_from_its_own_groups_and_is_checked_again():
+    v = build()
+    again = Verdict(world=v.world, skill=v.skill, error_vs_horizon=v.error_vs_horizon, calibration=v.calibration,
+                    sharpness=v.sharpness, exceptions=v.exceptions, trials=v.trials, climatology=v.climatology,
+                    trust_horizons=v.trust_horizons, not_tested=v.not_tested, limitations=v.limitations)
+    assert again.to_dict() == v.to_dict()
+    with pytest.raises(VerdictIncompleteError):
+        Verdict(world=v.world, skill={}, error_vs_horizon=v.error_vs_horizon, calibration=v.calibration,
+                sharpness=v.sharpness, exceptions=v.exceptions, trials=v.trials, climatology=v.climatology,
+                trust_horizons=v.trust_horizons, not_tested=v.not_tested, limitations=v.limitations)
+
+
+def test_limitations_and_not_tested_are_stored_as_tuples_and_the_class_is_slotted():
+    blocks = blocks_copy()
+    v = Verdict(world="lv", **blocks, not_tested=list(NOT_TESTED), limitations=list(JU10_DISCLOSURES))
+    assert type(v.limitations) is tuple and type(v.not_tested) is tuple
+    assert not hasattr(v, "__dict__")
+
+
+# --- review pass 1: every entry has exactly the spec's fields, nothing else (I2) ----------------
+
+
+ENTRY_FIELDS_UNDER_TEST = {
+    "skill": ("per_task_region", ["vs_persistence", "vs_linear", "crps"]),
+    "error_vs_horizon": ("per_region", ["steps", "median_error", "divergence_reference"]),
+    "calibration": ("per_task", ["levels", "coverage", "n_trials", "per_dimension"]),
+    "sharpness": ("per_task", ["mean_width_90"]),
+    "exceptions": ("per_task", ["n_trials", "expected", "observed", "band", "low_side_sharpness_flag"]),
+    "trials": ("per_task", ["distance_unit", "outcome_distance", "band_lo", "band_hi", "is_exception"]),
+    "climatology": ("per_task", ["switch_step", "agreement_mean_abs_z", "agrees"]),
+    "trust_horizons": ("per_task", ["tolerance", "steps", "world_time", "natural_units"]),
+}
+
+
+@pytest.mark.parametrize(("group", "field"), [(g, f) for g, (_, fs) in ENTRY_FIELDS_UNDER_TEST.items() for f in fs])
+def test_every_required_value_field_must_be_present(group, field):
+    blocks = blocks_copy()
+    del blocks[group][ENTRY_FIELDS_UNDER_TEST[group][0]][0][field]
+    with pytest.raises(VerdictIncompleteError, match=f"missing its required field '{field}'"):
+        build(blocks)
+
+
+@pytest.mark.parametrize(("group", "field"), [
+    (g, f) for g, (_, fs) in ENTRY_FIELDS_UNDER_TEST.items() for f in fs
+    if (g, f) not in {("climatology", "switch_step"), ("climatology", "agreement_mean_abs_z"),
+                      ("climatology", "agrees"), ("trust_horizons", "natural_units")}
+])
+def test_a_required_value_field_may_not_be_null_or_the_wrong_kind(group, field):
+    for bad in (None, "n/a", object()):
+        if field == "distance_unit" and bad == "n/a":
+            continue  # a text field: "n/a" is a perfectly good string
+        blocks = blocks_copy()
+        blocks[group][ENTRY_FIELDS_UNDER_TEST[group][0]][0][field] = bad
+        with pytest.raises(VerdictIncompleteError):
+            build(blocks)
+
+
+def test_only_the_spec_names_may_be_null_no_switch_step_no_natural_cycle():
+    blocks = blocks_copy()
+    blocks["climatology"]["per_task"][1].update(switch_step=None, agreement_mean_abs_z=None, agrees=None)
+    blocks["trust_horizons"]["per_task"][0]["natural_units"] = None
+    build(blocks)
+
+
+@pytest.mark.parametrize("group", list(BLOCK_KEYS))
+@pytest.mark.parametrize("extra", ["is_fixture", "model_name", "model_ref", "meta", "name", "anything_else"])
+def test_a_field_the_spec_does_not_define_is_refused_so_no_identity_can_ride_along(group, extra):
+    blocks = blocks_copy()
+    blocks[group][BLOCK_KEYS[group][0]][0][extra] = "ensemble"
+    with pytest.raises(VerdictIncompleteError, match="does not define"):
+        build(blocks)
+    blocks = blocks_copy()
+    blocks[group][extra] = "ensemble"
+    with pytest.raises(VerdictIncompleteError, match="does not define"):
+        build(blocks)
+
+
+def test_the_optional_bands_field_of_an_exception_entry_is_allowed_but_must_be_a_mapping():
+    blocks = blocks_copy()
+    blocks["exceptions"]["per_task"][0]["bands"] = {"green": [12, 29], "amber": [[8, 11], [30, 35]], "red": "outside"}
+    build(blocks)
+    blocks["exceptions"]["per_task"][0]["bands"] = "green"
+    with pytest.raises(VerdictIncompleteError, match="bands"):
+        build(blocks)
+
+
+def test_value_ranges_are_checked_where_the_spec_gives_them():
+    cases = [
+        ("exceptions", ("per_task", 0, "band"), "purple"),
+        ("exceptions", ("per_task", 0, "n_trials"), 0),
+        ("exceptions", ("per_task", 0, "observed"), -1),
+        ("calibration", ("per_task", 0, "n_trials"), 0),
+        ("trust_horizons", ("per_task", 0, "steps"), -1),
+        ("climatology", ("per_task", 1, "switch_step"), -3),
+        ("skill", ("per_task_region", 0, "crps"), "0.03"),
+        ("skill", ("per_task_region", 0, "vs_linear"), True),
+    ]
+    for group, (lst, i, field), bad in cases:
+        blocks = blocks_copy()
+        blocks[group][lst][i][field] = bad
+        with pytest.raises(VerdictIncompleteError):
+            build(blocks)
+
+
+def test_calibration_levels_and_coverage_agree_and_stay_inside_zero_one():
+    for patch in ({"coverage": [0.5, 0.8, 0.9]}, {"coverage": [0.5, 0.8, 0.9, 1.2]}, {"coverage": [-0.1, 0.8, 0.9, 0.9]},
+                  {"levels": [0.5, 0.8, 0.9, 1.0]}, {"levels": [0.0, 0.8, 0.9, 0.95]}):
+        blocks = blocks_copy()
+        blocks["calibration"]["per_task"][0].update(patch)
+        with pytest.raises(VerdictIncompleteError, match="calibration"):
+            build(blocks)
+
+
+def test_exceptions_n_trials_must_equal_the_number_of_trial_points():
+    for wrong in (1, 3, 5, 200):
+        blocks = blocks_copy()
+        blocks["exceptions"]["per_task"][0]["n_trials"] = wrong
+        with pytest.raises(VerdictIncompleteError, match="n_trials"):
+            build(blocks)
+
+
+def test_trial_points_must_make_sense_non_negative_distances_and_ordered_bands():
+    blocks = blocks_copy()
+    blocks["trials"]["per_task"][0]["outcome_distance"][0] = -0.1
+    with pytest.raises(VerdictIncompleteError, match="never negative"):
+        build(blocks)
+    blocks = blocks_copy()
+    blocks["trials"]["per_task"][0]["band_lo"][1] = 0.5  # above band_hi (0.2)
+    with pytest.raises(VerdictIncompleteError, match="band_lo"):
+        build(blocks)
+
+
+def test_error_vs_horizon_series_are_numbers_and_whole_increasing_steps():
+    cases = [("steps", [0, "a", "b"]), ("steps", [0.0, 1.0, 2.0]), ("steps", [False, 1, 2]), ("steps", [0, 5, 3]),
+             ("steps", [0, 1, 1]), ("median_error", ["a", "b", "c"]), ("divergence_reference", [0.0, None, 0.4])]
+    for field, bad in cases:
+        blocks = blocks_copy()
+        blocks["error_vs_horizon"]["per_region"][0][field] = bad
+        with pytest.raises(VerdictIncompleteError):
+            build(blocks)
+
+
+# --- review pass 1: the groups must cover the same (task, region) pairs (I3) --------------------
+
+
+@pytest.mark.parametrize("group", ["skill", "calibration", "sharpness", "climatology", "trust_horizons", "exceptions", "trials"])
+def test_dropping_a_task_from_any_one_group_is_a_partial_verdict_and_is_refused(group):
+    blocks = blocks_copy()
+    entries = blocks[group][BLOCK_KEYS[group][0]]
+    blocks[group][BLOCK_KEYS[group][0]] = [e for e in entries if e["task"] != "lv-planning"]
+    with pytest.raises(VerdictIncompleteError, match="different \\(task, region\\) pairs|no matching|matching"):
+        build(blocks)
+
+
+def test_an_extra_task_in_one_group_is_refused_and_so_is_a_region_only_one_group_knows():
+    blocks = blocks_copy()
+    extra = dict(blocks["sharpness"]["per_task"][0], task="lv-extra")
+    blocks["sharpness"]["per_task"].append(extra)
+    with pytest.raises(VerdictIncompleteError, match="different"):
+        build(blocks)
+    blocks = blocks_copy()
+    blocks["error_vs_horizon"]["per_region"].append(dict(blocks["error_vs_horizon"]["per_region"][0], region="phantom"))
+    with pytest.raises(VerdictIncompleteError, match="error_vs_horizon covers regions"):
+        build(blocks)
+    blocks = blocks_copy()
+    blocks["error_vs_horizon"]["per_region"] = []
+    with pytest.raises(VerdictIncompleteError):
+        build(blocks)
+
+
+def test_a_second_region_must_appear_in_every_group_or_none():
+    blocks = blocks_copy()
+    for group in TASK_REGION_GROUPS:
+        entries = blocks[group][BLOCK_KEYS[group][0]]
+        blocks[group][BLOCK_KEYS[group][0]] = entries + [dict(e, region="out-of-range") for e in entries]
+    blocks["error_vs_horizon"]["per_region"].append(dict(blocks["error_vs_horizon"]["per_region"][0], region="out-of-range"))
+    assert len(build(blocks).to_dict()["skill"]["per_task_region"]) == 4
+
+
+TASK_REGION_GROUPS = ["skill", "calibration", "sharpness", "climatology", "trust_horizons", "exceptions", "trials"]
+
+
+# --- review pass 1: typed key fields, no coercion, no raw crashes (M1, M2) ---------------------
+
+
+@pytest.mark.parametrize("bad", [True, 1.0, "x", -5, None, [1]])
+def test_horizon_step_must_be_a_whole_number_not_a_bool_float_or_string(bad):
+    for group in ("exceptions", "trials"):
+        blocks = blocks_copy()
+        blocks[group]["per_task"][0]["horizon_step"] = bad
+        with pytest.raises(VerdictIncompleteError):
+            build(blocks)
+
+
+@pytest.mark.parametrize("bad", [0, " ", ["lv"], {"a": 1}, 1.5, True])
+def test_task_and_region_must_be_plain_non_blank_strings(bad):
+    for field in ("task", "region"):
+        blocks = blocks_copy()
+        blocks["skill"]["per_task_region"][0][field] = bad
+        with pytest.raises(VerdictIncompleteError):
+            build(blocks)
+
+
+def test_whitespace_only_world_is_refused_and_a_str_subclass_is_not_accepted():
+    class S(str):
+        pass
+
+    for bad in ("  ", S("lv")):
+        with pytest.raises(VerdictIncompleteError, match="world"):
+            build(world=bad)
+
+
+def test_exotic_numbers_and_self_referencing_data_are_refused_cleanly_not_with_a_crash():
+    blocks = blocks_copy()
+    blocks["skill"]["per_task_region"][0]["crps"] = np.longdouble(0.25)
+    assert build(blocks).to_dict()["skill"]["per_task_region"][0]["crps"] == 0.25
+    blocks = blocks_copy()
+    blocks["skill"]["per_task_region"][0]["crps"] = np.longdouble("nan")
+    with pytest.raises(VerdictIncompleteError, match="not finite"):
+        build(blocks)
+    blocks = blocks_copy()
+    loop = []
+    loop.append(loop)
+    blocks["calibration"]["per_task"][0]["per_dimension"] = loop
+    with pytest.raises(VerdictIncompleteError, match="nested"):
+        build(blocks)
+    blocks = blocks_copy()
+    blocks["skill"]["per_task_region"][0]["crps"] = np.complex128(1)
+    with pytest.raises(VerdictIncompleteError, match="cannot carry"):
+        build(blocks)
+    blocks = blocks_copy()
+    blocks["skill"]["per_task_region"][0]["crps"] = np.str_("x")
+    with pytest.raises(VerdictIncompleteError, match="cannot carry"):
+        build(blocks)
+
+
+def test_numpy_booleans_and_integers_are_converted_to_plain_python_values():
+    blocks = blocks_copy()
+    blocks["trials"]["per_task"][0]["is_exception"] = np.array([True, False, True, False])
+    blocks["exceptions"]["per_task"][0]["n_trials"] = np.int64(4)
+    record = build(blocks).to_dict()
+    assert all(type(x) is bool for x in record["trials"]["per_task"][0]["is_exception"])
+    assert type(record["exceptions"]["per_task"][0]["n_trials"]) is int
+
+
+# --- boundary values and odd shapes (mutation survivors from pass 1 follow-up) --------------------
+
+
+def test_zero_valued_edges_are_legitimate():
+    blocks = blocks_copy()
+    blocks["trials"]["per_task"][0]["horizon_step"] = 0
+    blocks["exceptions"]["per_task"][0]["horizon_step"] = 0
+    blocks["trials"]["per_task"][0]["outcome_distance"] = [0.0, 0.0, 0.3, 0.4]
+    blocks["trials"]["per_task"][0]["band_lo"] = [0.0] * 4
+    blocks["trials"]["per_task"][0]["band_hi"] = [0.0, 0.2, 0.2, 0.2]  # lo == hi is allowed
+    blocks["calibration"]["per_task"][0]["coverage"] = [0.0, 1.0, 0.5, 0.5]
+    blocks["trust_horizons"]["per_task"][0]["steps"] = 0  # fails tolerance even at step one: 0 by convention
+    build(blocks)
+
+
+def test_a_numpy_boolean_scalar_is_converted_and_other_numpy_scalars_are_not_silently_taken():
+    blocks = blocks_copy()
+    blocks["trials"]["per_task"][0]["is_exception"] = [np.True_, np.False_, np.True_, np.False_]
+    record = build(blocks).to_dict()
+    assert record["trials"]["per_task"][0]["is_exception"] == [True, False, True, False]
+    assert all(type(x) is bool for x in record["trials"]["per_task"][0]["is_exception"])
+
+
+def test_entries_that_are_not_mappings_and_series_that_are_not_lists_are_refused():
+    for bad_entry in (5, None, "lv-control", ["task"]):
+        blocks = blocks_copy()
+        blocks["sharpness"]["per_task"][0] = bad_entry
+        with pytest.raises(VerdictIncompleteError):
+            build(blocks)
+    for field in ("outcome_distance", "band_lo", "band_hi", "is_exception"):
+        blocks = blocks_copy()
+        blocks["trials"]["per_task"][0][field] = "abcd"
+        with pytest.raises(VerdictIncompleteError, match=field):
+            build(blocks)

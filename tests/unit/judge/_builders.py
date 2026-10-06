@@ -82,8 +82,12 @@ def make_input(**overrides) -> JudgeInput:
 
 
 def good_blocks() -> dict:
-    """Eight valid metric blocks (everything the judge computes except the two constant groups)."""
+    """Eight valid metric blocks (everything the judge computes except the two constant groups).
+
+    Two tasks in one region ("training"); every group covers both, as the spec requires.
+    """
     keys = [("lv-control", "training"), ("lv-planning", "training")]
+    flags = {"lv-control": [True, False, True, False], "lv-planning": [False, False, True, False]}
     return {
         "skill": {"per_task_region": [
             {"task": t, "region": r, "vs_persistence": 0.4, "vs_linear": 0.3, "crps": 0.03} for t, r in keys]},
@@ -95,18 +99,22 @@ def good_blocks() -> dict:
             "n_trials": 200, "per_dimension": [[0.5, 0.5], [0.8, 0.8], [0.9, 0.9], [0.95, 0.94]]} for t, r in keys]},
         "sharpness": {"per_task": [{"task": t, "region": r, "mean_width_90": 0.18} for t, r in keys]},
         "exceptions": {"per_task": [
-            {"task": "lv-control", "region": "training", "horizon_step": 1, "n_trials": 4, "expected": 0.4,
-             "observed": 2, "band": "green", "low_side_sharpness_flag": False}]},
+            {"task": t, "region": r, "horizon_step": 1, "n_trials": 4, "expected": 0.4,
+             "observed": sum(flags[t]), "band": "green", "low_side_sharpness_flag": False} for t, r in keys]},
         "trials": {"per_task": [
-            {"task": "lv-control", "region": "training", "horizon_step": 1, "distance_unit": "rms-normalised",
+            {"task": t, "region": r, "horizon_step": 1, "distance_unit": "rms-normalised",
              "outcome_distance": [0.1, 0.2, 0.3, 0.4], "band_lo": [0.0] * 4, "band_hi": [0.2] * 4,
-             "is_exception": [True, False, True, False]}]},
+             "is_exception": flags[t]} for t, r in keys]},
         "climatology": {"per_task": [
-            {"task": "lv-planning", "region": "training", "switch_step": None,
+            {"task": "lv-control", "region": "training", "switch_step": None,
+             "agreement_mean_abs_z": None, "agrees": None},
+            {"task": "lv-planning", "region": "training", "switch_step": 4,
              "agreement_mean_abs_z": 0.6, "agrees": True}]},
         "trust_horizons": {"per_task": [
             {"task": "lv-control", "region": "training", "tolerance": 0.1, "steps": 118, "world_time": 2.36,
-             "natural_units": "0.34 cycles"}]},
+             "natural_units": "0.34 cycles"},
+            {"task": "lv-planning", "region": "training", "tolerance": 0.3, "steps": 41, "world_time": 0.82,
+             "natural_units": None}]},
     }
 
 
