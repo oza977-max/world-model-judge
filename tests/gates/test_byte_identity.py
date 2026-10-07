@@ -10,6 +10,8 @@ rule 3). The full pipeline's byte-identity gate (over out/verdicts/)
 is a later chunk's concern; this one runs over P1-C02's
 out/wmj-skeleton/0.json, the only deterministic artefact that exists
 at this build stage.
+
+In plain words: this gate runs the skeleton ten times, in separate processes, and requires the output to be identical byte for byte — the project's reproducibility promise, tested directly.
 """
 
 from __future__ import annotations

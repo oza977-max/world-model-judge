@@ -6,6 +6,8 @@ assembles the artefact in exactly worlds spec §5's shape. It RETURNS
 the dict; writing under out/ is reporting's job (design-review-008 C8).
 
 Unit tests run at reduced scale; full scale is the slow gate.
+
+In plain words: these tests check the benchmark that measures how fast each world drifts away from itself — the "nobody's fault" line — including the kicked version, region by region.
 """
 
 from __future__ import annotations

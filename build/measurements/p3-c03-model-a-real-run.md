@@ -5,8 +5,8 @@ frozen recipe's 50,000 (and 100,000) training examples, on both worlds. The
 headline: how well it does depends a lot on the random seed, so the
 pre-registered "is 50,000 enough?" test — which compares one 50,000-example run
 with one 100,000-example run — mostly measures that luck, not the amount of
-data. Nothing in the recipe was changed because of this; it is the owner's
-decision (REMEMBER.md D18).
+data. The recipe was changed afterwards, openly, on the owner's decision (D18, 2026-10-04):
+sections 5 and 6 below record what changed and the re-measurement.
 
 Setup: seed 20260825 for the data; `OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1`;
 the training set, held-out set and kicks exactly as `build_training_data`

@@ -12,6 +12,8 @@ narrates `climatology.per_task`, first computed at P4-C05).
 
 `wmj chart-preview` is internal-only (reporting ADR-R5), so this test
 exercises it at reduced scale via `--n-starts/--n-trials/--horizon`.
+
+In plain words: these tests check that the `chart-preview` command draws the first real chart from real data and writes it to the right place.
 """
 
 from __future__ import annotations

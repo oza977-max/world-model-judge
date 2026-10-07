@@ -8,6 +8,8 @@ adding a component never shifts another's stream (TC-NF1-03), two
 independent implementations of the pinned text converge (TC-NF1-04),
 a ':' in any part is rejected (TC-NF1-07), a non-str part is rejected
 (TC-NF1-08), and distinct seed purposes give distinct streams (TC-MU7-02).
+
+In plain words: these tests check the shared building blocks every model is handed — the seed source, the world facts, the training data bundle — refuse malformed input and give the same random streams every time.
 """
 
 from __future__ import annotations

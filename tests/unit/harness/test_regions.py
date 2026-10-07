@@ -12,6 +12,8 @@ the state looked familiar.
 
 Label shape is the one canonical `{"region_name", "axis"}` pair
 (worlds §5, judge §4), with `axis` in {"state", "action", "both", None}.
+
+In plain words: these tests check that every test trial is labelled with the region of the world it started in — familiar ground or not, and why — the same way every time.
 """
 
 from __future__ import annotations

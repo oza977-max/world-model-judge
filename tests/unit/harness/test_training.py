@@ -1000,3 +1000,27 @@ def test_the_m_set_is_still_a_prefix_of_the_2m_set_with_a_quota():
     for field in ("state", "action", "next_state", "is_kick"):
         assert np.array_equal(getattr(doubled.train_pairs, field)[:m], getattr(first.train_pairs, field))
     assert int(doubled.heldout_pairs.is_kick.sum()) == QUOTA["lv"]
+
+
+# --- review code-review-002 ------------------------------------------------------------------------
+
+
+def test_making_a_world_context_does_not_lock_the_worlds_own_scale_array():
+    from wmj.harness.training import make_world_context
+
+    before = lv.WORLD.scale.flags.writeable
+    ctx = make_world_context("lv", lv.WORLD)
+    assert lv.WORLD.scale.flags.writeable is before  # untouched: the context holds its own locked copy
+    assert ctx.scale is not lv.WORLD.scale and ctx.scale.flags.writeable is False
+    assert np.array_equal(ctx.scale, lv.WORLD.scale)
+
+
+def test_a_recipe_integer_of_absurd_length_is_refused_by_name_not_with_a_raw_error(tmp_path):
+    text = REAL_RECIPE.read_text()
+    bad = tmp_path / "recipe.md"
+    bad.write_text(text.replace("epochs: 100\n", "epochs: 100\n").replace("training_trajectories: 2000", "training_trajectories: " + "9" * 5000))
+    with pytest.raises(TrainingDataError, match="training_trajectories"):
+        read_training_recipe(bad)
+    ok = tmp_path / "ok.md"
+    ok.write_text(text.replace("training_trajectories: 2000", "training_trajectories: " + "9" * 16))
+    assert read_training_recipe(ok).training_trajectories == int("9" * 16)

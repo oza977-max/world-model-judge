@@ -4,7 +4,7 @@ In plain words: before any practice model can learn, the harness makes the
 homework once, for each world, and gives every model *exactly the same copy*.
 It simulates 2,000 histories of the world with the occasional kick pushed in,
 then makes one fixed, seeded pick from all the one-step examples in them:
-a training set (50,000 examples, exactly 12,500 of them kicked ones, so the
+a training set (100,000 examples since the 2026-10-04 fallback, exactly 12,500 of them kicked ones, so the
 models see the lever often enough to learn it), a held-back set that is
 never trained on (10,000 examples, kept for checking), and 64 training rows
 used once to sanity-check the learning arithmetic. No model picks its own
@@ -66,7 +66,7 @@ _RECIPE_KEYS = (
     "gradcheck_pairs",
 )
 _QUOTA_KEY = "heldout_kick_pairs"  # required in the recipe; optional (0) on the dataclass
-_PLAIN_POSITIVE_INT = re.compile(r"[1-9][0-9]*")
+_PLAIN_POSITIVE_INT = re.compile(r"[1-9][0-9]{0,15}")  # at most 16 digits: far beyond any real count
 _RECIPE_LINE = re.compile(r"[ \t]*([^#\s]*)[ \t]*(?:#.*)?")
 
 
@@ -185,7 +185,7 @@ def make_world_context(world_name: str, world: Any) -> WorldContext:
         action_dim=world.a,
         training_state_box=spec.training_state_box,
         training_action_interval=spec.training_action_interval,
-        scale=world.scale,
+        scale=np.array(world.scale, dtype=float, copy=True),  # a copy: WorldContext locks its arrays read-only
     )
 
 

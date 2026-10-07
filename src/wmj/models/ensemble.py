@@ -154,6 +154,7 @@ def train_member(
                 f"member {k}'s weights are not finite after epoch {epoch} — training diverged "
                 f"(models ADR-M3)"
             )
+    net.freeze()
     return net
 
 

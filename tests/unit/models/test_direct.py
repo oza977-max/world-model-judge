@@ -391,14 +391,12 @@ def test_predict_refuses_wrong_shapes_and_non_finite_input(model):
 
 
 def test_a_degenerate_spread_is_refused_at_predict_time(trained_net):
-    net = trained_net
-    saved = net.layers[-1][1].copy()
-    try:
-        net.layers[-1][1][2:] = -1e4  # log sigma -> exp underflows to 0
-        with pytest.raises(DirectTrainingError, match="spread"):
-            DirectModel(_ctx(), net).predict_batch(np.full((2, 2), 3.0), np.zeros((2, 1)))
-    finally:
-        net.layers[-1][1][:] = saved
+    import copy
+
+    net = copy.deepcopy(trained_net)  # a trained network is read-only; edit a copy
+    net.layers[-1][1][2:] = -1e4  # log sigma -> exp underflows to 0
+    with pytest.raises(DirectTrainingError, match="spread"):
+        DirectModel(_ctx(), net).predict_batch(np.full((2, 2), 3.0), np.zeros((2, 1)))
 
 
 def test_returned_arrays_are_independent_of_the_network(model, data):
@@ -556,14 +554,13 @@ def test_the_gradient_check_target_is_the_change_of_the_gradcheck_rows(data, mon
 
 
 def test_an_infinite_spread_and_a_nan_action_are_each_refused_by_name(trained_net):
+    import copy
+
     model = DirectModel(_ctx(), trained_net)
-    saved = trained_net.layers[-1][1].copy()
-    try:
-        trained_net.layers[-1][1][2:] = 1e4  # log sigma huge -> exp overflows to inf
-        with np.errstate(over="ignore"), pytest.raises(DirectTrainingError, match="spread"):
-            model.predict_batch(np.full((2, 2), 3.0), np.zeros((2, 1)))
-    finally:
-        trained_net.layers[-1][1][:] = saved
+    huge = copy.deepcopy(trained_net)
+    huge.layers[-1][1][2:] = 1e4  # log sigma huge -> exp overflows to inf
+    with np.errstate(over="ignore"), pytest.raises(DirectTrainingError, match="spread"):
+        DirectModel(_ctx(), huge).predict_batch(np.full((2, 2), 3.0), np.zeros((2, 1)))
     with pytest.raises(DirectTrainingError, match="finite"):
         model.predict_batch(np.full((2, 2), 3.0), np.array([[np.nan], [0.0]]))
     with pytest.raises(DirectTrainingError, match="one state"):
@@ -897,3 +894,29 @@ def test_the_seed_to_seed_spread_is_small_with_the_decay(data):
         means, _ = DirectModel(_ctx(), net).predict_batch(h.state, h.action)
         errors.append(float(np.mean(((means - h.next_state) / lv.WORLD.scale) ** 2)))
     assert max(errors) < 5 * min(errors)
+
+
+# --- review code-review-002: a trained network is read-only ---------------------------------------
+
+
+def test_a_trained_network_is_read_only_so_one_stray_write_cannot_change_every_model_built_on_it(trained_net):
+    import copy
+
+    for W, b in trained_net.layers:
+        assert W.flags.writeable is False and b.flags.writeable is False
+        with pytest.raises(ValueError):
+            W[0, 0] = 0.0
+        with pytest.raises(ValueError):
+            b[:] = 0.0
+    clone = copy.deepcopy(trained_net)  # a copy is a fresh, editable object (tests use this)
+    clone.layers[-1][1][:] += 1.0
+    assert not np.array_equal(clone.layers[-1][1], trained_net.layers[-1][1])
+
+
+def test_the_network_freeze_locks_every_weight_and_bias_and_only_those():
+    from wmj.models.mlp import MLP
+
+    net = MLP([3, 4, 2], np.random.default_rng(0))
+    assert all(W.flags.writeable and b.flags.writeable for W, b in net.layers)
+    net.freeze()
+    assert all(not W.flags.writeable and not b.flags.writeable for W, b in net.layers)

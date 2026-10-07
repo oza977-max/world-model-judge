@@ -15,7 +15,8 @@ import json
 import numpy as np
 import pytest
 
-from tests.unit.judge._builders import blocks_copy
+from tests.unit.judge._builders import GOOD_BANDS as BUILDER_BANDS
+from tests.unit.judge._builders import band_for, blocks_copy
 from wmj.judge.errors import VerdictIncompleteError
 from wmj.judge.limitations import JU10_DISCLOSURES, NOT_TESTED
 from wmj.judge.verdict import BLOCK_KEYS, VERDICT_SCHEMA, Verdict, assemble_verdict
@@ -259,6 +260,7 @@ def test_tc_ju9_03_property_holds_over_many_random_verdicts():
         trial = blocks["trials"]["per_task"][0]
         trial.update(outcome_distance=[0.1] * n, band_lo=[0.0] * n, band_hi=[0.2] * n, is_exception=flags)
         blocks["exceptions"]["per_task"][0]["observed"] = sum(flags)
+        blocks["exceptions"]["per_task"][0]["band"] = band_for(sum(flags))
         blocks["exceptions"]["per_task"][0]["n_trials"] = n
         blocks["calibration"]["per_task"][0]["n_trials"] = n
         record = build(blocks).to_dict()
@@ -671,8 +673,6 @@ def test_numpy_booleans_and_integers_are_converted_to_plain_python_values():
 
 def test_zero_valued_edges_are_legitimate():
     blocks = blocks_copy()
-    blocks["trials"]["per_task"][0]["horizon_step"] = 0
-    blocks["exceptions"]["per_task"][0]["horizon_step"] = 0
     blocks["trials"]["per_task"][0]["outcome_distance"] = [0.0, 0.0, 0.3, 0.4]
     blocks["trials"]["per_task"][0]["band_lo"] = [0.0] * 4
     blocks["trials"]["per_task"][0]["band_hi"] = [0.0, 0.2, 0.2, 0.2]  # lo == hi is allowed
@@ -769,10 +769,6 @@ def test_flags_are_real_booleans_not_zero_and_one(group, field):
 
 
 def test_the_band_vocabulary_is_exactly_green_amber_red():
-    for band in ("green", "amber", "red"):
-        blocks = blocks_copy()
-        blocks["exceptions"]["per_task"][0]["band"] = band
-        build(blocks)
     for band in ("yellow", "Green", "", None, 1):
         blocks = blocks_copy()
         blocks["exceptions"]["per_task"][0]["band"] = band
@@ -838,3 +834,139 @@ def test_calibration_and_exceptions_describe_the_same_trial_set():
     blocks["calibration"]["per_task"][0]["n_trials"] = 200
     with pytest.raises(VerdictIncompleteError, match="one shared trial set"):
         build(blocks)
+
+
+# --- review pass 3 -----------------------------------------------------------------------------------------
+
+
+def test_absurdly_large_numbers_are_refused_with_the_judges_own_error_never_a_raw_one():
+    huge = 10**5000
+    for group, lst, i, field in (("trust_horizons", "per_task", 0, "steps"), ("trust_horizons", "per_task", 0, "world_time"),
+                                 ("exceptions", "per_task", 0, "observed"),
+                                 ("calibration", "per_task", 0, "n_trials")):
+        blocks = blocks_copy()
+        blocks[group][lst][i][field] = huge
+        with pytest.raises(VerdictIncompleteError):
+            build(blocks)
+    blocks = blocks_copy()
+    blocks["error_vs_horizon"]["dt"] = huge
+    with pytest.raises(VerdictIncompleteError):
+        build(blocks)
+    blocks = blocks_copy()
+    blocks["skill"]["per_task_region"][0]["task"] = huge
+    with pytest.raises(VerdictIncompleteError):
+        build(blocks)
+    with pytest.raises(VerdictIncompleteError):
+        build(world=huge)
+
+
+@pytest.mark.parametrize("bad", [5, 3.5, object(), True])
+def test_limitations_and_not_tested_that_are_not_sequences_are_refused_cleanly(bad):
+    with pytest.raises(VerdictIncompleteError):
+        Verdict(world="lv", **blocks_copy(), not_tested=NOT_TESTED, limitations=bad)
+    with pytest.raises(VerdictIncompleteError):
+        Verdict(world="lv", **blocks_copy(), not_tested=bad, limitations=JU10_DISCLOSURES)
+
+
+def test_the_stored_fixed_text_is_the_constants_themselves_even_if_a_lookalike_passes_the_comparison():
+    class Liar(str):
+        def __eq__(self, other):
+            return True
+
+        __hash__ = str.__hash__
+
+    sneaky = (Liar("evil " + JU10_DISCLOSURES[0]), *JU10_DISCLOSURES[1:])
+    v = Verdict(world="lv", **blocks_copy(), not_tested=NOT_TESTED, limitations=sneaky)
+    assert v.limitations is JU10_DISCLOSURES and v.to_dict()["limitations"] == list(JU10_DISCLOSURES)
+
+
+def test_band_ranges_must_not_overlap_and_must_be_contiguous_with_no_gap():
+    base = {"green": [12, 29], "amber": [[8, 11], [30, 35]], "red": "outside"}
+    ok = [base,
+          {**base, "amber": [[0, 11], [30, 200]]},
+          {"green": [1, 1], "amber": [[0, 0], [2, 2]], "red": "outside"}]  # degenerate one-count ranges are allowed
+    for bands in ok:
+        blocks = blocks_copy()
+        blocks["exceptions"]["per_task"][0]["bands"] = bands
+        blocks["exceptions"]["per_task"][0]["band"] = "red"  # observed is 2: red for the first, see the next lines
+        if bands is not base:
+            blocks["exceptions"]["per_task"][0]["band"] = "red"
+        try:
+            build(blocks)
+        except VerdictIncompleteError as err:
+            assert "band=" in str(err), err  # only the band-name rule may object, not the ranges
+    bad = [
+        {**base, "green": [0, 10], "amber": [[0, 5], [8, 12]]},  # overlapping
+        {**base, "amber": [[8, 12], [30, 35]]},  # amber-low runs into green
+        {**base, "amber": [[8, 10], [30, 35]]},  # a gap between amber-low and green
+        {**base, "amber": [[8, 11], [29, 35]]},  # amber-high runs into green
+        {**base, "amber": [[8, 11], [31, 35]]},  # a gap between green and amber-high
+        {**base, "amber": [[11, 8], [30, 35]]},  # inverted
+        {**base, "amber": [[8, 11], [35, 30]]},
+        {**base, "green": [29, 12]},
+    ]
+    for bands in bad:
+        blocks = blocks_copy()
+        blocks["exceptions"]["per_task"][0]["bands"] = bands
+        with pytest.raises(VerdictIncompleteError, match="bands"):
+            build(blocks)
+
+
+def test_bands_are_required_on_every_exception_entry_so_the_band_name_is_always_checked():
+    blocks = blocks_copy()
+    del blocks["exceptions"]["per_task"][0]["bands"]
+    with pytest.raises(VerdictIncompleteError, match="missing its required field 'bands'"):
+        build(blocks)
+
+
+def test_the_header_trial_count_must_equal_the_number_of_points_in_both_blocks():
+    for n in (3, 5, 200):
+        blocks = blocks_copy()
+        blocks["exceptions"]["per_task"][0]["n_trials"] = n
+        blocks["calibration"]["per_task"][0]["n_trials"] = n  # keep calibration agreeing so only the points differ
+        with pytest.raises(VerdictIncompleteError, match="holds 4 points|header count"):
+            build(blocks)
+
+
+def test_world_time_must_equal_steps_times_dt_to_a_billionth_and_exact_products_are_accepted():
+    for off in (1e-6, 1e-3, 0.5, -0.5):
+        blocks = blocks_copy()
+        blocks["trust_horizons"]["per_task"][0]["world_time"] = 2.36 + off
+        with pytest.raises(VerdictIncompleteError, match="steps x dt"):
+            build(blocks)
+    for dt, steps in ((0.002, 5000), (0.02, 118), (0.01, 3), (1 / 3, 7), (0.05, 0)):
+        blocks = blocks_copy()
+        blocks["error_vs_horizon"]["dt"] = dt
+        blocks["trust_horizons"]["per_task"][0].update(steps=steps, world_time=steps * dt)
+        blocks["trust_horizons"]["per_task"][1].update(steps=0, world_time=0.0)
+        blocks["climatology"]["per_task"][0].update(switch_step=None, agreement_mean_abs_z=None, agrees=None)
+        build(blocks)
+
+
+def test_horizon_steps_are_one_based_and_trust_horizons_are_capped_at_the_switch_step():
+    for group in ("exceptions", "trials"):
+        blocks = blocks_copy()
+        blocks[group]["per_task"][0]["horizon_step"] = 0
+        with pytest.raises(VerdictIncompleteError, match="horizon_step"):
+            build(blocks)
+    blocks = blocks_copy()
+    blocks["climatology"]["per_task"][1]["switch_step"] = 40  # the trust horizon is 41
+    with pytest.raises(VerdictIncompleteError, match="switch step"):
+        build(blocks)
+    blocks["climatology"]["per_task"][1]["switch_step"] = 41  # equal is allowed (closed)
+    build(blocks)
+
+
+def test_divergence_references_and_per_dimension_coverage_edges():
+    blocks = blocks_copy()
+    blocks["error_vs_horizon"]["per_region"][0]["divergence_reference"][1] = -0.1
+    with pytest.raises(VerdictIncompleteError):
+        build(blocks)
+    blocks = blocks_copy()
+    blocks["calibration"]["per_task"][0]["per_dimension"] = [[0.0, 1.0]] * 4  # exactly 0 and exactly 1 are real values
+    build(blocks)
+    blocks = blocks_copy()
+    blocks["calibration"]["per_task"][0]["per_dimension"] = [0.5, 0.8, 0.9, 0.95]  # flat: not one row per level
+    with pytest.raises(VerdictIncompleteError, match="per_dimension"):
+        build(blocks)
+    assert BUILDER_BANDS["green"] == [12, 29]

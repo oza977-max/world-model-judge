@@ -30,8 +30,9 @@ change in the state and `log σ`, in the state's own units: `mean = state +
 Δmean`, `spread = exp(log σ)`. (The spec names no output scaling; recorded
 as backlog A20.)
 
-**Why the three numbers below are copied here.** `EPOCHS`, `BATCH_SIZE` and
-`BETA_NLL` are the frozen recipe's `epochs`, `batch_size` and `beta_nll`.
+**Why the numbers below are copied here.** `EPOCHS`, `BATCH_SIZE`, `BETA_NLL`,
+`LEARNING_RATE` and `LR_FINAL` are the frozen recipe's `epochs`, `batch_size`,
+`beta_nll`, `lr_initial` and `lr_final`.
 This package may not read files (its import allowlist, cross-cutting
 ADR-003), so a test compares them with `prereg/recipe.md` on every run — the
 same pattern the worlds' kick settings use — and a drift fails loudly.
@@ -71,7 +72,8 @@ def learning_rates(epochs: int) -> list[float]:
     a constant rate the final error of the *same* network on the *same* data
     swung by a factor of 20 from the random seed alone; the decay settles every
     run into about the same answer. Constant within an epoch; the first epoch
-    uses `LEARNING_RATE` exactly and the last uses `LR_FINAL` exactly.
+    uses `LEARNING_RATE` exactly and, for two or more epochs, the last uses
+    `LR_FINAL` exactly (a single epoch has no "last": it uses `LEARNING_RATE`).
     """
     if epochs == 1:
         return [LEARNING_RATE]
@@ -241,6 +243,7 @@ def train_direct(
                 f"the network's weights are not finite after epoch {epoch} — training diverged "
                 f"(models ADR-M3)"
             )
+    net.freeze()
     return net
 
 
@@ -300,9 +303,9 @@ def _context_key(ctx: WorldContext) -> tuple:
 def shared_direct_core(ctx: WorldContext, seeds: SeedSource, training: TrainingData) -> MLP:
     """The trained network that `direct` and every fixture built on it share.
 
-    In plain words: the three deliberately broken models are each "Model A with
+    In plain words: the four deliberately broken models are each "Model A with
     one thing broken" (models ADR-M4), so each needs Model A's trained network.
-    Training it four times over would cost minutes and prove nothing — it is the
+    Training it five times over would cost minutes and prove nothing — it is the
     same computation from the same seed on the same data. This trains it once
     per (run seed, world, data object) and hands the same network to everyone
     (the harness gives every factory the very same `TrainingData` object, ADR-M1).

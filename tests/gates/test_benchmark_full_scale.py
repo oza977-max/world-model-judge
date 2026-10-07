@@ -6,6 +6,8 @@ within 1e-6. TC-WD3-03 / TC-WD4-01 / TC-WD4-02 at real scale.
 
 Marked `slow` (~90 s): `pytest -m slow tests/gates/test_benchmark_full_scale.py`.
 The unit suite exercises the same code at reduced scale.
+
+In plain words: this gate runs the drift benchmark at its real size and checks it finishes and gives sensible numbers, because small tests cannot show size-dependent problems.
 """
 
 from __future__ import annotations

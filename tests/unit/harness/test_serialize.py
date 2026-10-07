@@ -3,6 +3,8 @@
 Covers cross-cutting ADR-002 rule 4: sorted keys, UTF-8, \\n newlines,
 no trailing whitespace, arrays via .tolist(), json.dumps as the sole
 float-rendering call, non-finite values rejected.
+
+In plain words: these tests check that results are written in one canonical way — sorted keys, no NaN, fixed number formatting — so the same result always gives the same bytes.
 """
 
 from __future__ import annotations

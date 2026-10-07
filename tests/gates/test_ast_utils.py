@@ -4,6 +4,8 @@ every TC-NF6 import/identifier gate is built from.
 Each helper is checked against tiny synthetic source snippets, not
 real files, so a bug in the helper itself is caught independently of
 whatever it is later pointed at (fixtures or real source).
+
+In plain words: these tests check the helper that reads source code as a tree — the tool the import and purity gates use to catch forbidden imports — against small known examples.
 """
 
 from __future__ import annotations

@@ -10,6 +10,8 @@ are built at P6-C01, where the roster is first consumed.
 Because the two baselines register themselves at import time into the same
 module-global registry, tests that register throwaway names snapshot and
 restore `_REGISTRY` so they never corrupt the real roster for a later test.
+
+In plain words: these tests check the model sign-up list: a model exists to the harness only if it is registered once under its name, and a duplicate or blank name is refused.
 """
 
 from __future__ import annotations

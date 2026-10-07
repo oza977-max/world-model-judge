@@ -1,7 +1,10 @@
-"""wmj.harness.sufficiency — "is 50,000 training examples enough?", asked once, blind.
+"""wmj.harness.sufficiency — "is the training set big enough?", asked once, blind.
 
-In plain words: the recipe trains each practice model on 50,000 examples. Is
-that enough, or would 100,000 make it noticeably better? This is checked
+In plain words: the recipe first proposed training each practice model on 50,000
+examples (the check below is written for that original question; it takes the
+recipe's `subsample_pairs` as M and compares M with 2M — the pre-registered
+fallback made M = 100,000 on 2026-10-04, the check having failed at 50,000). Is
+that enough, or would double make it noticeably better? This is checked
 **once, at build time, before the lock**, by training each model twice — on
 50,000 and on 100,000 examples — and comparing the error on examples neither
 version trained on. If the 50,000-example model is within 10% of the
@@ -29,11 +32,11 @@ those examples in training and tilt the test toward "50,000 is not enough"
 backlog A21 as a clarification of "each model's own held-out pairs").
 
 **Kick split.** The same step reports each model's held-out error separately
-for kicked and un-kicked examples, because training is 25% kicks while the
+for kicked and un-kicked examples, because training is 12.5% kicks (25% at the original 50,000) while the
 evaluation steps are about 1% (predator–prey) and 0.2% (pendulum) kicks. The
-number of kicked held-out examples is reported with it: it is small (backlog
-A19 / D17), and a kick-split figure resting on a handful of examples must not
-be read as more than that.
+number of kicked held-out examples is reported with it (1,000 since the D17 quota;
+backlog A19 — it was 6 and 10 before), so the figure always shows how many
+examples it rests on.
 """
 
 from __future__ import annotations
@@ -167,6 +170,7 @@ def check_world(
     """
     if isinstance(n_seeds, bool) or not isinstance(n_seeds, int) or n_seeds < 1:
         raise SufficiencyError(f"n_seeds must be a positive int, got {n_seeds!r}")
+    m_is_sufficient(0.0, 0.0, tolerance)  # validate the tolerance now, not after ten trainings
     ctx = make_world_context(world_name, world)
     data_seeds = SeedSource(run_seed, None)
     big_recipe = replace(recipe, subsample_pairs=2 * recipe.subsample_pairs)

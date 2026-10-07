@@ -5,8 +5,7 @@ two simple baselines predicted, which region of the world each trial started in,
 the world drifts from itself, what the world usually looks like, which tasks are being
 graded, and the thresholds fixed in advance. That is all. There is no field for a model's
 name, whether it is a deliberately broken test model, its architecture or its training
-history — and the classes are frozen, slotted and exact-typed (a subclass with extra
-attributes is refused), so a field cannot be attached afterwards by accident. This is
+history — and the classes are frozen, slotted and exact-typed (no subclass can be made), so a field cannot be attached afterwards by accident. This is
 blindness by construction, not by promise (TC-JU1-01). What no type can stop is a person
 writing a model's name into a free-text field such as the world's or a task's name; the
 harness hands the judge only world, region and task names, and a test pins that these are
@@ -29,6 +28,15 @@ from wmj.judge.errors import JudgeInputError, MissingBaselineError
 
 AXES = ("state", "action", "both")
 TASK_KINDS = ("control", "planning")
+
+
+def _r(value) -> str:
+    """A safe, short `repr` for refusal messages (a absurdly long integer must not crash the message)."""
+    try:
+        text = repr(value)
+    except ValueError:  # e.g. an integer of more than 4,300 digits
+        return "<number too large to display>"
+    return text if len(text) <= 80 else text[:77] + "..."
 
 
 def _bad(message: str) -> JudgeInputError:
@@ -58,28 +66,28 @@ def _frozen_array(name: str, value, *, dtype=float, ndim: int | None = None) -> 
 
 def _exact_str(name: str, value) -> str:
     if type(value) is not str or not value.strip():
-        raise _bad(f"{name} must be a plain non-blank string, got {value!r}")
+        raise _bad(f"{name} must be a plain non-blank string, got {_r(value)}")
     return value
 
 
 def _whole(name: str, value) -> int:
     if type(value) is bool or not isinstance(value, (int, np.integer)):
-        raise _bad(f"{name} must be a whole number, got {value!r}")
+        raise _bad(f"{name} must be a whole number, got {_r(value)}")
     try:
         return int(value)
     except (OverflowError, ValueError) as exc:  # pragma: no cover - ints never overflow
-        raise _bad(f"{name} is not usable as a whole number: {value!r}") from exc
+        raise _bad(f"{name} is not usable as a whole number: {_r(value)}") from exc
 
 
 def _positive_finite(name: str, value) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float, np.integer, np.floating)):
-        raise _bad(f"{name} must be a number, got {value!r}")
+        raise _bad(f"{name} must be a number, got {_r(value)}")
     try:
         value = float(value)
     except OverflowError as exc:
         raise _bad(f"{name} is too large to use, got a huge number") from exc
     if not (math.isfinite(value) and value > 0.0):
-        raise _bad(f"{name} must be finite and positive, got {value!r}")
+        raise _bad(f"{name} must be finite and positive, got {_r(value)}")
     return value
 
 
@@ -110,7 +118,10 @@ class RegionLabel:
     def __post_init__(self) -> None:
         _exact_str("region_name", self.region_name)
         if self.axis is not None and (type(self.axis) is not str or self.axis not in AXES):
-            raise _bad(f"axis must be one of {AXES} or None, got {self.axis!r}")
+            raise _bad(f"axis must be one of {AXES} or None, got {_r(self.axis)}")
+
+    def __reduce__(self):  # copy / pickle re-run the checks
+        return (RegionLabel, (self.region_name, self.axis))
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,12 +138,15 @@ class TaskSpec:
     def __post_init__(self) -> None:
         _exact_str("task name", self.name)
         if type(self.kind) is not str or self.kind not in TASK_KINDS:
-            raise _bad(f"task kind must be one of {TASK_KINDS}, got {self.kind!r}")
+            raise _bad(f"task kind must be one of {TASK_KINDS}, got {_r(self.kind)}")
         _set(self, "tolerance", _positive_finite("task tolerance", self.tolerance))
         horizon = _whole("task horizon", self.horizon)
         if horizon < 1:
-            raise _bad(f"task horizon must be an int >= 1, got {self.horizon!r}")
+            raise _bad(f"task horizon must be an int >= 1, got {_r(self.horizon)}")
         _set(self, "horizon", horizon)
+
+    def __reduce__(self):
+        return (TaskSpec, (self.name, self.kind, self.tolerance, self.horizon))
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -170,14 +184,14 @@ class Bands:
     def __post_init__(self) -> None:
         n = _whole("bands n", self.n)
         if n < 1:
-            raise _bad(f"bands n must be an int >= 1, got {self.n!r}")
+            raise _bad(f"bands n must be an int >= 1, got {_r(self.n)}")
         if type(self.p) not in (float, int):
             raise _bad(f"bands p must be a plain number, got {type(self.p).__name__}")
         if not (0.0 < self.p < 1.0):
-            raise _bad(f"bands p must be strictly between 0 and 1, got {self.p!r}")
+            raise _bad(f"bands p must be strictly between 0 and 1, got {_r(self.p)}")
         for label, pair in (("green", self.green), ("amber_outer", self.amber_outer)):
             if not isinstance(pair, (tuple, list)) or len(pair) != 2:
-                raise _bad(f"{label} must be a (low, high) pair, got {pair!r}")
+                raise _bad(f"{label} must be a (low, high) pair, got {_r(pair)}")
         g_lo, g_hi = (_whole("green", v) for v in self.green)
         a_lo, a_hi = (_whole("amber_outer", v) for v in self.amber_outer)
         if not (0 <= a_lo <= g_lo <= g_hi <= a_hi <= n):
@@ -185,6 +199,9 @@ class Bands:
         _set(self, "n", n)
         _set(self, "green", (g_lo, g_hi))
         _set(self, "amber_outer", (a_lo, a_hi))
+
+    def __reduce__(self):
+        return (Bands, (self.n, self.p, self.green, self.amber_outer))
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -225,7 +242,7 @@ class ClimatologyBin:
     def __post_init__(self) -> None:
         for label, v in (("invariant_lo", self.invariant_lo), ("invariant_hi", self.invariant_hi)):
             if type(v) is bool or not isinstance(v, (int, float, np.integer, np.floating)):
-                raise _bad(f"{label} must be a number (infinite ends allowed), got {v!r}")
+                raise _bad(f"{label} must be a number (infinite ends allowed), got {_r(v)}")
         try:
             lo, hi = float(self.invariant_lo), float(self.invariant_hi)
         except OverflowError as exc:
@@ -242,7 +259,7 @@ class ClimatologyBin:
             raise _bad("a climatology bin's sd must be > 0")
         n_samples = _whole("n_samples", self.n_samples)
         if n_samples < 1:
-            raise _bad(f"n_samples must be an int >= 1, got {self.n_samples!r}")
+            raise _bad(f"n_samples must be an int >= 1, got {_r(self.n_samples)}")
         _set(self, "n_samples", n_samples)
 
     def __reduce__(self):
@@ -395,3 +412,24 @@ class JudgeInput:
             self.linear, self.region_labels, self.divergence_curves, self.climatology, self.invariant_bins,
             self.tasks, self.thresholds,
         ))
+
+
+def _guard_post_init(cls) -> None:
+    """Turn any stray Python error from a check (overflow, odd type) into the judge's own refusal."""
+    original = cls.__post_init__
+
+    def checked(self):
+        try:
+            original(self)
+        except JudgeInputError:
+            raise
+        except MissingBaselineError:
+            raise
+        except (OverflowError, TypeError, ValueError) as exc:
+            raise JudgeInputError(f"{cls.__name__}: unusable input ({type(exc).__name__}: {exc})") from exc
+
+    cls.__post_init__ = checked
+
+
+for _cls in (RegionLabel, TaskSpec, Forecasts, Bands, Thresholds, ClimatologyBin, RegionClimatology, RegionCurve, JudgeInput):
+    _guard_post_init(_cls)

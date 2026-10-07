@@ -11,6 +11,8 @@ Full three-generator identity (once wmj.harness.benchmarks and a
 separate training-data module exist) is re-checked at P6-C01.
 
 TC-WD3-02: the negative — a mismatched dt must fail the check.
+
+In plain words: this gate checks that the world's "truth" and every model share the same integrator and step size — the trap the essay names — so no chart measures the integrator instead of the model.
 """
 
 from __future__ import annotations

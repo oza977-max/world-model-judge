@@ -15,8 +15,9 @@ before the backprop it validates (models §8, Beck's failing-test-first).
 
 This is the core only: the architecture, the optimiser, and the check.
 The task-specific heads and losses — direct's error-bar output and its
-Gaussian-NLL training, the ensemble members' mean-only training — are
-built on top of this at P3-C03/P3-C04.
+β-NLL training, the ensemble members' mean-only training — are
+built on top of this at P3-C03/P3-C04. (Model A trains with a β-weighted Gaussian
+NLL, β = 0.5; see `direct.py`.)
 
 Determinism (cross-cutting ADR-002): every weight is drawn from a
 `Generator` the caller passes in, never from NumPy's global RNG, so a
@@ -113,6 +114,17 @@ class MLP:
     def param_shapes(self) -> list[tuple[tuple[int, ...], tuple[int, ...]]]:
         """The `(W.shape, b.shape)` per layer — the optimiser's moment shapes."""
         return [(W.shape, b.shape) for W, b in self.layers]
+
+    def freeze(self) -> None:
+        """Lock every weight and bias read-only (a trained network is never edited again).
+
+        One trained network is shared by `direct` and every fixture built on it, and by every
+        later cache hit — a stray in-place write would silently change all of them
+        (code-review-002, Panel E). Training calls this when it finishes.
+        """
+        for W, b in self.layers:
+            W.setflags(write=False)
+            b.setflags(write=False)
 
     def forward(self, X: np.ndarray) -> tuple[np.ndarray, dict]:
         """`X: float64[batch, in]` -> `(output[batch, out], cache)`.

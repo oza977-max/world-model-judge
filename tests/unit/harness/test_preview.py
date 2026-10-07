@@ -4,6 +4,8 @@ The real `error_vs_horizon` block is the judge's (JU-3, P4-C05). Until
 it exists, the harness computes a stand-in with exactly the judge's
 block shape (judge §5) so the renderer never changes when the producer
 swaps. Reduced scale here; the CLI's defaults are the spec's numbers.
+
+In plain words: these tests check the small first end-to-end slice that turns a baseline's real forecasts into the numbers behind the preview chart.
 """
 
 from __future__ import annotations

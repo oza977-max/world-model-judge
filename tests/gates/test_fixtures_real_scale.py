@@ -1,10 +1,10 @@
-"""P3-C05 real-scale gate: the three broken models built on the real, frozen-recipe Model A.
+"""P3-C05 real-scale gate: the broken test models (four since P3-C08) built on the real, frozen-recipe Model A.
 
 In plain words: the unit tests build the broken models on a small, quickly trained network.
 The real ones sit on the real network (100 epochs, 100,000 examples) where error bars are
 about a thousandth and a jitter of "twice the error bar" is tiny in absolute terms. A rule
 that only misbehaves there (an added floor, a clip, a fixed-size noise) would pass the small
-tests. This builds `direct` and all three fixtures from one real training run and checks, on
+tests. This builds `direct` and all the fixtures from one real training run and checks, on
 every real held-out example and on far-out-of-range inputs: the network is trained exactly
 once and shared; `fx-overconfident` differs from Model A only in an error bar a quarter the
 size; `fx-honest-rough`'s jitter is a standard normal in units of two error bars and its bar is

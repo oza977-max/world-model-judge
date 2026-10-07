@@ -7,6 +7,8 @@ this test's failures, not the other way around.
 Covers the chunk's own acceptance criterion (build/prompts/P1-C02.md):
 a clean run from checkout produces out/wmj-skeleton/0.json, and two
 consecutive invocations are byte-identical.
+
+In plain words: these tests check the command line: that the right subcommands exist, route to the right code, and refuse unknown ones clearly.
 """
 
 from __future__ import annotations

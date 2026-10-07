@@ -116,8 +116,16 @@ pendulum_action_max: 1.0
   uses `lr_final + ½(lr_initial − lr_final)(1 + cos(π·e/(E−1)))`). Added
   2026-10-04 (owner decision D18): with a constant rate the final error of the
   *same* network on the *same* data swung by a factor of 20 from the random seed
-  alone; with the decay every seed lands within a factor of ~1.3
-  (`build/measurements/p3-c03-model-a-real-run.md`, section 5).
+  alone; with the decay the seeds agree to within about 1.1–1.4× at 50,000
+  pairs and up to about 2.3× for the pendulum at 100,000 pairs (corrected
+  2026-10-07 — an earlier wording said "~1.3" for all; see
+  `build/measurements/p3-c03-model-a-real-run.md`, sections 5 and 6).
+- Units and loss scaling (stated 2026-10-07; they change trained bytes, so they
+  belong here): Model A's network outputs the predicted *change in raw state
+  units* and the log of the spread. Each ensemble member's loss is
+  `mean(((prediction − truth)/scale)²)` over examples and quantities, with
+  `scale` the world's declared per-quantity scale — the same scaled metric the
+  sufficiency test uses — not unscaled mean-squared error.
 - Gradient check: one finite-difference check of backprop on the fixed
   64-pair batch, run once before training — `direct`'s network under plain
   Gaussian NLL, each ensemble member under MSE; relative-error denominator
@@ -174,8 +182,10 @@ with `|u|` uniform on `(max, 2·max]`. Predator–prey kicks are small (trained
 `[−0.1, 0.1]`) because larger ones were measured to crash the prey
 population through its floor on full-length runs.
 
-**Disclosed:** training pairs are 25% kicks (`kick_pairs / subsample_pairs`)
-while evaluation steps are about 1% (LV) and 0.2% (pendulum) kicks. Both
+**Disclosed:** training pairs are 12.5% kicks (`kick_pairs / subsample_pairs`
+= 12,500 / 100,000; it was 25% before the 2026-10-04 fallback to 100,000, and
+the sufficiency build at twice that has 6.25%) while evaluation steps are about
+1% (LV) and 0.2% (pendulum) kicks. Both
 unrigged models share this. The build reports each model's held-out error
 separately on kick and non-kick pairs.
 
@@ -204,7 +214,10 @@ seed purposes (`"train-starts"` / `"eval-starts"`), making the two sets
 disjoint by construction (MU-7). The 2026-09-28 revision adds its own
 purposes, each distinct: `"train-kicks"`, `"eval-kicks"`, `"benchmark-kicks"`
 (one stream per trajectory, trial or start), `"subsample-kick"`,
-`"subsample-nonkick"`, `"heldout"`, `"gradcheck-batch"`.
+`"subsample-nonkick"`, `"heldout"`, `"gradcheck-batch"`, and — added 2026-10-04
+with the held-out kick quota — `"heldout-kick"`. Streams used outside the
+training recipe are recorded in the build notes (`fx-honest-rough`'s noise key,
+backlog A25; the action-response probe states, A26).
 
 ## The uncertainty format (MU-1)
 
@@ -263,3 +276,13 @@ reason. Earlier versions stay readable in git history.
   other value. Unchanged: every other key. Consequence: one Model A training now
   takes about 35 s instead of 17 s, and the held-out kick quota (1,000) plus the
   training kick quota (12,500) use 13,500 of predator–prey's ~13,870 kick pairs.
+- **2026-10-07 — corrections to this file's own statements, before any model was
+  judged** (code-review-002; `build/spec-corrections-backlog.md` A23, A24). No
+  pinned number changed. (1) The "Disclosed" paragraph said training pairs are 25%
+  kicks; with `subsample_pairs: 100000` it is 12.5% (the fallback entry above said
+  "unchanged: every other key" and missed this derived figure). (2) The seed-agreement
+  claim for the cosine decay is restated to the measured range. (3) The scaled-MSE
+  loss for the ensemble and the raw-unit outputs of Model A are now written down in
+  "Units and loss scaling" — they were pinned in code and the build notes but not
+  here, so a re-implementer from this file alone would have trained different
+  weights. (4) The seed-purpose list gained `"heldout-kick"`. Unchanged: every key.

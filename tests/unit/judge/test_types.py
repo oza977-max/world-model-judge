@@ -538,3 +538,25 @@ def test_a_judge_input_cannot_be_subclassed_to_carry_identity():
     with pytest.raises(TypeError, match="cannot be subclassed"):
         class Tagged(JudgeInput):
             model_name: str = "x"
+
+
+def test_stray_python_errors_inside_the_checks_become_the_judges_own_refusals():
+    huge = 10**5000
+    for build in (
+        lambda: TaskSpec("a", "control", huge, 3),
+        lambda: Bands(n=200, p=0.1, green=(huge, 29), amber_outer=(8, 35)),
+        lambda: RegionLabel(huge, None),
+        lambda: make_input(world=huge),
+        lambda: make_input(dt=huge),
+    ):
+        with pytest.raises(JudgeInputError):
+            build()
+
+
+def test_the_small_value_types_re_run_their_checks_on_copy_and_unpickle():
+    import copy
+    import pickle
+
+    for obj in (RegionLabel("r", "state"), TaskSpec("a", "control", 0.1, 3), Bands(200, 0.1, (12, 29), (8, 35))):
+        for clone in (copy.deepcopy(obj), pickle.loads(pickle.dumps(obj)), copy.copy(obj)):
+            assert clone == obj and clone is not obj

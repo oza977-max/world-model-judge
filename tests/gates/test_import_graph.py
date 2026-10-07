@@ -37,6 +37,8 @@ that identifier-by-identifier patching of this class of route is
 whack-a-mole; banning `metaclass=` outright closes the whole family in
 one rule, since no wmj code has a legitimate reason to define one.
 Applied to both the judge gate and the models gate.
+
+In plain words: these gates read the source code and fail if the judge or the models import anything they are not allowed to (so the judge stays blind and pure), and prove the gates can fail on deliberately bad examples.
 """
 
 from __future__ import annotations

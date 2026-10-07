@@ -6,6 +6,8 @@ match finite differences, so that check is written and Red before
 `backward` exists. A phantom-gate pairing proves the check can actually
 fail — a gradient checker that never rejects a wrong gradient is no
 check at all.
+
+In plain words: these tests check the small neural network both practice models are built on: its shapes, its hand-written learning arithmetic against brute-force numbers, that it is seeded, and that its own self-check can fail.
 """
 
 from __future__ import annotations
@@ -294,3 +296,11 @@ def test_gradient_check_holds_on_the_real_adr_m3_architecture():
     target = rng.standard_normal((32, 4))
     max_rel_error = gradient_check(mlp, X, _mse_loss_and_grad(target))
     assert max_rel_error < 1e-5
+
+
+def test_the_gradient_check_floor_is_the_spec_pinned_number():
+    """models ADR-M3: the relative-error denominator is floored at 1e-3 of the largest gradient. A looser floor
+    would let a wrong backprop on a small-gradient parameter through (code-review-002)."""
+    from wmj.models import mlp
+
+    assert mlp.GRADIENT_SCALE_FLOOR == 1e-3

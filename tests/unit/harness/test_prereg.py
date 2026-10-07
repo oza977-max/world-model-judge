@@ -40,6 +40,7 @@ from wmj.harness.prereg import (
     check_prereg,
     check_recipe_world_constants,
     freeze_commit,
+    parse_matching_margin,
     read_matching_margin,
     within_matching_margin,
 )
@@ -1456,10 +1457,84 @@ def test_an_uncommitted_revert_to_the_frozen_bytes_is_not_a_clean_file(tmp_path)
     """Review pass 6 (F4): HEAD holds tuned thresholds; the worktree was put
     back to the frozen bytes without committing. The judged-against content
     must be committed, so this is refused even though the bytes are frozen."""
-    repo, freeze_sha = _frozen_repo(tmp_path)
+    repo, _freeze_sha = _frozen_repo(tmp_path)
     frozen = (repo / "prereg" / "thresholds.json").read_bytes()
     (repo / "prereg" / "thresholds.json").write_text('{"tuned": true}')
     _commit(repo, "tune", at=1_500_000)
     (repo / "prereg" / "thresholds.json").write_bytes(frozen)
     with pytest.raises(PreregNotCommittedError, match="uncommitted"):
         check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)
+
+
+# --- the matching margin is validated like every other pinned recipe number (review code-review-002) ---
+
+
+@pytest.mark.parametrize("line", [
+    "matching_margin: inf", "matching_margin: nan", "matching_margin: -1", "matching_margin: 0", "matching_margin: 1",
+    "matching_margin: 1.5", "matching_margin: 0_05", "matching_margin: ０.05", "matching_margin: 1e999",
+    "matching_margin: 0.05 per task", "matching_margin: 5%", "matching_margin:", "matching_margin: 0,05",
+    "matching_margin: 0.9 (old value)", "matching_margin: 0x1", "matching_margin: true",
+])
+def test_a_malformed_or_meaningless_matching_margin_is_refused_with_a_prereg_error(line):
+    with pytest.raises(PreregError, match="matching_margin"):
+        parse_matching_margin("epochs: 100\n" + line + "\nmodels: direct, ensemble\n")
+
+
+def test_a_matching_margin_line_must_appear_exactly_once_at_the_left_margin():
+    with pytest.raises(PreregError, match="no 'matching_margin:' line"):
+        parse_matching_margin("epochs: 100\n")
+    with pytest.raises(PreregError, match="no 'matching_margin:' line"):
+        parse_matching_margin("  matching_margin: 0.05\n")  # indented: not a key
+    with pytest.raises(PreregError, match="no 'matching_margin:' line"):
+        parse_matching_margin("\ufeffmatching_margin: 0.05\n")  # a byte-order mark hides the key
+    with pytest.raises(PreregError, match="more than once"):
+        parse_matching_margin("matching_margin: 0.05\nmatching_margin: 0.9\n")
+    # an indented prose mention of an old value is ignored, not mistaken for the key
+    assert parse_matching_margin("  matching_margin: 0.9 (old)\nmatching_margin: 0.05\n") == 0.05
+
+
+@pytest.mark.parametrize(("line", "expected"), [
+    ("matching_margin: 0.05", 0.05), ("matching_margin:0.05", 0.05), ("matching_margin: .05", 0.05),
+    ("matching_margin: 5e-2", 0.05), ("matching_margin: 0.05  # the pinned margin", 0.05),
+    ("matching_margin: 0.999", 0.999), ("matching_margin: 1e-9", 1e-9), ("matching_margin:\t0.05", 0.05),
+])
+def test_a_plain_decimal_margin_with_an_optional_comment_is_read(line, expected):
+    assert parse_matching_margin("a: 1\n" + line + "\nb: 2\n") == expected
+
+
+def test_read_matching_margin_turns_unreadable_files_into_prereg_errors(tmp_path):
+    with pytest.raises(PreregError, match="cannot read"):
+        read_matching_margin(tmp_path / "missing.md")
+    latin = tmp_path / "latin.md"
+    latin.write_bytes("matching_margin: 0.05  # caf\xe9\n".encode("latin-1"))
+    with pytest.raises(PreregError, match="cannot read"):
+        read_matching_margin(latin)
+    bad = tmp_path / "bad.md"
+    bad.write_text("matching_margin: 7\n")
+    with pytest.raises(PreregError, match="strictly between"):
+        read_matching_margin(bad)
+
+
+def test_the_real_recipe_has_a_valid_margin():
+    root = Path(__file__).resolve().parents[3]
+    assert read_matching_margin(root / "prereg" / "recipe.md") == 0.05
+
+
+def test_check_prereg_refuses_a_frozen_recipe_whose_margin_would_switch_the_gate_off(tmp_path):
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    recipe = RECIPE.replace("matching_margin: 0.05", "matching_margin: inf")
+    _commit_prereg(repo, recipe=recipe, prediction=PREDICTION, at=1_000_000)
+    _freeze(repo, at=1_100_000)
+    with pytest.raises(PreregError, match="matching_margin"):
+        check_prereg(repo, PREREG_FILES, MODELS, run_timestamp=2_000_000)
+
+
+@pytest.mark.parametrize("value", ["0.1 0.2", "0.1 per kick", "0.1, 0.2", "0.1x", "1e400"])
+def test_a_world_constant_with_trailing_tokens_is_refused(value):
+    with pytest.raises(PreregWorldConstantError, match="lv_action_max"):
+        check_recipe_world_constants(RECIPE.replace("lv_action_max: 0.1", f"lv_action_max: {value}"))
+
+
+def test_a_world_constant_with_a_trailing_comment_is_still_accepted():
+    check_recipe_world_constants(RECIPE.replace("lv_action_max: 0.1", "lv_action_max: 0.1   # trained half-width"))

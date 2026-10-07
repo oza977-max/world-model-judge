@@ -202,6 +202,9 @@ _PINNED_CONFIG = (
 )
 
 
+GIT_TIMEOUT_SECONDS = 300  # generous: a full-history walk of a large repository is the slow case
+
+
 def _git_argv(repo: Path, *args: str) -> list[str]:
     pinned = [part for setting in _PINNED_CONFIG for part in ("-c", setting)]
     return ["git", "-C", str(repo), *pinned, *args]
@@ -217,9 +220,19 @@ def _run_git(
             check=False,
             capture_output=True,
             text=not binary,
+            # bytes that are not valid text in the current locale (a path with accents under the C
+            # locale) must not become a bare UnicodeDecodeError: decode as UTF-8, keep stray bytes
+            encoding=None if binary else "utf-8",
+            errors=None if binary else "surrogateescape",
             input=stdin,
             env=_git_env(),
+            timeout=GIT_TIMEOUT_SECONDS,
         )
+    except subprocess.TimeoutExpired as exc:
+        raise PreregError(
+            f"git did not finish within {GIT_TIMEOUT_SECONDS} s ({' '.join(args[:2])}) — the pre-registration "
+            f"cannot be certified from a repository that does not answer"
+        ) from exc
     except FileNotFoundError as exc:
         raise PreregError(
             "git executable not found — cannot certify pre-registration "
@@ -486,7 +499,7 @@ def check_recipe_world_constants(recipe_text: str) -> None:
 
     modules = {"lv": lv, "pendulum": pendulum}
     for key, world, attribute in _WORLD_KEYS:
-        found = re.findall(rf"^{re.escape(key)}:[ \t]*([^#\s]*)", recipe_text, re.MULTILINE)
+        found = [v.strip() for v in re.findall(rf"^{re.escape(key)}:[ \t]*([^\n#]*)", recipe_text, re.MULTILINE)]
         if not found:
             raise PreregWorldConstantError(
                 f"the recipe has no '{key}:' line — the worlds' kick settings must be "
@@ -620,6 +633,7 @@ def check_prereg(
     recipe_text = _decode(verified["recipe.md"], f"{PREREG_DIR}/recipe.md")
     prediction_text = _decode(verified["prediction.md"], f"{PREREG_DIR}/prediction.md")
     check_recipe_world_constants(recipe_text)
+    parse_matching_margin(recipe_text)
     for model in models:
         if model.is_baseline or model.is_fixture:
             continue  # exempt: adding a baseline/fixture stays one file (TC-MU6-05)
@@ -638,16 +652,44 @@ def check_prereg(
     return freeze_sha
 
 
+def parse_matching_margin(recipe_text: str) -> float:
+    """The recipe's `matching_margin: <number>` line, validated (MU-5, TC-MU5-01).
+
+    In plain words: the matching margin decides whether the two practice models
+    count as "equally accurate"; if it were infinite, negative or misread, the
+    accuracy-matching check would pass for every pair and the experiment's
+    headline comparison would lose its meaning. So the line must appear exactly
+    once, at the left margin, as a plain decimal number strictly between 0 and
+    1 (an optional `# comment` may follow); anything else is refused with a
+    clear message — never a bare Python error, never a guess.
+    """
+    found = re.findall(r"^matching_margin:[ \t]*([^\n#]*)", recipe_text, re.MULTILINE)
+    if not found:
+        raise PreregError(
+            "no 'matching_margin:' line in the recipe — MU-5's margin must be pinned there, one line, "
+            "starting at the left margin (TC-MU5-01)"
+        )
+    if len(found) > 1:
+        raise PreregError(f"the recipe pins 'matching_margin' more than once ({found}) (TC-MU5-01)")
+    value = found[0].strip()
+    if not _PLAIN_DECIMAL.fullmatch(value):
+        raise PreregError(f"the recipe's matching_margin value {value!r} is not a plain decimal number (TC-MU5-01)")
+    margin = float(value)
+    if not (0.0 < margin < 1.0):
+        raise PreregError(
+            f"the recipe's matching_margin {value!r} must be strictly between 0 and 1 — an infinite, zero or "
+            "negative margin would make the accuracy-matching check meaningless (TC-MU5-01)"
+        )
+    return margin
+
+
 def read_matching_margin(recipe_path: str | Path) -> float:
-    """Read the pinned `matching_margin: <float>` line from recipe.md (MU-5)."""
-    for line in Path(recipe_path).read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if stripped.startswith("matching_margin:"):
-            return float(stripped.split(":", 1)[1].split("#", 1)[0].strip())
-    raise PreregError(
-        f"no 'matching_margin:' line in {recipe_path} — MU-5's margin must be "
-        f"pinned in the recipe (TC-MU5-01)"
-    )
+    """Read and validate the pinned `matching_margin` from recipe.md (MU-5)."""
+    try:
+        text = Path(recipe_path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise PreregError(f"cannot read the recipe at {recipe_path}: {exc}") from exc
+    return parse_matching_margin(text)
 
 
 def within_matching_margin(skill_a: float, skill_b: float, *, margin: float) -> bool:

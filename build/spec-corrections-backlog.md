@@ -889,7 +889,7 @@ reviewed); this note is what the next design review should fold in.
    and hold the verified bytes (or re-check immediately before use).
    Residual #7: only the repository on this disk is examined.
 
-*Where recorded:* `build/handovers/P3-C10.md` (to be written at convergence);
+*Where recorded:* `build/handovers/P3-C10.md`;
 independent review of P3-C10, passes 1–3.
 
 ### A19 — found building P3-C06: two things the training-data spec leaves open (for the next review)
@@ -997,7 +997,7 @@ text of the reviewed specs, which were not edited.
    compares medians over five seeds (seed `k` = run seed + `k`; `k = 0` is the
    old single run) instead of single runs. Epochs stay 100.
 3. **Evidence:** `build/measurements/p3-c03-model-a-real-run.md` (sections 3, 5,
-   6). Before: seed-to-seed spread of the held-out error up to 20×; after: ~1.3×.
+   6). Before: seed-to-seed spread of the held-out error up to 20×; after: ~1.1–1.4× at 50,000 pairs (up to ~2.3× for the pendulum at 100,000; corrected 2026-10-07).
 4. **The pre-registered fallback was enacted the same day** (recipe revision
    log): the official Model A check at the final settings failed on both worlds
    (median ratios 1.29 and 2.75 against 1.10), and the rule says one failing
@@ -1028,7 +1028,7 @@ picks changes trained bytes, so it belongs in the spec. Also: the members share
 Model A's cosine learning-rate decay (A23), imported from one place
 (`models/direct.py: learning_rates`), not copied.
 
-*Where recorded:* `build/handovers/P3-C04.md` (to be written at convergence).
+*Where recorded:* `build/handovers/P3-C04.md`.
 
 ### A25 — fixtures (P3-C05): a shared core, row-hashed noise, one new seed purpose (found building P3-C05)
 
@@ -1136,3 +1136,28 @@ Building the two doors in code needed a few exact rules; they are written here f
 6. **What no type can prevent:** a person writing a model's name into a free-text field (world, region, task name). The harness supplies only these three; a test pins that these are the only text fields.
 
 *Where recorded:* `build/handovers/P4-C01.md`.
+
+### A29 — NF-1 narrowed: byte-identity holds on the same CPU family and library build (code-review-002 Panel E; owner decision 2026-10-06)
+
+**In plain words:** the requirement says results are identical "across machines of the same
+platform". A reviewer showed that is not true across different processors: NumPy and its maths
+library pick different low-level routines depending on the CPU, so the same training run gives
+slightly different weights (measured: different OpenBLAS kernels give different bytes for the same
+matrix product; `exp` differs between machines with and without a wide-vector unit; the thread
+count changes nothing). On one machine everything is exactly reproducible. The owner chose to
+**narrow the claim and record the evidence** rather than pin the kernels.
+
+1. NF-1 should read: byte-identical on the **same CPU family and library build** (Python, NumPy,
+   OpenBLAS versions and the CPU features NumPy detects), same seed, same recipe.
+2. Every run records `harness.fingerprint.runtime_fingerprint()` in its envelope's `meta`
+   (P6-C01 wires it): Python, NumPy, BLAS name/version, platform, the detected CPU features, and
+   any `OPENBLAS_CORETYPE` override. A sceptic re-running elsewhere can then tell a hardware
+   difference in the last digits from a real disagreement.
+3. The ten-run byte-identity gate (TC-NF1-01) proves same-machine reproducibility only; it cannot
+   prove cross-CPU identity and should not be read as doing so.
+4. Not done (the other option): pinning `OPENBLAS_CORETYPE` and disabling the wide-vector paths
+   so any modern CPU gives the same bytes. Revisit if cross-machine identity is ever required.
+5. The requirements text and cross-cutting ADR-002 (lines 51 and 131) still say "same platform" —
+   for the next design review to reword. JU-10's seven texts are unchanged (verbatim by rule).
+
+*Where recorded:* `REMEMBER.md` §3 (P6-C01), §7; `src/wmj/harness/fingerprint.py`.

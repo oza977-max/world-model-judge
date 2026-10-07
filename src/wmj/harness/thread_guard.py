@@ -11,6 +11,7 @@ ever imported tells BLAS not to do that (cross-cutting ADR-002 rule 1).
 from __future__ import annotations
 
 import os
+import sys
 
 from wmj.errors import WmjError
 
@@ -21,13 +22,27 @@ class ThreadGuardError(WmjError):
     """Raised when a thread-count env var is missing or not '1'."""
 
 
+def _numpy_already_imported() -> bool:
+    return "numpy" in sys.modules
+
+
 def ensure_single_threaded() -> None:
     """Set the three thread-count env vars to "1".
 
     Must be called before `import numpy` appears anywhere in the
     process — NumPy reads these at import time to configure BLAS
-    threading; setting them afterwards has no effect.
+    threading; setting them afterwards has no effect. So if NumPy is
+    *already* loaded and any variable was not already "1", this refuses
+    (rather than set the variables and falsely assure the caller that
+    BLAS obeys them — code-review-002, Panel E).
     """
+    if _numpy_already_imported() and any(os.environ.get(name) != "1" for name in THREAD_ENV_VARS):
+        raise ThreadGuardError(
+            "NumPy is already imported and the thread-count variables are not all '1' — setting them now "
+            "would have no effect on BLAS; start the process through `python -m wmj` (which sets them "
+            "first) or export OMP_NUM_THREADS, OPENBLAS_NUM_THREADS and MKL_NUM_THREADS as 1 before "
+            "Python starts (cross-cutting ADR-002 rule 1)"
+        )
     for name in THREAD_ENV_VARS:
         os.environ[name] = "1"
 

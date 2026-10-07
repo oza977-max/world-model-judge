@@ -10,7 +10,7 @@ the spec does not define (so no identity field can ride along), if a number is n
 if the groups do not cover the same (task, region) pairs, or if the exception counts disagree
 with the per-trial points they are made of. Once built, a verdict is read-only: its groups
 are frozen (mappings that refuse writes, tuples instead of lists), so an inconsistent verdict
-cannot be produced by editing a good one. Facts that identify a model or a fixture belong to
+cannot be produced by editing a good one by accident. Facts that identify a model or a fixture belong to
 the harness envelope that wraps a verdict (judge spec §5). The fixed text (limitations,
 not-tested) is inserted here from `limitations.py` and checked word for word.
 """
@@ -52,12 +52,12 @@ CALIBRATION_LEVELS = [0.5, 0.8, 0.9, 0.95]  # ADR-J2: exactly these four, in thi
 # score either — and no natural cycle).
 ENTRY_FIELDS: dict[str, dict[str, str]] = {
     "skill": {"vs_persistence": "num", "vs_linear": "num", "crps": "nonneg"},
-    "error_vs_horizon": {"steps": "intlist", "median_error": "nonneglist", "divergence_reference": "numlist"},
+    "error_vs_horizon": {"steps": "intlist", "median_error": "nonneglist", "divergence_reference": "nonneglist"},
     "calibration": {"levels": "numlist", "coverage": "numlist", "n_trials": "posint", "per_dimension": "list"},
     "sharpness": {"mean_width_90": "nonneg"},
     "exceptions": {
         "n_trials": "posint", "expected": "nonneg", "observed": "nonnegint", "band": "band",
-        "low_side_sharpness_flag": "bool",
+        "low_side_sharpness_flag": "bool", "bands": "dict",
     },
     "trials": {
         "distance_unit": "str", "outcome_distance": "nonneglist", "band_lo": "nonneglist", "band_hi": "nonneglist",
@@ -66,9 +66,18 @@ ENTRY_FIELDS: dict[str, dict[str, str]] = {
     "climatology": {"switch_step": "nonnegint?", "agreement_mean_abs_z": "nonneg?", "agrees": "bool?"},
     "trust_horizons": {"tolerance": "nonneg", "steps": "nonnegint", "world_time": "nonneg", "natural_units": "str?"},
 }
-OPTIONAL_ENTRY_FIELDS: dict[str, dict[str, str]] = {"exceptions": {"bands": "dict"}}
+OPTIONAL_ENTRY_FIELDS: dict[str, dict[str, str]] = {}
 BLOCK_LEVEL_FIELDS: dict[str, tuple[str, ...]] = {"error_vs_horizon": ("dt",)}
 TASK_REGION_BLOCKS = ("skill", "calibration", "sharpness", "climatology", "trust_horizons")
+
+
+def _r(value) -> str:
+    """A safe, short `repr` for refusal messages (an absurdly long integer must not crash the message)."""
+    try:
+        text = repr(value)
+    except ValueError:  # e.g. an integer of more than 4,300 digits
+        return "<number too large to display>"
+    return text if len(text) <= 80 else text[:77] + "..."
 
 
 def _fail(message: str) -> VerdictIncompleteError:
@@ -102,7 +111,7 @@ def _plain(value, path: str, depth: int = 0):
         return value
     if type(value) is float:
         if not math.isfinite(value):
-            raise _fail(f"{path} holds a number that is not finite ({value!r}); a verdict never carries NaN or infinity")
+            raise _fail(f"{path} holds a number that is not finite ({_r(value)}); a verdict never carries NaN or infinity")
         return value
     if isinstance(value, (list, tuple)):
         return [_plain(v, f"{path}[{i}]", depth + 1) for i, v in enumerate(value)]
@@ -110,7 +119,7 @@ def _plain(value, path: str, depth: int = 0):
         out = {}
         for key, item in value.items():
             if type(key) is not str or not key.strip():
-                raise _fail(f"{path} has a key that is not a non-blank string: {key!r}")
+                raise _fail(f"{path} has a key that is not a non-blank string: {_r(key)}")
             if key.endswith(BANNED_KEY_SUFFIXES):
                 raise _fail(f"{path}.{key}: suffix-encoded axes are banned — use explicit key fields (judge spec §5)")
             out[key] = _plain(item, f"{path}.{key}", depth + 1)
@@ -180,8 +189,8 @@ def _kind_ok(kind: str, value) -> bool:
 
 def _check_key_field(name: str, i: int, field: str, value) -> None:
     if field == "horizon_step":
-        if not _is_int(value) or value < 0:
-            raise _fail(f"{name}[{i}].horizon_step must be a whole number >= 0, got {value!r}")
+        if not _is_int(value) or value < 1:
+            raise _fail(f"{name}[{i}].horizon_step must be a whole number >= 1 (steps are 1-based, ADR-J4), got {_r(value)}")
     elif type(value) is not str or not value.strip():
         raise _fail(f"{name}[{i}] has no '{field}' (every entry carries its task/region/step keys)")
 
@@ -219,7 +228,7 @@ def _check_block(name: str, block) -> dict:
                     raise _fail(f"{where} is missing its required field '{field}'")
                 continue
             if not _kind_ok(kind, entry[field]):
-                raise _fail(f"{where}.{field} must be {kind} (got {entry[field]!r}) — a field that could not be computed aborts the run")
+                raise _fail(f"{where}.{field} must be {kind} (got {_r(entry[field])}) — a field that could not be computed aborts the run")
         key = tuple(entry[f] for f in key_fields)
         if key in seen:
             raise _fail(f"{name}.{list_name} has two entries for the same key {key}")
@@ -248,9 +257,7 @@ def _check_calibration(block: dict) -> None:
 
 
 def _check_exception_bands(i: int, entry: dict) -> None:
-    bands = entry.get("bands")
-    if bands is None:
-        return
+    bands = entry["bands"]
     ok = (
         set(bands) == {"green", "amber", "red"}
         and _pair(bands["green"])
@@ -267,16 +274,19 @@ def _check_exception_bands(i: int, entry: dict) -> None:
         )
     g_lo, g_hi = bands["green"]
     (a1_lo, a1_hi), (a2_lo, a2_hi) = bands["amber"]
-    if not (a1_lo <= a1_hi < g_lo <= g_hi < a2_lo <= a2_hi):
-        raise _fail(f"exceptions.per_task[{i}].bands must nest: amber-low < green < amber-high")
+    if not (a1_lo <= a1_hi and a1_hi + 1 == g_lo and g_lo <= g_hi and g_hi + 1 == a2_lo and a2_lo <= a2_hi):
+        raise _fail(
+            f"exceptions.per_task[{i}].bands must be contiguous whole-number ranges: amber-low, then green, then "
+            "amber-high with no gap or overlap (ADR-J4)"
+        )
     observed = entry["observed"]
     expected_band = "green" if g_lo <= observed <= g_hi else (
         "amber" if (a1_lo <= observed <= a1_hi or a2_lo <= observed <= a2_hi) else "red"
     )
     if entry["band"] != expected_band:
         raise _fail(
-            f"exceptions.per_task[{i}]: band={entry['band']!r} but observed={observed} against {bands} is "
-            f"{expected_band!r}"
+            f"exceptions.per_task[{i}]: band={_r(entry['band'])} but observed={observed} against {bands} is "
+            f"{_r(expected_band)}"
         )
 
 
@@ -324,6 +334,14 @@ def _check_cross_block(blocks: dict) -> None:
                 f"exceptions n_trials={e['n_trials']} differs from calibration n_trials="
                 f"{sizes[(e['task'], e['region'])]} for {(e['task'], e['region'])} — one shared trial set"
             )
+    switch = {(e["task"], e["region"]): e["switch_step"] for e in blocks["climatology"]["per_task"]}
+    for e in blocks["trust_horizons"]["per_task"]:
+        cap = switch[(e["task"], e["region"])]
+        if cap is not None and e["steps"] > cap:
+            raise _fail(
+                f"trust_horizons steps={e['steps']} for {(e['task'], e['region'])} exceeds the switch step {cap} — "
+                "the trust horizon is capped at the switch step (ADR-J5)"
+            )
     regions = {r for _, r in reference}
     covered = {e["region"] for e in blocks["error_vs_horizon"]["per_region"]}
     if covered != regions:
@@ -364,7 +382,6 @@ def _check_trials_and_exceptions(trials: dict, exceptions: dict) -> None:
         key = (entry["task"], entry["region"], entry["horizon_step"])
         if key not in by_key:
             raise _fail(f"exceptions.per_task[{i}] {key} has no matching trials entry")
-        _check_exception_bands(i, entry)
         observed_sum, n_points = by_key[key]
         if entry["observed"] != observed_sum:
             raise _fail(
@@ -376,6 +393,7 @@ def _check_trials_and_exceptions(trials: dict, exceptions: dict) -> None:
                 f"exceptions.per_task[{i}] {key}: n_trials={entry['n_trials']} but the trials entry holds "
                 f"{n_points} points — the header count and the points are one fact"
             )
+        _check_exception_bands(i, entry)
     if {(e["task"], e["region"], e["horizon_step"]) for e in exceptions["per_task"]} != set(by_key):
         raise _fail("every trials entry needs exactly one matching exceptions entry")
 
@@ -397,6 +415,14 @@ class Verdict:
     limitations: tuple
 
     def __post_init__(self) -> None:
+        try:
+            self._validate()
+        except VerdictIncompleteError:
+            raise
+        except (OverflowError, TypeError, ValueError, RecursionError) as exc:
+            raise _fail(f"the verdict cannot be built from this input ({type(exc).__name__}: {exc})") from exc
+
+    def _validate(self) -> None:
         if type(self.world) is not str or not self.world.strip():
             raise _fail("the verdict needs the world's name")
         checked = {name: _check_block(name, block) for name, block in self._blocks().items()}
@@ -414,8 +440,8 @@ class Verdict:
             raise _fail("limitations must be the seven JU-10 disclosures, verbatim and in order (ADR-J7)")
         if not_tested != NOT_TESTED:
             raise _fail("not_tested must be the fixed not-tested list (judge spec §5)")
-        object.__setattr__(self, "limitations", limitations)
-        object.__setattr__(self, "not_tested", not_tested)
+        object.__setattr__(self, "limitations", JU10_DISCLOSURES)  # the constants themselves, not the caller's objects
+        object.__setattr__(self, "not_tested", NOT_TESTED)
 
     def __init_subclass__(cls, **kwargs):
         raise TypeError("Verdict cannot be subclassed: a subclass could carry fields the verdict must not have")

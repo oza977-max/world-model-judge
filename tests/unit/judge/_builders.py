@@ -81,6 +81,16 @@ def make_input(**overrides) -> JudgeInput:
     return JudgeInput(**kwargs)
 
 
+GOOD_BANDS = {"green": [12, 29], "amber": [[8, 11], [30, 35]], "red": "outside"}
+
+
+def band_for(observed: int) -> str:
+    """The band name ADR-J4 gives a count against the pinned green [12, 29] and amber [8, 11] / [30, 35]."""
+    if 12 <= observed <= 29:
+        return "green"
+    return "amber" if 8 <= observed <= 35 else "red"
+
+
 def good_blocks() -> dict:
     """Eight valid metric blocks (everything the judge computes except the two constant groups).
 
@@ -100,7 +110,8 @@ def good_blocks() -> dict:
         "sharpness": {"per_task": [{"task": t, "region": r, "mean_width_90": 0.18} for t, r in keys]},
         "exceptions": {"per_task": [
             {"task": t, "region": r, "horizon_step": 1, "n_trials": 4, "expected": 0.4,
-             "observed": sum(flags[t]), "band": "green", "low_side_sharpness_flag": False} for t, r in keys]},
+             "observed": sum(flags[t]), "band": band_for(sum(flags[t])), "low_side_sharpness_flag": False,
+             "bands": dict(GOOD_BANDS)} for t, r in keys]},
         "trials": {"per_task": [
             {"task": t, "region": r, "horizon_step": 1, "distance_unit": "rms-normalised",
              "outcome_distance": [0.1, 0.2, 0.3, 0.4], "band_lo": [0.0] * 4, "band_hi": [0.2] * 4,
@@ -108,7 +119,7 @@ def good_blocks() -> dict:
         "climatology": {"per_task": [
             {"task": "lv-control", "region": "training", "switch_step": None,
              "agreement_mean_abs_z": None, "agrees": None},
-            {"task": "lv-planning", "region": "training", "switch_step": 4,
+            {"task": "lv-planning", "region": "training", "switch_step": 50,
              "agreement_mean_abs_z": 0.6, "agrees": True}]},
         "trust_horizons": {"per_task": [
             {"task": "lv-control", "region": "training", "tolerance": 0.1, "steps": 118, "world_time": 2.36,

@@ -89,7 +89,7 @@ def binomial_bands(n: int = _N, p: float = _P) -> dict:
     return {
         "n": n,
         "p": p,
-        "expected_exceptions": int(round(n * p)),
+        "expected_exceptions": round(n * p),
         "green": [g_lo, g_hi],
         "amber_outer": [a_lo, a_hi],
         "green_outside_prob": outside(g_lo, g_hi),
@@ -126,7 +126,9 @@ def write_thresholds(path: str | Path) -> None:
     canonical serializer (sorted keys, `allow_nan=False`)."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(canonical_serialize(build_thresholds()))
+    scratch = path.with_name(path.name + ".tmp")  # write beside, then swap in: a crash never truncates the file
+    scratch.write_bytes(canonical_serialize(build_thresholds()))
+    scratch.replace(path)
 
 
 if __name__ == "__main__":  # run once at pre-registration, then commit

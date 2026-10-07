@@ -600,3 +600,9 @@ def test_the_factory_and_the_defaults_train_exactly_the_recipes_100_epochs_of_ba
     single = train_member(_lv_ctx(), _seeds(), data, 2)
     assert all(W.tobytes() == W2.tobytes() for (W, _), (W2, _) in zip(single.layers, explicit[2].layers))
     assert (direct.EPOCHS, direct.BATCH_SIZE) == (100, 256)
+
+
+def test_every_trained_ensemble_member_is_read_only(nets):
+    for net in nets:
+        for W, b in net.layers:
+            assert W.flags.writeable is False and b.flags.writeable is False

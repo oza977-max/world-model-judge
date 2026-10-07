@@ -19,11 +19,13 @@ import pytest
 from wmj.harness import sufficiency
 from wmj.harness.sufficiency import (
     SufficiencyError,
-    check_world as _check_world,
     decide_subsample_pairs,
     held_out_error,
     kick_split_error,
     m_is_sufficient,
+)
+from wmj.harness.sufficiency import (
+    check_world as _check_world,
 )
 from wmj.harness.training import TrainingRecipe, build_training_data, make_world_context
 from wmj.models.base import Pairs, SeedSource
@@ -580,3 +582,19 @@ def test_the_kick_split_reports_the_median_over_seeds_too():
     want = np.mean((0.01 / np.asarray(lv.WORLD.scale)) ** 2)
     assert result.split_m.error_plain == pytest.approx(want, rel=1e-9)
     assert result.split_m.n_kick > 0 and result.split_m.error_kick == pytest.approx(want, rel=1e-9)
+
+
+# --- review code-review-002 -------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("bad", [float("nan"), -0.1, float("inf"), True, None, "0.1"])
+def test_a_bad_tolerance_is_refused_before_any_training_happens(bad):
+    calls = []
+
+    def factory(ctx, seeds, training):
+        calls.append(1)
+        raise AssertionError("training must not start")
+
+    with pytest.raises(SufficiencyError, match="tolerance"):
+        check_world("lv", lv.WORLD, factory, RECIPE, SEED, "direct", horizon=100, tolerance=bad)
+    assert calls == []

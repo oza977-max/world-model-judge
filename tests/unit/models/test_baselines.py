@@ -4,6 +4,8 @@ Persistence: mean = current state; spread = std of one-step training
 changes. Linear: mean = current + (current - previous), falling back
 to persistence on the first predict() of a rollout (no previous yet);
 spread = std of that rule's own training residuals.
+
+In plain words: these tests check the two simple reference models ("nothing changes" and "straight line"): what they predict, how wide their error bars are, that they refuse a degenerate error bar, and that persistence can predict a whole batch exactly like one row at a time.
 """
 
 from __future__ import annotations

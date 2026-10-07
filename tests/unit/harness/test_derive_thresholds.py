@@ -5,6 +5,8 @@ green = the widest central region whose each tail is <= 2.5% -> [12, 29];
 amber-outer = each tail <= 0.05% -> [8, 35]; red beyond. These integers are
 *computed* here and asserted against the spec's pinned values, so the
 derivation — not a hardcoded table — is what is tested (JU-11).
+
+In plain words: these tests check that the pass/fail bands are computed from the exact binomial arithmetic rather than chosen by eye, that the committed file matches the code, and that writing it can never leave a half-written file.
 """
 
 from __future__ import annotations
@@ -73,3 +75,49 @@ def test_write_thresholds_is_byte_reproducible(tmp_path):
     # and it is valid JSON with the bands
     loaded = json.loads(a.read_text())
     assert loaded["bands"]["amber_outer"] == [8, 35]
+
+
+# --- review code-review-002 ---------------------------------------------------------------------
+
+
+def test_the_committed_thresholds_file_is_exactly_what_the_code_derives():
+    """prereg/thresholds.json is committed before judging; if it drifts from the derivation
+    (a hand edit, or a change to a world's scale vector) the pre-registration would certify
+    numbers the code no longer produces."""
+    from pathlib import Path
+
+    from wmj.harness.serialize import canonical_serialize
+
+    committed = Path(__file__).resolve().parents[3] / "prereg" / "thresholds.json"
+    assert canonical_serialize(build_thresholds()) == committed.read_bytes()
+
+
+def test_writing_thresholds_is_atomic_a_failed_write_leaves_the_old_file_and_no_scratch(tmp_path, monkeypatch):
+    from wmj.harness import derive_thresholds as dt
+
+    target = tmp_path / "prereg" / "thresholds.json"
+    write_thresholds(target)
+    good = target.read_bytes()
+    assert not list(target.parent.glob("*.tmp"))  # no scratch file is left behind on success
+
+    def boom():
+        raise RuntimeError("crash while computing")
+
+    monkeypatch.setattr(dt, "build_thresholds", boom)
+    try:
+        write_thresholds(target)
+    except RuntimeError:
+        pass
+    assert target.read_bytes() == good and not list(target.parent.glob("*.tmp"))
+    monkeypatch.undo()
+
+    def crash_on_swap(self, other):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(type(target), "replace", crash_on_swap)
+    try:
+        write_thresholds(target)
+    except OSError:
+        pass
+    monkeypatch.undo()
+    assert target.read_bytes() == good  # the live file was never half-written

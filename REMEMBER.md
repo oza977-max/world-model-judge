@@ -50,9 +50,7 @@ Ordered by when they bite. *(D1–D6, D12 and D14 were settled at Round 10 on
 |---|---|---|---|
 | D15 | **New, found while applying Round 10 (not yet reviewed): the climatology reference is still null-action.** JU-6's conditioned climatology comes from one 200,000-step *unkicked* trajectory, binned by the conserved quantity; evaluation trials now carry kicks, which move a trajectory between bins after the switch step. With small, sparse kicks the effect should be modest, but it is unmeasured. Options: disclose it, measure it at P4-C05, or build the climatology from a kicked trajectory. | Measure at P4-C05 and disclose the figure; route any design change through review. | backlog A16; 2026-09-28 |
 | D16 | **New at P3-C09 (backlog A17):** should every `out-large-action` test run be *guaranteed* at least one kick (by construction), rather than checked by a test as now? Without a kick a run in that region would be labelled "fully familiar". Rare (≈0.09% of LV runs) and absent with the pinned seed. Also: two small helper modules and a `kick_rate_per_s` world setting are not yet named in the specs. | Ratify at the next review; guaranteeing a kick is a one-line rule. | backlog A17; 2026-09-29 |
-| D17 | **CLOSED 2026-10-04 — implemented on the owner's "go ahead with your recommendations"** (backlog A23; `prereg/recipe.md` revision log). Held-out set now has its own kick quota (`heldout_kick_pairs: 1000`). | — | backlog A23 |
-| D18 | **CLOSED 2026-10-04 — implemented on the owner's "go ahead with your recommendations"** (backlog A23; `prereg/recipe.md` revision log). Cosine learning-rate decay (`lr_initial` 1e-3 → `lr_final` 1e-5, epochs stay 100) and a median-of-5-seeds sufficiency test (`sufficiency_seeds: 5`); seed-to-seed spread of the held-out error fell from up to ~20× to ~1.3×. **The pre-registered fallback to 100,000 pairs was enacted 2026-10-04** (Model A failed the median test on both worlds: ratios 1.29 / 2.75; one failing model decides it). | — | backlog A23 |
-| D19 | **New at P3-C04 (disclosure for the owner):** at build time I computed *calibration* statistics (z-scores, coverage of one error bar) of both practice models on the **held-out pairs** — not evaluation trials, not used to change any model, the recipe or `prereg/prediction.md` (all unchanged). Result: Model A well calibrated, the ensemble over-confident. Prereg residual 5 forbids *evaluation-trial* metrics before the freeze; held-out pairs are the build-time sufficiency/kick-report set, so this is not a breach, but it is a look at the thing the experiment will later test. | Decide whether this needs a line in the verdict's limits (JU-10) or the prediction's revision log; recommended: disclose in `prereg/prediction.md`'s revision note that the build-time calibration was seen and the prediction was left unchanged. | `build/measurements/p3-c04-model-b-real-run.md` |
+| D19 | **BEFORE THE FREEZE — decide (listed in §3 "Before P6-C03"). New at P3-C04 (disclosure for the owner):** at build time I computed *calibration* statistics (z-scores, coverage of one error bar) of both practice models on the **held-out pairs** — not evaluation trials, not used to change any model, the recipe or `prereg/prediction.md` (all unchanged). Result: Model A well calibrated, the ensemble over-confident. Prereg residual 5 forbids *evaluation-trial* metrics before the freeze; held-out pairs are the build-time sufficiency/kick-report set, so this is not a breach, but it is a look at the thing the experiment will later test. | Decide whether this needs a line in the verdict's limits (JU-10) or the prediction's revision log; recommended: disclose in `prereg/prediction.md`'s revision note that the build-time calibration was seen and the prediction was left unchanged. | `build/measurements/p3-c04-model-b-real-run.md` |
 | D7 | **Registry discovery carve-out:** allow only `wmj/models/registry.py` to import `importlib`/`pkgutil`. | Decide at P6-C01; ratify in review. | backlog A11 |
 | D8 | **BC-4 purity decision** (drop the completeness claim; byte-identity as backstop; no out-of-process sandbox) was delegated to the assistant and is "reversible in the spec text". | Owner ratifies or reverses. | calibration:228 |
 | D9 | **Essay: "No threshold forces a stop" is still unaddressed** — frontier AI labs publish risk policies where crossing a capability threshold triggers mandatory action. Mention it? | Owner's call. | `HANDOVER.md:296` |
@@ -62,14 +60,14 @@ Ordered by when they bite. *(D1–D6, D12 and D14 were settled at Round 10 on
 
 ## 3. Owed work, by stage
 
-**Now — next: Phase-3 wiring audit (Hard Gate 7), then Phase 4. P3-C08 (action-response check + `fx-action-blind`, DONE 2026-10-04, two review passes, handover `build/handovers/P3-C08.md`), P3-C05 (the three fixtures, DONE 2026-10-04, five review passes, handover `build/handovers/P3-C05.md`), P3-C04 (the ensemble, with the P3-C02 re-open), P3-C03 (Model A) and P3-C06 are DONE (handovers in `build/handovers/`); owner decisions D17 and D18 are open and affect the recipe before the freeze. P3-C10 (the one-time lock) is DONE (2026-10-03, six review passes, handover `build/handovers/P3-C10.md`).**
+**Now: Phase 4 (the judge) — P4-C01 (types and verdict assembly) built and in review; next P4-C02 (skill). Phase 3 is DONE: all ten chunks, its wiring audit (passed) and its code review (code-review-002; fixes applied 2026-10-07). Handovers are in `build/handovers/`. The freeze (`prereg/FREEZE`) has NOT been made; see "Before P6-C03".**
 - **Independent re-check of the v1.8 purity guards and the rewritten ADR-004 orchestration loop** — owed by BC-2 since `calibration.md:249`; Rounds 9 and 10 were scoped elsewhere. Neither is built yet (P4-C06, P6-C01).
 - Fold the remaining spec text corrections listed in §5 into the specs at the next review.
 
 
 **P3-C10 — DONE.** Carry-forward: P6-C01 must hold the bytes `check_prereg` verified (or re-check immediately before use) — the certificate is a commit id, not the bytes later read (residual 6). Making the freeze itself (committing `prereg/FREEZE`) is a human act after the recipe is final; D17 and the sufficiency-test result come first.
 
-**P3-C06 — training data: DONE 2026-10-03 (five review passes, handover `build/handovers/P3-C06.md`; `src/wmj/harness/training.py`). Kick-safety gate calls the real generator. Full-scale: LV 13,874 kick pairs available (need 12,500), pendulum 19,900; builds in ~1 s / ~11 s. Open: D17 (held-out kick share ~0.1% — owner decision before P3-C03's kick report). Note for P6-C01: `read_training_recipe` has no from-bytes entry; add one if holding verified bytes.**
+**P3-C06 — training data: DONE 2026-10-03 (five review passes, handover `build/handovers/P3-C06.md`; `src/wmj/harness/training.py`). Kick-safety gate calls the real generator. Full-scale: LV 13,874 kick pairs available (need 12,500), pendulum 19,900; builds in ~1 s / ~11 s. (D17 — the small held-out kick share — was closed 2026-10-04: the held-out set now has 1,000 kicked pairs.) Note for P6-C01: `read_training_recipe` has no from-bytes entry; add one if holding verified bytes.**
 - Draw kicks with `wmj.harness.kicks.seeded_kick_sequences(..., "train-kicks", ...)` and step with `transition_batch` (both built at P3-C09); then point the training half of `tests/gates/test_kick_safety_full_scale.py` at the real generator.
 - 2,000 kicked full-horizon trajectories per world, then the harness's subsample (12,500 kick pairs + non-kick pairs to M), held-out and grad-check sets — models §4 as revised at Round 10.
 - **Measure runtime** for real and report it against judge ADR-J6's new measured envelope.
@@ -84,7 +82,7 @@ Ordered by when they bite. *(D1–D6, D12 and D14 were settled at Round 10 on
 - P3-C04: `sqrt(1+1/K)·std(ddof=1)` spread mapping (TC-MU5-03).
 - **Independent re-check owed for the 2026-10-04 amendments (D17 quota in `harness/training.py`, D18 cosine decay in `models/direct.py`, median-of-seeds in `harness/sufficiency.py`):** built with tests and the author's own mutation checks only; fold them into P3-C04's review passes (they share the files).
 - ~~P3-C02 must be re-opened~~ **DONE with P3-C04 (2026-10-04):** persistence/linear `stateless`, persistence `predict_batch`, TC-MU1-04 over the roster.
-- **D17 clarification:** the 6 (LV) / 10 (pendulum) kicked held-out rows are for the 50,000-pair build; the sufficiency report scores the 100,000-pair build's held-out set, which has 10 (LV) / 7 (pendulum). Same conclusion — far too few for a kick-split claim.
+- ~~D17 clarification~~ **closed 2026-10-04:** the held-out set now carries its own kick quota (1,000 kicked pairs), so a kick-split figure rests on 1,000 examples, not 6–10.
 - Serialising `KickSplit` counts (numpy ints) to JSON at P6-C01: cast to `int`.
 - **Contract from P3-C06's review (read before building the models):**
   - *Factories must refuse `train_pairs is None`* (the pair fields are optional only for the skeleton/preview callers; backlog A19).
@@ -111,11 +109,11 @@ Ordered by when they bite. *(D1–D6, D12 and D14 were settled at Round 10 on
 
 **Phase 5** — P5-C03: full Chart-2 caption and switch lines. P5-C04: TC-RP7-02 SVG identity, TC-JU12-04, model card, `writer.py` sole writer to `out/`.
 
-**P6-C01** — registry auto-discovery + D7 carve-out; `wmj run`, `wmj verify`, `wmj list-models` (output format unspecified — pin it); orchestration loop with baseline pre-pass and **batched rollouts** (Round 10); **record the freeze SHA `check_prereg` returns as `meta.prereg_commit`** (TC-MU6-07); TC-MU9-01/02/03, TC-MU2-02 full, TC-NF1-05/09, full TC-WD3-01, full TC-NF1-01/02; wire benchmarks, regions, action_response, fixtures into `wmj run`. **Also wire `harness.training.assert_eval_starts_disjoint` into the run** (models spec lines 289/313 say the harness asserts start-disjointness at run time; it is built and tested at P3-C06 but no caller in `src/` uses it yet). Read and hold the bytes `check_prereg` verified (P3-C10 residual 6).
+**P6-C01** — put `harness.fingerprint.runtime_fingerprint()` into every envelope's `meta` (NF-1 narrowing, A29); call `check_action_response` for every model (A26); wire `harness.training` incl. `assert_eval_starts_disjoint` (A27); registry auto-discovery + D7 carve-out; `wmj run`, `wmj verify`, `wmj list-models` (output format unspecified — pin it); orchestration loop with baseline pre-pass and **batched rollouts** (Round 10); **record the freeze SHA `check_prereg` returns as `meta.prereg_commit`** (TC-MU6-07); TC-MU9-01/02/03, TC-MU2-02 full, TC-NF1-05/09, full TC-WD3-01, full TC-NF1-01/02; wire benchmarks, regions, action_response, fixtures into `wmj run`. **Also wire `harness.training.assert_eval_starts_disjoint` into the run** (models spec lines 289/313 say the harness asserts start-disjointness at run time; it is built and tested at P3-C06 but no caller in `src/` uses it yet). Read and hold the bytes `check_prereg` verified (P3-C10 residual 6).
 
 **P6-C02** — regenerate the stale `specs/*.html` twins with the parity hash; runtime/dependency/confidentiality gates; README must state the PNG byte-identity exclusion and the SVG reproducibility property.
 
-**Before P6-C03 — the freeze.** Commit `prereg/FREEZE` once (one freeze, ever — models ADR-M5). **No evaluation-trial metric of either unrigged model may be computed before it** (disclosed residual #5).
+**Before P6-C03 — the freeze.** First settle **D19** (the build-time look at held-out calibration; `prereg/prediction.md` is unrevised and still says the ensemble is better calibrated) and confirm no open recipe revision is pending (the last was 2026-10-07). Then commit `prereg/FREEZE` once (one freeze, ever — models ADR-M5). **No evaluation-trial metric of either unrigged model may be computed before it** (disclosed residual #5).
 
 **P6-C03 — the judged run** — `check_prereg` → full run → publish `out/` → **publish either way (TC-MU6-02) — the owner's job, not code**; human passes: TC-JU10-02 (a newcomer sees judge and models share an author), **TC-NF4-02 (a reader with banking knowledge checks every description is generic and publicly sourced)**, TC-NF5-01 (no overclaim), TC-RP5-01; answer OQ-3 honestly.
 
@@ -126,7 +124,7 @@ Ordered by when they bite. *(D1–D6, D12 and D14 were settled at Round 10 on
 | Promise | Made |
 |---|---|
 | Flag the moment the pieces exist to run the **MU-5 separability test** — the thesis's moment of truth — and offer a clearly labelled throwaway spike if the owner wants certainty sooner. | 2026-09-11 |
-| Say when the build reaches **cosmetic work** (Phase 5/6 copy, README, changelog) so the owner can switch to Sonnet; keep Opus for the numerically delicate chunks. | 2026-09-11 |
+| Say when the build reaches **cosmetic work** (Phase 5/6 copy, README, changelog) so the owner can switch to a cheaper model; keep the strongest for the numerically delicate chunks. | 2026-09-11 |
 | Surface the **measured epoch/runtime numbers** at P3-C06/C03. | 2026-09-11 |
 | Report **Model A's fit openly** — now via the pre-registered sufficiency test and the kick/non-kick held-out split (Round 10 replaced "fit vs the MU-5 margin", which would have tuned against the comparison). | 2026-09-27, revised 2026-09-28 |
 | Report whether the **smaller LV lever** still lets the action-blind fixture be caught (P3-C08). | 2026-09-28 |
@@ -170,11 +168,11 @@ ships pre-trained weights instead of training from scratch).
 ADR-M5's five residuals (rewritable git history, undetectable
 non-publication, forgeable commit timestamps, entry substance (A13), no
 evaluation before the freeze — procedural, not enforceable); the gradient
-check's near-dead-unit blind spot (A10); the train/eval kick-share shift (25%
+check's near-dead-unit blind spot (A10); the train/eval kick-share shift (12.5%
 vs ~1% / ~0.2%); the small LV lever (kicks ≤ 0.1);
 JU-10's seven limitation texts, verbatim, in every verdict; the not-tested
 list; TC-JU12-04 (`ctypes`, pre-capture); NF-4 gaps (no pre-push layer,
-web-UI merges, gc-pruned objects); cross-platform identity out of scope; PNGs
+web-UI merges, gc-pruned objects); byte-identity holds on the same CPU family and library build, not across different CPUs (different CPUs choose different maths routines — A29; every run records a fingerprint, `harness/fingerprint.py`); PNGs
 outside byte-identity; BLAS thread settings not verifiable at runtime; worlds
 hardcoded, not auto-discovered.
 
@@ -184,6 +182,10 @@ hardcoded, not auto-discovered.
 
 | Item | Closed | How |
 |---|---|---|
+| D17 Held-out kick quota | 2026-10-04 | Implemented on the owner's "go ahead with your recommendations": `heldout_kick_pairs: 1000` (backlog A23; recipe revision log). Re-checked independently in code-review-002 (2026-10-06): quota drawn kicks-first, no other stream shifts, held-out disjoint. |
+| D18 Sufficiency test noise | 2026-10-04 | Implemented the same way: cosine decay 1e-3 → 1e-5, median of 5 seeds; fallback to 100,000 enacted by the pre-registered rule (A23). Re-checked independently in code-review-002. |
+| Phase 3 wiring audit (Hard Gate 7) | 2026-10-04 | Passed by hand-run greps; matrix gaps recorded as backlog A27. |
+| code-review-002 (Phase 3) | 2026-10-06 | 0 Critical, 6 Important, 19 Minor; owner chose "fix all recommended" and "narrow NF-1, record the CPU" (backlog A29). `code-review/code-review-002.html`; fixes in the commit that follows it. |
 | D1 Model A's loss | 2026-09-28 | β-NLL, β = 0.5, gradient written out (models ADR-M3, recipe). Round 10. |
 | D2 Freeze-point contradiction | 2026-09-28 | One freeze, ever: the commit that adds `prereg/FREEZE` (models ADR-M5); build at P3-C10. |
 | D3 Training recipe over budget | 2026-09-28 | 50,000-pair harness subsample, batch 256, batched evaluation; NF-2 purpose stated (requirements v1.4); ADR-J6 measured envelope. `sharpness_hedge_threshold = scale` ratified. |
