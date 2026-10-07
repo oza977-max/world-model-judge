@@ -31,11 +31,11 @@ TASK_KINDS = ("control", "planning")
 
 
 def _r(value) -> str:
-    """A safe, short `repr` for refusal messages (a absurdly long integer must not crash the message)."""
+    """A safe, short `repr` for refusal messages (an absurdly long integer must not crash the message)."""
     try:
         text = repr(value)
-    except ValueError:  # e.g. an integer of more than 4,300 digits
-        return "<number too large to display>"
+    except Exception:  # noqa: BLE001 - an integer of 4,300+ digits, a deeply nested or hostile object
+        return "<value too large or odd to display>"
     return text if len(text) <= 80 else text[:77] + "..."
 
 
@@ -44,6 +44,8 @@ def _bad(message: str) -> JudgeInputError:
 
 
 def _frozen_array(name: str, value, *, dtype=float, ndim: int | None = None) -> np.ndarray:
+    if isinstance(value, np.ma.MaskedArray):
+        raise _bad(f"{name} is a masked array — masked cells would be silently read as numbers")
     try:
         source = np.asarray(value)
     except (TypeError, ValueError) as exc:
@@ -61,7 +63,7 @@ def _frozen_array(name: str, value, *, dtype=float, ndim: int | None = None) -> 
     if arr.dtype.kind == "f" and not np.all(np.isfinite(arr)):
         raise _bad(f"{name} contains NaN or infinity")
     arr.setflags(write=False)
-    return arr
+    return arr.view()  # a view of a locked owner: its WRITEABLE flag cannot be switched back on
 
 
 def _exact_str(name: str, value) -> str:
@@ -284,6 +286,9 @@ class RegionClimatology:
             raise _bad("every climatology bin of a region must cover the same number of quantities")
         _set(self, "bins", bins)
 
+    def __reduce__(self):
+        return (RegionClimatology, (self.region_name, self.bins))
+
 
 @dataclass(frozen=True, slots=True, eq=False)
 class RegionCurve:
@@ -366,6 +371,14 @@ class JudgeInput:
             raise _bad(f"region_labels needs exactly one RegionLabel per trial ({n}), got {len(labels)}")
         _set(self, "region_labels", labels)
         regions = sorted({x.region_name for x in labels})
+        for region in regions:
+            count = sum(1 for x in labels if x.region_name == region)
+            if count != self.thresholds.bands.n:
+                raise _bad(
+                    f"region {region!r} has {count} trials but the pre-registered bands are for exactly "
+                    f"n = {self.thresholds.bands.n}: grading a different number of trials against them would "
+                    "give a wrong band (judge spec ADR-J4)"
+                )
 
         curves = _as_tuple('divergence_curves', self.divergence_curves)
         if not all(type(c) is RegionCurve for c in curves):
@@ -425,8 +438,8 @@ def _guard_post_init(cls) -> None:
             raise
         except MissingBaselineError:
             raise
-        except (OverflowError, TypeError, ValueError) as exc:
-            raise JudgeInputError(f"{cls.__name__}: unusable input ({type(exc).__name__}: {exc})") from exc
+        except Exception as exc:
+            raise JudgeInputError(f"{cls.__name__}: unusable input ({type(exc).__name__})") from exc
 
     cls.__post_init__ = checked
 

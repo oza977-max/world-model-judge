@@ -469,7 +469,7 @@ def test_a_field_the_spec_does_not_define_is_refused_so_no_identity_can_ride_alo
 GOOD_BANDS = {"green": [12, 29], "amber": [[8, 11], [30, 35]], "red": "outside"}
 
 
-def test_the_optional_bands_field_has_exactly_the_specs_shape_and_agrees_with_the_band_name():
+def test_the_bands_field_has_exactly_the_specs_shape_and_agrees_with_the_band_name():
     blocks = blocks_copy()
     entry = blocks["exceptions"]["per_task"][0]
     entry["bands"] = dict(GOOD_BANDS)
@@ -676,7 +676,7 @@ def test_zero_valued_edges_are_legitimate():
     blocks["trials"]["per_task"][0]["outcome_distance"] = [0.0, 0.0, 0.3, 0.4]
     blocks["trials"]["per_task"][0]["band_lo"] = [0.0] * 4
     blocks["trials"]["per_task"][0]["band_hi"] = [0.0, 0.2, 0.2, 0.2]  # lo == hi is allowed
-    blocks["calibration"]["per_task"][0]["coverage"] = [0.0, 1.0, 0.5, 0.5]
+    blocks["calibration"]["per_task"][0]["coverage"] = [0.0, 0.0, 0.5, 1.0]
     blocks["trust_horizons"]["per_task"][0].update(steps=0, world_time=0.0)  # fails even at step one: 0 by convention
     build(blocks)
 
@@ -970,3 +970,122 @@ def test_divergence_references_and_per_dimension_coverage_edges():
     with pytest.raises(VerdictIncompleteError, match="per_dimension"):
         build(blocks)
     assert BUILDER_BANDS["green"] == [12, 29]
+
+
+# --- review pass 4 -------------------------------------------------------------------------------------------
+
+
+def test_hostile_containers_inside_a_group_are_refused_cleanly_not_with_a_raw_error():
+    class BadDict(dict):
+        def items(self):
+            raise RuntimeError("boom")
+
+    class BadList(list):
+        def __iter__(self):
+            raise RuntimeError("boom")
+
+    class BadRepr:
+        def __repr__(self):
+            raise RuntimeError("boom")
+
+    blocks = blocks_copy()
+    blocks["skill"]["per_task_region"][0] = BadDict(blocks["skill"]["per_task_region"][0])
+    with pytest.raises(VerdictIncompleteError):
+        build(blocks)
+    blocks = blocks_copy()
+    blocks["skill"]["per_task_region"] = BadList(blocks["skill"]["per_task_region"])
+    with pytest.raises(VerdictIncompleteError):
+        build(blocks)
+    blocks = blocks_copy()
+    blocks["skill"]["per_task_region"][0]["task"] = BadRepr()
+    with pytest.raises(VerdictIncompleteError):
+        build(blocks)
+    deep = []
+    for _ in range(3000):
+        deep = [deep]
+    blocks = blocks_copy()
+    blocks["calibration"]["per_task"][0]["per_dimension"] = deep
+    with pytest.raises(VerdictIncompleteError):
+        build(blocks)
+
+
+def test_calibration_coverage_cannot_fall_as_the_interval_widens():
+    for coverage in ([1.0, 0.8, 0.9, 0.94], [0.5, 0.8, 0.9, 0.89], [0.5, 0.4, 0.9, 0.94]):
+        blocks = blocks_copy()
+        blocks["calibration"]["per_task"][0]["coverage"] = coverage
+        with pytest.raises(VerdictIncompleteError, match="must not fall"):
+            build(blocks)
+    blocks = blocks_copy()
+    blocks["calibration"]["per_task"][0]["coverage"] = [0.5, 0.5, 0.5, 0.5]  # flat is fine
+    build(blocks)
+
+
+def test_a_trust_horizon_tolerance_must_be_positive():
+    for bad in (0, 0.0, -0.1):
+        blocks = blocks_copy()
+        blocks["trust_horizons"]["per_task"][0]["tolerance"] = bad
+        with pytest.raises(VerdictIncompleteError, match="tolerance"):
+            build(blocks)
+
+
+def test_a_group_with_an_empty_entry_list_is_refused_by_itself_even_when_every_group_is_empty():
+    blocks = blocks_copy()
+    for group, (lst, _) in BLOCK_KEYS.items():
+        blocks[group][lst] = []
+    with pytest.raises(VerdictIncompleteError, match="missing or empty"):
+        build(blocks)
+    for group, (lst, _) in BLOCK_KEYS.items():
+        blocks = blocks_copy()
+        blocks[group][lst] = []
+        with pytest.raises(VerdictIncompleteError, match="missing or empty"):
+            build(blocks)
+
+
+def test_dt_of_exactly_zero_is_refused_on_its_own_terms():
+    blocks = blocks_copy()
+    blocks["error_vs_horizon"]["dt"] = 0
+    for entry in blocks["trust_horizons"]["per_task"]:
+        entry.update(steps=0, world_time=0.0)  # so the steps x dt rule cannot be what refuses it
+    for entry in blocks["climatology"]["per_task"]:
+        entry.update(switch_step=None, agreement_mean_abs_z=None, agrees=None)
+    with pytest.raises(VerdictIncompleteError, match="dt"):
+        build(blocks)
+
+
+@pytest.mark.parametrize("bad", [4.0, 0, -4, True, "4"])
+def test_trial_counts_must_be_positive_whole_numbers_not_floats(bad):
+    blocks = blocks_copy()
+    blocks["calibration"]["per_task"][0]["n_trials"] = bad
+    with pytest.raises(VerdictIncompleteError, match="n_trials"):
+        build(blocks)
+
+
+@pytest.mark.parametrize("bands", [
+    {"green": [12, 29], "amber": [[8, 11], [30, 35]], "red": "outside"},
+])
+def test_each_band_range_is_a_pair_of_whole_non_negative_numbers_in_order(bands):
+    for green in ([12.0, 29], [-1, 29], [12, 29, 30], [True, 29], "ab"):
+        blocks = blocks_copy()
+        blocks["exceptions"]["per_task"][0]["bands"] = {**bands, "green": green}
+        with pytest.raises(VerdictIncompleteError, match="bands"):
+            build(blocks)
+    for amber in ([[8.0, 11], [30, 35]], [[-1, 11], [30, 35]], [[8, 11], [30]], [[8, 11], [30, 35], [40, 41]]):
+        blocks = blocks_copy()
+        blocks["exceptions"]["per_task"][0]["bands"] = {**bands, "amber": amber}
+        with pytest.raises(VerdictIncompleteError, match="bands"):
+            build(blocks)
+    blocks = blocks_copy()  # a band range may start at zero (no lower exceptions possible)
+    blocks["exceptions"]["per_task"][0]["bands"] = {"green": [1, 29], "amber": [[0, 0], [30, 35]], "red": "outside"}
+    blocks["exceptions"]["per_task"][0]["band"] = "green"  # 2 exceptions against green [1, 29]
+    build(blocks)
+
+
+def test_world_time_precision_is_a_billionth_relative():
+    for rel, ok in ((2e-9, False), (1e-10, True), (-2e-9, False), (-1e-10, True)):
+        blocks = blocks_copy()
+        blocks["trust_horizons"]["per_task"][0]["world_time"] = 2.36 * (1 + rel)
+        if ok:
+            build(blocks)
+        else:
+            with pytest.raises(VerdictIncompleteError, match="steps x dt"):
+                build(blocks)

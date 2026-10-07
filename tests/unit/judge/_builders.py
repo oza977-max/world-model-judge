@@ -52,7 +52,7 @@ def judge_input_kwargs() -> dict:
         "persistence": forecasts(2),
         "linear": forecasts(3),
         "region_labels": tuple(
-            RegionLabel("training", None) if i < 4 else RegionLabel("out-of-range", "state") for i in range(N)
+            RegionLabel("training", None) if i < 3 else RegionLabel("out-of-range", "state") for i in range(N)
         ),
         "divergence_curves": (
             RegionCurve("training", np.linspace(0.0, 1.0, H + 1)),
@@ -68,7 +68,7 @@ def judge_input_kwargs() -> dict:
             TaskSpec("lv-planning", "planning", 0.3, 5),
         ),
         "thresholds": Thresholds(
-            bands=Bands(n=200, p=0.1, green=(12, 29), amber_outer=(8, 35)),
+            bands=Bands(n=3, p=0.1, green=(0, 1), amber_outer=(0, 2)),  # n matches the 3 trials per region
             sharpness_hedge_threshold=np.array([4.0, 2.5]),
             agreement_threshold=1.0,
         ),

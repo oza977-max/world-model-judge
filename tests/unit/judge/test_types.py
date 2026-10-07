@@ -245,7 +245,7 @@ def test_thresholds_bands_must_nest_and_hedge_vector_must_match_the_quantities()
     with pytest.raises(JudgeInputError, match="agreement_threshold"):
         Thresholds(bands, np.array([1.0, 1.0]), 0.0)
     with pytest.raises(JudgeInputError, match="one entry per quantity"):
-        make_input(thresholds=Thresholds(bands, np.ones(D + 1), 1.0))
+        make_input(thresholds=Thresholds(Bands(n=3, p=0.1, green=(0, 1), amber_outer=(0, 2)), np.ones(D + 1), 1.0))
 
 
 def test_world_dt_and_cycle_length_rules():
@@ -460,7 +460,7 @@ def test_the_smallest_possible_input_one_trial_one_step_one_quantity_is_accepted
         climatology=(RegionClimatology("r", (bin_,)),),
         invariant_bins=np.zeros((1, 1), dtype=int),
         tasks=(TaskSpec("t", "control", 0.1, 1),),
-        thresholds=Thresholds(Bands(n=200, p=0.1, green=(12, 29), amber_outer=(8, 35)), np.ones(1), 1.0),
+        thresholds=Thresholds(Bands(n=1, p=0.5, green=(0, 1), amber_outer=(0, 1)), np.ones(1), 1.0),
     )
     assert inp.outcomes.shape == (1, 1, 1)
 
@@ -560,3 +560,83 @@ def test_the_small_value_types_re_run_their_checks_on_copy_and_unpickle():
     for obj in (RegionLabel("r", "state"), TaskSpec("a", "control", 0.1, 3), Bands(200, 0.1, (12, 29), (8, 35))):
         for clone in (copy.deepcopy(obj), pickle.loads(pickle.dumps(obj)), copy.copy(obj)):
             assert clone == obj and clone is not obj
+
+
+# --- review pass 4 ---------------------------------------------------------------------------------------
+
+
+def _nested(depth):
+    x = []
+    for _ in range(depth):
+        x = [x]
+    return x
+
+
+def test_deeply_nested_or_hostile_values_never_escape_as_raw_python_errors():
+    class BadRepr:
+        def __repr__(self):
+            raise RuntimeError("boom")
+
+    for bad in (_nested(3000), BadRepr()):
+        for build in (
+            lambda b=bad: TaskSpec(b, "control", 0.1, 3),
+            lambda b=bad: TaskSpec("a", b, 0.1, 3),
+            lambda b=bad: TaskSpec("a", "control", b, 3),
+            lambda b=bad: RegionLabel("r", b),
+            lambda b=bad: RegionLabel(b, None),
+            lambda b=bad: make_input(world=b),
+            lambda b=bad: make_input(dt=b),
+            lambda b=bad: make_input(natural_cycle_length=b),
+            lambda b=bad: Bands(n=b, p=0.1, green=(12, 29), amber_outer=(8, 35)),
+            lambda b=bad: ClimatologyBin(0.0, 1.0, np.zeros(2), np.ones(2), b),
+        ):
+            with pytest.raises(JudgeInputError):
+                build()
+
+
+def test_each_regions_trial_count_must_equal_the_pre_registered_band_size():
+    labels = judge_input_kwargs()["region_labels"]  # 3 + 3 trials, bands for n = 3
+    make_input()
+    for bands_n in (2, 4, 200):
+        bands = Bands(n=bands_n, p=0.1, green=(0, 1), amber_outer=(0, 2))
+        with pytest.raises(JudgeInputError, match="pre-registered bands are for exactly"):
+            make_input(thresholds=Thresholds(bands, np.ones(D), 1.0))
+    uneven = labels[:2] + (RegionLabel("out-of-range", "state"),) * 4  # 2 + 4: neither matches 3
+    with pytest.raises(JudgeInputError, match="pre-registered bands"):
+        make_input(region_labels=uneven)
+
+
+def test_a_locked_array_cannot_be_unlocked_by_the_caller():
+    inp = make_input()
+    for arr in (inp.outcomes, inp.predictions.mean, inp.invariant_bins, inp.divergence_curves[0].curve):
+        with pytest.raises(ValueError):
+            arr.flags.writeable = True
+        with pytest.raises(ValueError):
+            arr.setflags(write=True)
+        assert arr.base is not None and arr.base.flags.writeable is False
+
+
+def test_masked_arrays_are_refused_not_silently_unmasked():
+    masked = np.ma.masked_array(np.zeros((N, H, D)), mask=np.zeros((N, H, D), dtype=bool))
+    masked.mask[0, 0, 0] = True
+    with pytest.raises(JudgeInputError, match="masked"):
+        make_input(outcomes=masked)
+    with pytest.raises(JudgeInputError, match="masked"):
+        Forecasts(masked, np.ones((N, H, D)))
+
+
+def test_ragged_or_object_arrays_are_refused():
+    with pytest.raises(JudgeInputError):
+        make_input(outcomes=[[[1.0, 2.0], [3.0]], [[1.0, 2.0], [3.0, 4.0]]])
+    with pytest.raises(JudgeInputError, match="numbers"):
+        make_input(outcomes=np.empty((N, H, D), dtype=object))
+
+
+def test_region_climatology_re_runs_its_checks_on_copy_and_pickle():
+    import copy
+    import pickle
+
+    table = make_input().climatology[0]
+    for clone in (copy.deepcopy(table), pickle.loads(pickle.dumps(table)), copy.copy(table)):
+        assert clone.region_name == table.region_name and len(clone.bins) == len(table.bins)
+        assert type(clone.bins) is tuple

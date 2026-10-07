@@ -64,9 +64,8 @@ ENTRY_FIELDS: dict[str, dict[str, str]] = {
         "is_exception": "boollist",
     },
     "climatology": {"switch_step": "nonnegint?", "agreement_mean_abs_z": "nonneg?", "agrees": "bool?"},
-    "trust_horizons": {"tolerance": "nonneg", "steps": "nonnegint", "world_time": "nonneg", "natural_units": "str?"},
+    "trust_horizons": {"tolerance": "pos", "steps": "nonnegint", "world_time": "nonneg", "natural_units": "str?"},
 }
-OPTIONAL_ENTRY_FIELDS: dict[str, dict[str, str]] = {}
 BLOCK_LEVEL_FIELDS: dict[str, tuple[str, ...]] = {"error_vs_horizon": ("dt",)}
 TASK_REGION_BLOCKS = ("skill", "calibration", "sharpness", "climatology", "trust_horizons")
 
@@ -75,8 +74,8 @@ def _r(value) -> str:
     """A safe, short `repr` for refusal messages (an absurdly long integer must not crash the message)."""
     try:
         text = repr(value)
-    except ValueError:  # e.g. an integer of more than 4,300 digits
-        return "<number too large to display>"
+    except Exception:  # noqa: BLE001 - an integer of 4,300+ digits, a deeply nested or hostile object
+        return "<value too large or odd to display>"
     return text if len(text) <= 80 else text[:77] + "..."
 
 
@@ -162,6 +161,8 @@ def _kind_ok(kind: str, value) -> bool:
         return _is_num(value)
     if kind == "nonneg":
         return _is_num(value) and value >= 0
+    if kind == "pos":
+        return _is_num(value) and value > 0
     if kind == "posint":
         return _is_int(value) and value >= 1
     if kind == "nonnegint":
@@ -209,7 +210,6 @@ def _check_block(name: str, block) -> dict:
     if not isinstance(entries, list) or not entries:
         raise _fail(f"{name}.{list_name} is missing or empty — a verdict never carries an empty group")
     required = ENTRY_FIELDS[name]
-    optional = OPTIONAL_ENTRY_FIELDS.get(name, {})
     seen = set()
     for i, entry in enumerate(entries):
         where = f"{name}.{list_name}[{i}]"
@@ -219,14 +219,12 @@ def _check_block(name: str, block) -> dict:
             if field not in entry:
                 raise _fail(f"{where} has no '{field}' (every entry carries its task/region/step keys)")
             _check_key_field(f"{name}.{list_name}", i, field, entry[field])
-        unknown = set(entry) - set(key_fields) - set(required) - set(optional)
+        unknown = set(entry) - set(key_fields) - set(required)
         if unknown:
             raise _fail(f"{where} has fields the spec does not define: {sorted(unknown)}")
-        for field, kind in {**required, **optional}.items():
+        for field, kind in required.items():
             if field not in entry:
-                if field in required:
-                    raise _fail(f"{where} is missing its required field '{field}'")
-                continue
+                raise _fail(f"{where} is missing its required field '{field}'")
             if not _kind_ok(kind, entry[field]):
                 raise _fail(f"{where}.{field} must be {kind} (got {_r(entry[field])}) — a field that could not be computed aborts the run")
         key = tuple(entry[f] for f in key_fields)
@@ -245,6 +243,12 @@ def _check_calibration(block: dict) -> None:
             raise _fail(f"calibration.per_task[{i}]: levels and coverage differ in length")
         if not all(0.0 <= v <= 1.0 for v in coverage):
             raise _fail(f"calibration.per_task[{i}]: coverage must lie in [0, 1]")
+        # (the judge may not import itertools, so no `pairwise`)
+        if any(b < a for a, b in zip(coverage, coverage[1:])):  # noqa: RUF007
+            raise _fail(
+                f"calibration.per_task[{i}]: coverage must not fall as the interval widens (the intervals are "
+                "nested, so a wider one always covers at least as much)"
+            )
         per_dimension = entry["per_dimension"]
         widths = {len(row) if isinstance(row, list) else -1 for row in per_dimension}
         if len(per_dimension) != len(levels) or len(widths) != 1 or -1 in widths or 0 in widths or not all(
@@ -419,8 +423,8 @@ class Verdict:
             self._validate()
         except VerdictIncompleteError:
             raise
-        except (OverflowError, TypeError, ValueError, RecursionError) as exc:
-            raise _fail(f"the verdict cannot be built from this input ({type(exc).__name__}: {exc})") from exc
+        except Exception as exc:
+            raise _fail(f"the verdict cannot be built from this input ({type(exc).__name__})") from exc
 
     def _validate(self) -> None:
         if type(self.world) is not str or not self.world.strip():
