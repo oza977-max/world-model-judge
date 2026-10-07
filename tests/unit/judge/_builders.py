@@ -68,7 +68,7 @@ def judge_input_kwargs() -> dict:
             TaskSpec("lv-planning", "planning", 0.3, 5),
         ),
         "thresholds": Thresholds(
-            bands=Bands(n=3, p=0.1, green=(0, 1), amber_outer=(0, 2)),  # n matches the 3 trials per region
+            bands=Bands(n=3, p=0.1, green=(1, 1), amber_outer=(0, 2)),  # n matches the 3 trials per region
             sharpness_hedge_threshold=np.array([4.0, 2.5]),
             agreement_threshold=1.0,
         ),

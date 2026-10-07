@@ -1188,3 +1188,15 @@ there is none. These choices were made and are written here for the next design 
 5. Open for P4-C04: the hedging cross-flag compares the mean 90% width with `sharpness_hedge_threshold`, a per-quantity vector in the *raw* scale vector's units, while the arrays arrive normalised (A30). The comparison rule (a scalar width against a vector) is not defined in the spec either; P4-C04 must settle both and record it.
 
 *Where recorded:* `build/handovers/P4-C03.md`.
+
+### A32 — exceptions and trials: conventions pinned while building P4-C04 (2026-10-07)
+
+**In plain words:** four small choices the spec left open about counting misses, written here for
+the next design review.
+
+1. **"Width" is a radius.** The spec's `trials.band_hi` says "the interval's width", but each point is a *distance from the model's mean*, so the matching band edge is the interval's half-width — z90 × the stated spread (RMS over quantities). A full width would draw misses as hits. `band_lo` is 0.
+2. **A miss is decided per quantity, never from the two drawn numbers.** `is_exception` is true iff some quantity lies strictly outside z90 × its own spread; the plotted distance and radius are RMS summaries and cannot reproduce that test, so they are never used to re-derive it.
+3. **The hedging flag** (`low_side_sharpness_flag`) is true iff the count is green-or-better (`observed ≤ green_hi`, so including the low-amber and low-red counts) **and** the task/region's mean 90% width from the sharpness block is strictly above the mean of `sharpness_hedge_threshold`. The spec compares a scalar width with a per-quantity vector; the vector's mean is the chosen reduction. The threshold must be in the arrays' normalised units (A30) — the ratified "= scale" rule becomes the number 1.
+4. **Bands that cannot be written out.** If the pre-registered bands leave no amber range on one side of green (tiny n), the judge refuses rather than invent one. Unreachable at n = 200.
+
+*Where recorded:* `build/handovers/P4-C04.md`.
