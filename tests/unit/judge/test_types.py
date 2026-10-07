@@ -665,3 +665,13 @@ def test_the_locked_arrays_cannot_be_unlocked_even_through_their_base():
             with pytest.raises(ValueError):
                 target.setflags(write=True)
         assert arr.flags.writeable is False
+
+
+def test_names_with_control_characters_are_refused_so_regions_cannot_merge_by_a_hidden_character():
+    for bad in ("a\x00", "\x00a", "a\nb", "a\tb", "\x7f"):
+        with pytest.raises(JudgeInputError, match="control characters"):
+            RegionLabel(bad, None)
+        with pytest.raises(JudgeInputError, match="control characters"):
+            TaskSpec(bad, "control", 0.1, 3)
+        with pytest.raises(JudgeInputError, match="control characters"):
+            make_input(world=bad)

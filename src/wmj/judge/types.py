@@ -73,6 +73,8 @@ def _frozen_array(name: str, value, *, dtype=float, ndim: int | None = None) -> 
 def _exact_str(name: str, value) -> str:
     if type(value) is not str or not value.strip():
         raise _bad(f"{name} must be a plain non-blank string, got {_r(value)}")
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in value):
+        raise _bad(f"{name} must not contain control characters (such as NUL or a newline), got {_r(value)}")
     return value
 
 

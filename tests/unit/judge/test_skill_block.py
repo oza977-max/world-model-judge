@@ -16,13 +16,22 @@ import numpy as np
 import pytest
 
 from tests.unit.judge._builders import (
+    D,
+    H,
     forecasts,
     judge_input_kwargs,
     make_input,
 )
 from wmj.judge.errors import JudgeInputError
 from wmj.judge.skill import compute_skill, crps_gaussian, skill_score
-from wmj.judge.types import Bands, Forecasts, JudgeInput, RegionLabel, Thresholds
+from wmj.judge.types import (
+    Bands,
+    Forecasts,
+    JudgeInput,
+    RegionLabel,
+    TaskSpec,
+    Thresholds,
+)
 from wmj.judge.verdict import _check_block
 
 SQRT_PI = math.sqrt(math.pi)
@@ -216,3 +225,114 @@ def test_the_scalar_helpers_still_agree_with_the_independent_closed_form():
     for mu, sigma, y in ((0.0, 1.0, 0.3), (2.0, 0.1, 2.5), (-1.0, 5.0, 4.0)):
         assert float(crps_gaussian(np.array([mu]), np.array([sigma]), np.array([y]))[0]) == pytest.approx(_crps(mu, sigma, y), rel=1e-12)
     assert skill_score(0.5, 1.0) == 0.5
+
+
+# --- review pass 1 --------------------------------------------------------------------------------------
+
+
+def test_a_crps_that_overflows_is_a_loud_judge_error_never_a_skill_of_one():
+    from wmj.judge.errors import JudgeError
+    from wmj.judge.skill import NonFiniteScoreError
+
+    kwargs = judge_input_kwargs()
+    n = len(kwargs["region_labels"])
+    tiny = np.full((n, H, D), 1e-320)  # a legal spread (> 0) so small that (outcome - mean) / spread overflows
+    for field in ("persistence", "linear"):
+        broken = dict(kwargs)
+        broken[field] = Forecasts(np.array(kwargs[field].mean), tiny)
+        with pytest.raises(NonFiniteScoreError) as err:
+            compute_skill(JudgeInput(**broken))
+        assert isinstance(err.value, JudgeError)
+    broken = dict(kwargs)
+    broken["predictions"] = Forecasts(np.array(kwargs["predictions"].mean), tiny)
+    with pytest.raises(NonFiniteScoreError):
+        compute_skill(JudgeInput(**broken))
+
+
+def test_the_scalar_functions_refuse_non_finite_scores_and_their_errors_are_judge_errors():
+    from wmj.judge.errors import JudgeError
+    from wmj.judge.skill import (
+        NonFiniteScoreError,
+        NonPositiveBaselineError,
+        NonPositiveSpreadError,
+    )
+
+    for bad in (float("inf"), float("nan")):
+        with pytest.raises(NonFiniteScoreError):
+            skill_score(bad, 1.0)
+        with pytest.raises(NonFiniteScoreError):
+            skill_score(1.0, bad)
+    with pytest.raises(NonPositiveBaselineError):
+        skill_score(0.5, 0.0)
+    with pytest.raises(NonPositiveSpreadError):
+        crps_gaussian(np.array([0.0]), np.array([0.0]), np.array([1.0]))
+    for cls in (NonFiniteScoreError, NonPositiveBaselineError, NonPositiveSpreadError):
+        assert issubclass(cls, JudgeError) and issubclass(cls, ValueError)
+
+
+def test_crps_accepts_scalar_and_zero_dimensional_input():
+    assert float(crps_gaussian(np.array(0.0), np.array(1.0), np.array(0.3))) == pytest.approx(_crps(0.0, 1.0, 0.3), rel=1e-12)
+    assert float(crps_gaussian(0.0, 1.0, 0.3)) == pytest.approx(_crps(0.0, 1.0, 0.3), rel=1e-12)
+
+
+def test_extreme_but_representable_cases_stay_finite_and_positive():
+    for z in (-40.0, -8.0, 0.0, 1e-3, 8.0, 40.0):
+        for sigma in (1e-12, 1e-3, 1.0, 1e3, 1e12):
+            value = float(crps_gaussian(np.array([0.0]), np.array([sigma]), np.array([z * sigma]))[0])
+            assert math.isfinite(value) and value > 0.0
+            assert value == pytest.approx(_crps(0.0, sigma, z * sigma), rel=1e-9)
+
+
+def test_region_names_that_are_prefixes_of_each_other_stay_separate():
+    from wmj.judge.types import (
+        Bands,
+        ClimatologyBin,
+        RegionClimatology,
+        RegionCurve,
+        Thresholds,
+    )
+
+    n_each, names = 2, ["a", "ab", "abc"]
+    n = n_each * len(names)
+    rng = np.random.default_rng(1)
+    labels = tuple(RegionLabel(name, None) for name in names for _ in range(n_each))
+    mean, spread = rng.normal(size=(n, 1, 1)), rng.uniform(0.5, 1.5, size=(n, 1, 1))
+    inp = JudgeInput(
+        world="w", dt=0.1, natural_cycle_length=None,
+        predictions=Forecasts(mean, spread), outcomes=rng.normal(size=(n, 1, 1)),
+        persistence=Forecasts(mean * 0, np.ones_like(spread)), linear=Forecasts(mean * 0 + 0.3, np.ones_like(spread)),
+        region_labels=labels,
+        divergence_curves=tuple(RegionCurve(name, np.array([0.0, 1.0])) for name in names),
+        climatology=tuple(RegionClimatology(name, (ClimatologyBin(0.0, 1.0, np.zeros(1), np.ones(1), 5),)) for name in names),
+        invariant_bins=np.zeros((n, 1), dtype=int), tasks=(TaskSpec("t", "control", 0.1, 1),),
+        thresholds=Thresholds(Bands(n=n_each, p=0.1, green=(0, 1), amber_outer=(0, n_each)), np.ones(1), 1.0),
+    )
+    block = compute_skill(inp)["per_task_region"]
+    assert [e["region"] for e in block] == names
+    for i, name in enumerate(names):
+        rows = [2 * i, 2 * i + 1]
+        expected = np.mean([_crps(mean[r, 0, 0], spread[r, 0, 0], inp.outcomes[r, 0, 0]) for r in rows])
+        assert block[i]["crps"] == pytest.approx(expected, rel=1e-12)
+
+
+def test_a_duck_typed_lookalike_with_the_right_attributes_is_still_refused():
+    import types as pytypes
+
+    real = make_input()
+    lookalike = pytypes.SimpleNamespace(**{f: getattr(real, f) for f in
+        ("world", "predictions", "outcomes", "persistence", "linear", "region_labels", "tasks", "divergence_curves")})
+    with pytest.raises(JudgeInputError, match="JudgeInput"):
+        compute_skill(lookalike)
+
+
+@pytest.mark.parametrize("factor", [0.9, 0.95, 1.05, 1.1])
+def test_tc_ju4_02_even_small_misstatements_of_the_spread_score_worse(factor):
+    rng = np.random.default_rng(99)
+    worse = 0
+    for _ in range(25):
+        mu, sigma = rng.normal(scale=2.0), float(np.exp(rng.normal(scale=0.7)))
+        y = rng.normal(mu, sigma, size=400_000)
+        true_score = float(np.mean(crps_gaussian(np.full_like(y, mu), np.full_like(y, sigma), y)))
+        false_score = float(np.mean(crps_gaussian(np.full_like(y, mu), np.full_like(y, sigma * factor), y)))
+        worse += true_score < false_score
+    assert worse == 25

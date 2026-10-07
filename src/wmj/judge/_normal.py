@@ -29,7 +29,7 @@ Z_95 = 1.9600
 
 def Phi(z: np.ndarray) -> np.ndarray:
     """The standard normal CDF: 0.5 * (1 + erf(z / sqrt(2)))."""
-    return 0.5 * (1.0 + _erf(z / SQRT_2).astype(np.float64))
+    return 0.5 * (1.0 + np.asarray(_erf(np.asarray(z, dtype=np.float64) / SQRT_2), dtype=np.float64))
 
 
 def phi(z: np.ndarray) -> np.ndarray:

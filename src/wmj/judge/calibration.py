@@ -25,7 +25,7 @@ Z_VALUES = (Z_50, Z_80, Z_90, Z_95)
 
 def region_rows(inp: JudgeInput) -> dict[str, np.ndarray]:
     """For each region present, the indices of its trials (regions in sorted-name order)."""
-    names = np.array([label.region_name for label in inp.region_labels])
+    names = np.array([label.region_name for label in inp.region_labels], dtype=object)  # not fixed-width text: NumPy would strip trailing NULs
     return {region: np.flatnonzero(names == region) for region in sorted(set(names.tolist()))}
 
 

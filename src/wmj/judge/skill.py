@@ -8,13 +8,16 @@ score into a ranking anyone can read: 0 means "no better than the
 baseline", 1 means "essentially perfect", negative means "worse than
 just guessing the baseline's answer".
 
-This module imports only numpy and math — nothing else, per this
-project's own rule that the judge cannot import any other wmj package
-(cross-cutting ADR-003), so it defines its own small exception rather
-than reaching for the shared WmjError base.
+This module imports only numpy and the judge's own modules — nothing
+else, per this project's own rule that the judge cannot import any other
+wmj package (cross-cutting ADR-003). Its refusals are the judge's own
+`JudgeError` family (`wmj.judge.errors`), never a bare Python error and
+never a silently wrong number.
 """
 
 from __future__ import annotations
+
+import math
 
 import numpy as np
 
@@ -23,7 +26,7 @@ from wmj.judge.errors import JudgeInputError
 from wmj.judge.types import JudgeInput
 
 
-class NonPositiveSpreadError(ValueError):
+class NonPositiveSpreadError(JudgeInputError):
     """Raised when a stated spread is zero or negative.
 
     CRPS is undefined for a non-positive spread; the judge refuses
@@ -50,12 +53,21 @@ def crps_gaussian(
             f"(judge spec §7 sigma<=0 guard)"
         )
     z = (outcome - mean) / spread
-    return spread * (
-        z * (2.0 * Phi(z) - 1.0) + 2.0 * phi(z) - 1.0 / np.sqrt(np.pi)
-    )
+    with np.errstate(over="ignore", invalid="ignore"):
+        score = spread * (z * (2.0 * Phi(z) - 1.0) + 2.0 * phi(z) - 1.0 / np.sqrt(np.pi))
+    if not np.all(np.isfinite(score)):
+        raise NonFiniteScoreError(
+            "the CRPS overflowed or is not a number (a spread so small that (outcome − mean)/spread cannot be "
+            "represented); the judge refuses rather than report a skill built on it"
+        )
+    return score
 
 
-class NonPositiveBaselineError(ValueError):
+class NonFiniteScoreError(JudgeInputError):
+    """Raised when a CRPS comes out infinite or not-a-number (an overflow), never reported as a number."""
+
+
+class NonPositiveBaselineError(JudgeInputError):
     """Raised when the baseline CRPS a skill score divides by is not > 0.
 
     A Gaussian CRPS is strictly positive for any finite spread > 0, so
@@ -72,6 +84,8 @@ def skill_score(crps_model: float, crps_baseline: float) -> float:
     0 means no better than the baseline; 1 means essentially perfect;
     negative means worse than the baseline. Requires `crps_baseline > 0`.
     """
+    if not (math.isfinite(crps_model) and math.isfinite(crps_baseline)):
+        raise NonFiniteScoreError(f"skill_score needs finite CRPS values, got {crps_model!r} and {crps_baseline!r}")
     if not crps_baseline > 0.0:
         raise NonPositiveBaselineError(
             f"skill_score requires crps_baseline > 0, got {crps_baseline!r} "
@@ -101,7 +115,7 @@ def compute_skill(inp: JudgeInput) -> dict:
     """
     if type(inp) is not JudgeInput:
         raise JudgeInputError(f"compute_skill needs a JudgeInput, got {type(inp).__name__}")
-    labels = np.array([label.region_name for label in inp.region_labels])
+    labels = np.array([label.region_name for label in inp.region_labels], dtype=object)
     scored: dict[str, tuple[float, float, float]] = {}
     for region in sorted(set(labels.tolist())):
         rows = np.flatnonzero(labels == region)
