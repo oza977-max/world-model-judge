@@ -103,8 +103,8 @@ tests/                          unit tests and gates
 Build state (2026-10-07): Phases 1–3 done. Phase 3 (the models and the
 harness around them): P3-C01 to P3-C10, its wiring audit (passed) and its independent
 code review (code-review-002: 0 Critical, 6 Important, all fixed). Phase 4 (the
-judge) in progress: P4-C01 (the input and verdict doors) built and in review; next
-P4-C02 (skill). Round 10 design review closed 2026-09-28. Owner decisions D17/D18
+judge) in progress: P4-C01 (the input and verdict doors, five review passes) done; P4-C02
+(skill) built and in review. Round 10 design review closed 2026-09-28. Owner decisions D17/D18
 were applied on 2026-10-04 (`subsample_pairs` now 100,000). The freeze
 (`prereg/FREEZE`) has not been made; D19 must be settled first. NF-1 is narrowed:
 byte-identity holds on the same CPU family and library build (backlog A29) — see

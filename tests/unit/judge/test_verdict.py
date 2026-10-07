@@ -466,6 +466,20 @@ def test_a_field_the_spec_does_not_define_is_refused_so_no_identity_can_ride_alo
         build(blocks)
 
 
+
+def _set_bands(blocks, bands):
+    """Give every exceptions entry the same `bands` (they must agree) and the band name its count earns."""
+    for entry in blocks["exceptions"]["per_task"]:
+        entry["bands"] = bands
+        try:
+            g_lo, g_hi = bands["green"]
+            (a1, a2), (a3, a4) = bands["amber"]
+            n = entry["observed"]
+            entry["band"] = "green" if g_lo <= n <= g_hi else ("amber" if a1 <= n <= a2 or a3 <= n <= a4 else "red")
+        except (TypeError, ValueError, KeyError):
+            pass  # a malformed shape: leave the band name alone, the shape check is what must refuse it
+
+
 GOOD_BANDS = {"green": [12, 29], "amber": [[8, 11], [30, 35]], "red": "outside"}
 
 
@@ -504,7 +518,7 @@ def test_the_bands_field_has_exactly_the_specs_shape_and_agrees_with_the_band_na
 ])
 def test_a_malformed_or_identity_carrying_bands_field_is_refused(bad):
     blocks = blocks_copy()
-    blocks["exceptions"]["per_task"][0]["bands"] = bad
+    _set_bands(blocks, bad)
     with pytest.raises(VerdictIncompleteError):
         build(blocks)
 
@@ -887,7 +901,7 @@ def test_band_ranges_must_not_overlap_and_must_be_contiguous_with_no_gap():
           {"green": [1, 1], "amber": [[0, 0], [2, 2]], "red": "outside"}]  # degenerate one-count ranges are allowed
     for bands in ok:
         blocks = blocks_copy()
-        blocks["exceptions"]["per_task"][0]["bands"] = bands
+        _set_bands(blocks, bands)
         blocks["exceptions"]["per_task"][0]["band"] = "red"  # observed is 2: red for the first, see the next lines
         if bands is not base:
             blocks["exceptions"]["per_task"][0]["band"] = "red"
@@ -907,7 +921,7 @@ def test_band_ranges_must_not_overlap_and_must_be_contiguous_with_no_gap():
     ]
     for bands in bad:
         blocks = blocks_copy()
-        blocks["exceptions"]["per_task"][0]["bands"] = bands
+        _set_bands(blocks, bands)
         with pytest.raises(VerdictIncompleteError, match="bands"):
             build(blocks)
 
@@ -1066,17 +1080,16 @@ def test_trial_counts_must_be_positive_whole_numbers_not_floats(bad):
 def test_each_band_range_is_a_pair_of_whole_non_negative_numbers_in_order(bands):
     for green in ([12.0, 29], [-1, 29], [12, 29, 30], [True, 29], "ab"):
         blocks = blocks_copy()
-        blocks["exceptions"]["per_task"][0]["bands"] = {**bands, "green": green}
+        _set_bands(blocks, {**bands, "green": green})
         with pytest.raises(VerdictIncompleteError, match="bands"):
             build(blocks)
     for amber in ([[8.0, 11], [30, 35]], [[-1, 11], [30, 35]], [[8, 11], [30]], [[8, 11], [30, 35], [40, 41]]):
         blocks = blocks_copy()
-        blocks["exceptions"]["per_task"][0]["bands"] = {**bands, "amber": amber}
+        _set_bands(blocks, {**bands, "amber": amber})
         with pytest.raises(VerdictIncompleteError, match="bands"):
             build(blocks)
     blocks = blocks_copy()  # a band range may start at zero (no lower exceptions possible)
-    blocks["exceptions"]["per_task"][0]["bands"] = {"green": [1, 29], "amber": [[0, 0], [30, 35]], "red": "outside"}
-    blocks["exceptions"]["per_task"][0]["band"] = "green"  # 2 exceptions against green [1, 29]
+    _set_bands(blocks, {"green": [1, 29], "amber": [[0, 0], [30, 35]], "red": "outside"})  # 2 and 1 against green [1, 29]
     build(blocks)
 
 
@@ -1089,3 +1102,53 @@ def test_world_time_precision_is_a_billionth_relative():
         else:
             with pytest.raises(VerdictIncompleteError, match="steps x dt"):
                 build(blocks)
+
+
+# --- review pass 5 hardening ----------------------------------------------------------------------------------
+
+
+def test_two_exceptions_entries_with_different_bands_are_refused():
+    blocks = blocks_copy()
+    blocks["exceptions"]["per_task"][1]["bands"] = {"green": [12, 29], "amber": [[8, 11], [30, 36]], "red": "outside"}
+    with pytest.raises(VerdictIncompleteError, match="different `bands`"):
+        build(blocks)
+
+
+def test_a_skill_above_one_is_impossible_and_refused_but_exactly_one_is_allowed():
+    for field in ("vs_persistence", "vs_linear"):
+        blocks = blocks_copy()
+        blocks["skill"]["per_task_region"][0][field] = 17.0
+        with pytest.raises(VerdictIncompleteError, match=field):
+            build(blocks)
+        blocks["skill"]["per_task_region"][0][field] = 1.0
+        build(blocks)
+        blocks["skill"]["per_task_region"][0][field] = -250.0  # terrible is allowed: skill has no floor
+        build(blocks)
+
+
+def test_the_lower_band_of_a_trial_plot_is_always_zero():
+    blocks = blocks_copy()
+    blocks["trials"]["per_task"][0]["band_lo"][1] = 0.05
+    with pytest.raises(VerdictIncompleteError, match="band_lo is always 0"):
+        build(blocks)
+
+
+def test_integers_too_large_to_write_out_are_refused_in_any_number_field():
+    for group, lst, i, field in (("skill", "per_task_region", 0, "crps"), ("sharpness", "per_task", 0, "mean_width_90"),
+                                 ("trust_horizons", "per_task", 0, "tolerance")):
+        blocks = blocks_copy()
+        blocks[group][lst][i][field] = 10**5000
+        with pytest.raises(VerdictIncompleteError):
+            build(blocks)
+        blocks[group][lst][i][field] = 2**63 + 1
+        with pytest.raises(VerdictIncompleteError):
+            build(blocks)
+    blocks = blocks_copy()
+    blocks["skill"]["per_task_region"][0]["crps"] = 2**63
+    build(blocks)
+
+
+def test_a_verdict_is_deliberately_unhashable_compare_with_to_dict():
+    with pytest.raises(TypeError):
+        hash(build())
+    assert build() == build() and build().to_dict() == build().to_dict()

@@ -511,7 +511,7 @@ def test_value_types_without_arrays_compare_by_value():
 
 
 def test_bands_p_must_be_a_plain_number_and_the_message_says_which_problem():
-    for p in ("0.1", None, np.float64(0.1), [0.1]):
+    for p in ("0.1", None, [0.1], True, np.timedelta64(1)):
         with pytest.raises(JudgeInputError, match="plain number"):
             Bands(n=200, p=p, green=(12, 29), amber_outer=(8, 35))
     with pytest.raises(JudgeInputError, match="strictly between"):
@@ -640,3 +640,28 @@ def test_region_climatology_re_runs_its_checks_on_copy_and_pickle():
     for clone in (copy.deepcopy(table), pickle.loads(pickle.dumps(table)), copy.copy(table)):
         assert clone.region_name == table.region_name and len(clone.bins) == len(table.bins)
         assert type(clone.bins) is tuple
+
+
+def test_numpy_floats_are_accepted_for_the_band_probability_like_every_other_number():
+    assert Bands(n=200, p=np.float64(0.1), green=(12, 29), amber_outer=(8, 35)).p == 0.1
+
+
+def test_numpy_time_values_and_byte_strings_are_not_numbers():
+    for bad in (np.timedelta64(5), np.datetime64("2026-01-01")):
+        with pytest.raises(JudgeInputError):
+            make_input(dt=bad)
+        with pytest.raises(JudgeInputError):
+            TaskSpec("a", "control", bad, 3)
+        with pytest.raises(JudgeInputError):
+            TaskSpec("a", "control", 0.1, bad)
+    with pytest.raises(JudgeInputError):
+        Thresholds(Bands(n=3, p=0.1, green=(0, 1), amber_outer=(0, 2)), bytearray(b"ab"), 1.0)
+
+
+def test_the_locked_arrays_cannot_be_unlocked_even_through_their_base():
+    inp = make_input()
+    for arr in (inp.outcomes, inp.predictions.mean, inp.invariant_bins, inp.divergence_curves[0].curve):
+        for target in (arr, arr.base):
+            with pytest.raises(ValueError):
+                target.setflags(write=True)
+        assert arr.flags.writeable is False

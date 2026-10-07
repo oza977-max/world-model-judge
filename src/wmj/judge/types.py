@@ -44,6 +44,8 @@ def _bad(message: str) -> JudgeInputError:
 
 
 def _frozen_array(name: str, value, *, dtype=float, ndim: int | None = None) -> np.ndarray:
+    if isinstance(value, (bytes, bytearray, memoryview, str)):
+        raise _bad(f"{name} must be an array of numbers, not a byte or text string")
     if isinstance(value, np.ma.MaskedArray):
         raise _bad(f"{name} is a masked array — masked cells would be silently read as numbers")
     try:
@@ -62,8 +64,10 @@ def _frozen_array(name: str, value, *, dtype=float, ndim: int | None = None) -> 
         raise _bad(f"{name} must have {ndim} dimension(s), got shape {tuple(arr.shape)}")
     if arr.dtype.kind == "f" and not np.all(np.isfinite(arr)):
         raise _bad(f"{name} contains NaN or infinity")
-    arr.setflags(write=False)
-    return arr.view()  # a view of a locked owner: its WRITEABLE flag cannot be switched back on
+    # Rebuilt over an immutable `bytes` buffer: a NumPy array that does not own its memory and whose memory
+    # is read-only cannot have its WRITEABLE flag switched back on (not even through `.base`).
+    locked = np.frombuffer(arr.tobytes(), dtype=arr.dtype).reshape(arr.shape)
+    return locked
 
 
 def _exact_str(name: str, value) -> str:
@@ -73,7 +77,7 @@ def _exact_str(name: str, value) -> str:
 
 
 def _whole(name: str, value) -> int:
-    if type(value) is bool or not isinstance(value, (int, np.integer)):
+    if not _plain_number(value) or isinstance(value, (float, np.floating)):
         raise _bad(f"{name} must be a whole number, got {_r(value)}")
     try:
         return int(value)
@@ -81,8 +85,16 @@ def _whole(name: str, value) -> int:
         raise _bad(f"{name} is not usable as a whole number: {_r(value)}") from exc
 
 
+def _plain_number(value) -> bool:
+    """A real number — not a bool, and not a NumPy time span or date that happens to subclass `np.integer`."""
+    return (
+        not isinstance(value, (bool, np.bool_, np.timedelta64, np.datetime64))
+        and isinstance(value, (int, float, np.integer, np.floating))
+    )
+
+
 def _positive_finite(name: str, value) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float, np.integer, np.floating)):
+    if not _plain_number(value):
         raise _bad(f"{name} must be a number, got {_r(value)}")
     try:
         value = float(value)
@@ -187,7 +199,7 @@ class Bands:
         n = _whole("bands n", self.n)
         if n < 1:
             raise _bad(f"bands n must be an int >= 1, got {_r(self.n)}")
-        if type(self.p) not in (float, int):
+        if not _plain_number(self.p):
             raise _bad(f"bands p must be a plain number, got {type(self.p).__name__}")
         if not (0.0 < self.p < 1.0):
             raise _bad(f"bands p must be strictly between 0 and 1, got {_r(self.p)}")
@@ -243,7 +255,7 @@ class ClimatologyBin:
 
     def __post_init__(self) -> None:
         for label, v in (("invariant_lo", self.invariant_lo), ("invariant_hi", self.invariant_hi)):
-            if type(v) is bool or not isinstance(v, (int, float, np.integer, np.floating)):
+            if not _plain_number(v):
                 raise _bad(f"{label} must be a number (infinite ends allowed), got {_r(v)}")
         try:
             lo, hi = float(self.invariant_lo), float(self.invariant_hi)
@@ -318,7 +330,8 @@ class JudgeInput:
     baselines are required (a missing one raises `MissingBaselineError`). `region_labels`
     has one entry per trial; `divergence_curves` and `climatology` have one entry per
     region present; `invariant_bins` is the true invariant's bin index per trial and step.
-    `world` is the world's name (the verdict records which world it is about).
+    `world` is the world's name (the verdict records which world it is about). Every region must have exactly
+    `thresholds.bands.n` trials: the pre-registered bands are only valid for that many (judge ADR-J4).
     """
 
     __init_subclass__ = classmethod(_no_subclass)

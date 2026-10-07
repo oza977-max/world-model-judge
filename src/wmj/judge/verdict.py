@@ -51,7 +51,7 @@ CALIBRATION_LEVELS = [0.5, 0.8, 0.9, 0.95]  # ADR-J2: exactly these four, in thi
 # dict; a trailing "?" lets the value be null (only where the spec says so: no switch step — so no agreement
 # score either — and no natural cycle).
 ENTRY_FIELDS: dict[str, dict[str, str]] = {
-    "skill": {"vs_persistence": "num", "vs_linear": "num", "crps": "nonneg"},
+    "skill": {"vs_persistence": "skill", "vs_linear": "skill", "crps": "nonneg"},
     "error_vs_horizon": {"steps": "intlist", "median_error": "nonneglist", "divergence_reference": "nonneglist"},
     "calibration": {"levels": "numlist", "coverage": "numlist", "n_trials": "posint", "per_dimension": "list"},
     "sharpness": {"mean_width_90": "nonneg"},
@@ -88,7 +88,8 @@ def _is_int(x) -> bool:
 
 
 def _is_num(x) -> bool:
-    return type(x) in (int, float)
+    """A plain int or float; an int must fit in 64 bits (a verdict never needs more, and a longer one cannot be written out)."""
+    return type(x) is float or (type(x) is int and -(2**63) <= x <= 2**63)
 
 
 def _plain(value, path: str, depth: int = 0):
@@ -159,6 +160,8 @@ def _kind_ok(kind: str, value) -> bool:
         return value is None or _kind_ok(kind[:-1], value)
     if kind == "num":
         return _is_num(value)
+    if kind == "skill":
+        return _is_num(value) and value <= 1.0 + 1e-12  # 1 - CRPS_model/CRPS_baseline can never exceed 1
     if kind == "nonneg":
         return _is_num(value) and value >= 0
     if kind == "pos":
@@ -377,6 +380,8 @@ def _check_trials_and_exceptions(trials: dict, exceptions: dict) -> None:
         lengths = {len(entry[field]) for field in TRIAL_ARRAYS}
         if len(lengths) != 1:
             raise _fail(f"trials.per_task[{i}]: the per-trial arrays differ in length")
+        if any(lo != 0 for lo in entry["band_lo"]):
+            raise _fail(f"trials.per_task[{i}]: band_lo is always 0 — a distance is never negative (judge spec §5)")
         if any(lo > hi for lo, hi in zip(entry["band_lo"], entry["band_hi"])):
             raise _fail(f"trials.per_task[{i}]: band_lo must not exceed band_hi")
         if any(v < 0 for v in entry["outcome_distance"]):
@@ -398,6 +403,9 @@ def _check_trials_and_exceptions(trials: dict, exceptions: dict) -> None:
                 f"{n_points} points — the header count and the points are one fact"
             )
         _check_exception_bands(i, entry)
+    band_sets = {repr(e["bands"]) for e in exceptions["per_task"]}
+    if len(band_sets) > 1:
+        raise _fail("exceptions entries carry different `bands` — the pre-registered bands are one fixed set (JU-11)")
     if {(e["task"], e["region"], e["horizon_step"]) for e in exceptions["per_task"]} != set(by_key):
         raise _fail("every trials entry needs exactly one matching exceptions entry")
 

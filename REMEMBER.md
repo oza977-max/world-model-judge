@@ -60,7 +60,7 @@ Ordered by when they bite. *(D1–D6, D12 and D14 were settled at Round 10 on
 
 ## 3. Owed work, by stage
 
-**Now: Phase 4 (the judge) — P4-C01 (types and verdict assembly) built and in review; next P4-C02 (skill). Phase 3 is DONE: all ten chunks, its wiring audit (passed) and its code review (code-review-002; fixes applied 2026-10-07). Handovers are in `build/handovers/`. The freeze (`prereg/FREEZE`) has NOT been made; see "Before P6-C03".**
+**Now: Phase 4 (the judge) — P4-C01 (types and verdict assembly) DONE (five review passes, handover `build/handovers/P4-C01.md`); P4-C02 (skill) built and in review; then P4-C03 (calibration/sharpness), C04 (exceptions), C05 (horizon), C06 (blindness/purity gates). Phase 3 is DONE: all ten chunks, its wiring audit (passed) and its code review (code-review-002; fixes applied 2026-10-07). Handovers are in `build/handovers/`. The freeze (`prereg/FREEZE`) has NOT been made; see "Before P6-C03".**
 - **Independent re-check of the v1.8 purity guards and the rewritten ADR-004 orchestration loop** — owed by BC-2 since `calibration.md:249`; Rounds 9 and 10 were scoped elsewhere. Neither is built yet (P4-C06, P6-C01).
 - Fold the remaining spec text corrections listed in §5 into the specs at the next review.
 
