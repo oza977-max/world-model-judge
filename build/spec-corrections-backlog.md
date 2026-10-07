@@ -1174,3 +1174,17 @@ that the code had to decide.
 3. **Every task of a region carries identical skill numbers** (skill is pinned to h = 1); the entries repeat per task only because the keying rule demands explicit `task` and `region`.
 
 *Where recorded:* `build/handovers/P4-C02.md`.
+
+### A31 — calibration and sharpness: the evaluation step `h_task` (found building P4-C03, 2026-10-07)
+
+**In plain words:** calibration and sharpness are measured at one step per task — "the task's
+switch step" (ADR-J2, J3, J4) — but the spec does not say exactly how to find it or what to do when
+there is none. These choices were made and are written here for the next design review.
+
+1. **Finding the switch step:** the first step `s` in `1..task.horizon` where the region's divergence curve is *strictly* above the task's tolerance (a distance equal to the tolerance still passes — worlds §4.1). Step 0 is never a switch step (no forecast is made at step 0). It is searched only within the task's own horizon, not the world's full horizon `H`.
+2. **No switch step (ADR-J4 is silent):** the evaluation step is the task's horizon — the last step it is graded on ("graded by trajectory error for its entire horizon", ADR-J5). The verdict's `climatology.switch_step` is null for that task.
+3. **Coverage is closed** (exactly `z·σ` away is inside) and joint over quantities; `per_dimension` is four rows (one per level) of per-quantity rates.
+4. The helper lives in `climatology.py` (ADR-J5's module); P4-C05 extends that module.
+5. Open for P4-C04: the hedging cross-flag compares the mean 90% width with `sharpness_hedge_threshold`, a per-quantity vector in the *raw* scale vector's units, while the arrays arrive normalised (A30). The comparison rule (a scalar width against a vector) is not defined in the spec either; P4-C04 must settle both and record it.
+
+*Where recorded:* `build/handovers/P4-C03.md`.
