@@ -1163,3 +1163,14 @@ count changes nothing). On one machine everything is exactly reproducible. The o
    for the next design review to reword. JU-10's seven texts are unchanged (verbatim by rule).
 
 *Where recorded:* `REMEMBER.md` §3 (P6-C01), §7; `src/wmj/harness/fingerprint.py`.
+
+### A30 — skill block conventions (found building P4-C02, 2026-10-07)
+
+**In plain words:** the spec fixes the skill formula (ADR-J1) but leaves three things implicit
+that the code had to decide.
+
+1. **Normalised units are the harness's job.** `JudgeInput` carries no scale vector (the spec's "JudgeInput (complete)" list has none), yet CRPS "on normalised state" needs one. The judge therefore computes in the units its arrays arrive in, and the harness must divide forecasts and outcomes by the world's scale vector before handing them over (`skill.py` already says so). Consequence for later chunks: task tolerances, divergence curves and the sharpness-hedge threshold must be in the same normalised units — the pre-registered `sharpness_hedge_threshold` (currently the raw scale vector, ratified "= scale" at design-review-010) would be all 1s in normalised units. P4-C03 and P6-C01 must settle this; it is a spec gap, not decided here.
+2. **Step indexing:** `[n, H, d]` arrays hold steps 1..H (array index `k` is step `k + 1`); divergence curves `[H + 1]` are indexed by step from 0; one step ahead is array index 0.
+3. **Every task of a region carries identical skill numbers** (skill is pinned to h = 1); the entries repeat per task only because the keying rule demands explicit `task` and `region`.
+
+*Where recorded:* `build/handovers/P4-C02.md`.

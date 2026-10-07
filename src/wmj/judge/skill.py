@@ -19,6 +19,8 @@ from __future__ import annotations
 import numpy as np
 
 from wmj.judge._normal import Phi, phi
+from wmj.judge.errors import JudgeInputError
+from wmj.judge.types import JudgeInput
 
 
 class NonPositiveSpreadError(ValueError):
@@ -76,3 +78,49 @@ def skill_score(crps_model: float, crps_baseline: float) -> float:
             f"(judge spec ADR-J1: skill is a ratio to the baseline's CRPS)"
         )
     return float(1.0 - crps_model / crps_baseline)
+
+
+def _region_crps(forecasts, outcomes: np.ndarray, rows: np.ndarray) -> float:
+    """Mean CRPS over the given trials, at one step ahead (array index 0), averaged over quantities."""
+    per_quantity = crps_gaussian(forecasts.mean[rows, 0, :], forecasts.spread[rows, 0, :], outcomes[rows, 0, :])
+    return float(np.mean(np.mean(per_quantity, axis=1)))
+
+
+def compute_skill(inp: JudgeInput) -> dict:
+    """The verdict's `skill` block: one-step skill against both baselines, per task and region.
+
+    In plain words: for each region of the world, score the model's whole forecast (guess and
+    stated uncertainty together) one step ahead with the unfoolable CRPS rule, score the two
+    reference forecasts the same way, and report how much better the model is — 0 is "no better
+    than the reference", 1 is "essentially perfect", negative is "worse". The score is pinned to
+    the first step ahead whatever the task, so every task of a region carries the same numbers
+    (the spec still wants the task named on each entry). Only forecasts and outcomes are used,
+    in the units they arrive in (the harness hands over normalised ones), and only that region's
+    own trials. The entry names exactly `vs_persistence` and `vs_linear` — the judge cannot see
+    any other model, so no third comparator can appear (TC-MU6-05(b)).
+    """
+    if type(inp) is not JudgeInput:
+        raise JudgeInputError(f"compute_skill needs a JudgeInput, got {type(inp).__name__}")
+    labels = np.array([label.region_name for label in inp.region_labels])
+    scored: dict[str, tuple[float, float, float]] = {}
+    for region in sorted(set(labels.tolist())):
+        rows = np.flatnonzero(labels == region)
+        model = _region_crps(inp.predictions, inp.outcomes, rows)
+        scored[region] = (
+            model,
+            skill_score(model, _region_crps(inp.persistence, inp.outcomes, rows)),
+            skill_score(model, _region_crps(inp.linear, inp.outcomes, rows)),
+        )
+    return {
+        "per_task_region": [
+            {
+                "task": task.name,
+                "region": region,
+                "vs_persistence": scored[region][1],
+                "vs_linear": scored[region][2],
+                "crps": scored[region][0],
+            }
+            for task in inp.tasks
+            for region in sorted(scored)
+        ]
+    }
