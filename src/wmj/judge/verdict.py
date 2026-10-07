@@ -42,27 +42,29 @@ BANNED_KEY_SUFFIXES = ("_in", "_out", "_in_region", "_out_region")  # suffix-enc
 TRIAL_ARRAYS = ("outcome_distance", "band_lo", "band_hi", "is_exception")
 MAX_DEPTH = 40
 BANDS = ("green", "amber", "red")
+CALIBRATION_LEVELS = [0.5, 0.8, 0.9, 0.95]  # ADR-J2: exactly these four, in this order
 
 # Value fields of each block's entries (judge spec §5's schema): name -> kind. The key fields
 # (task/region/horizon_step) are checked separately. A field not listed here is refused, so
 # nothing the spec does not define — in particular nothing identifying a model — can ride along.
-# Kinds: num, posint, nonnegint, bool, str, band, numlist, intlist, boollist, list, dict; a
-# trailing "?" lets the value be null (only where the spec says so: no switch step, no natural cycle).
+# Kinds: num, nonneg, posint, nonnegint, bool, str, band, numlist, nonneglist, intlist, boollist, list,
+# dict; a trailing "?" lets the value be null (only where the spec says so: no switch step — so no agreement
+# score either — and no natural cycle).
 ENTRY_FIELDS: dict[str, dict[str, str]] = {
-    "skill": {"vs_persistence": "num", "vs_linear": "num", "crps": "num"},
-    "error_vs_horizon": {"steps": "intlist", "median_error": "numlist", "divergence_reference": "numlist"},
+    "skill": {"vs_persistence": "num", "vs_linear": "num", "crps": "nonneg"},
+    "error_vs_horizon": {"steps": "intlist", "median_error": "nonneglist", "divergence_reference": "numlist"},
     "calibration": {"levels": "numlist", "coverage": "numlist", "n_trials": "posint", "per_dimension": "list"},
-    "sharpness": {"mean_width_90": "num"},
+    "sharpness": {"mean_width_90": "nonneg"},
     "exceptions": {
-        "n_trials": "posint", "expected": "num", "observed": "nonnegint", "band": "band",
+        "n_trials": "posint", "expected": "nonneg", "observed": "nonnegint", "band": "band",
         "low_side_sharpness_flag": "bool",
     },
     "trials": {
-        "distance_unit": "str", "outcome_distance": "numlist", "band_lo": "numlist", "band_hi": "numlist",
+        "distance_unit": "str", "outcome_distance": "nonneglist", "band_lo": "nonneglist", "band_hi": "nonneglist",
         "is_exception": "boollist",
     },
-    "climatology": {"switch_step": "nonnegint?", "agreement_mean_abs_z": "num?", "agrees": "bool?"},
-    "trust_horizons": {"tolerance": "num", "steps": "nonnegint", "world_time": "num", "natural_units": "str?"},
+    "climatology": {"switch_step": "nonnegint?", "agreement_mean_abs_z": "nonneg?", "agrees": "bool?"},
+    "trust_horizons": {"tolerance": "nonneg", "steps": "nonnegint", "world_time": "nonneg", "natural_units": "str?"},
 }
 OPTIONAL_ENTRY_FIELDS: dict[str, dict[str, str]] = {"exceptions": {"bands": "dict"}}
 BLOCK_LEVEL_FIELDS: dict[str, tuple[str, ...]] = {"error_vs_horizon": ("dt",)}
@@ -149,6 +151,8 @@ def _kind_ok(kind: str, value) -> bool:
         return value is None or _kind_ok(kind[:-1], value)
     if kind == "num":
         return _is_num(value)
+    if kind == "nonneg":
+        return _is_num(value) and value >= 0
     if kind == "posint":
         return _is_int(value) and value >= 1
     if kind == "nonnegint":
@@ -159,6 +163,8 @@ def _kind_ok(kind: str, value) -> bool:
         return type(value) is str and bool(value.strip())
     if kind == "band":
         return value in BANDS and type(value) is str
+    if kind == "nonneglist":
+        return isinstance(value, list) and bool(value) and all(_is_num(v) and v >= 0 for v in value)
     if kind == "numlist":
         return isinstance(value, list) and bool(value) and all(_is_num(v) for v in value)
     if kind == "intlist":
@@ -224,10 +230,77 @@ def _check_block(name: str, block) -> dict:
 def _check_calibration(block: dict) -> None:
     for i, entry in enumerate(block["per_task"]):
         levels, coverage = entry["levels"], entry["coverage"]
+        if levels != CALIBRATION_LEVELS:
+            raise _fail(f"calibration.per_task[{i}].levels must be exactly {CALIBRATION_LEVELS} (ADR-J2)")
         if len(levels) != len(coverage):
             raise _fail(f"calibration.per_task[{i}]: levels and coverage differ in length")
-        if not all(0.0 < v < 1.0 for v in levels) or not all(0.0 <= v <= 1.0 for v in coverage):
-            raise _fail(f"calibration.per_task[{i}]: levels must lie in (0, 1) and coverage in [0, 1]")
+        if not all(0.0 <= v <= 1.0 for v in coverage):
+            raise _fail(f"calibration.per_task[{i}]: coverage must lie in [0, 1]")
+        per_dimension = entry["per_dimension"]
+        widths = {len(row) if isinstance(row, list) else -1 for row in per_dimension}
+        if len(per_dimension) != len(levels) or len(widths) != 1 or -1 in widths or 0 in widths or not all(
+            _is_num(v) and 0.0 <= v <= 1.0 for row in per_dimension for v in row
+        ):
+            raise _fail(
+                f"calibration.per_task[{i}].per_dimension must be one row of per-quantity coverages (numbers in "
+                f"[0, 1], the same length in every row) for each of the {len(levels)} levels"
+            )
+
+
+def _check_exception_bands(i: int, entry: dict) -> None:
+    bands = entry.get("bands")
+    if bands is None:
+        return
+    ok = (
+        set(bands) == {"green", "amber", "red"}
+        and _pair(bands["green"])
+        and isinstance(bands["amber"], list)
+        and len(bands["amber"]) == 2
+        and all(_pair(x) for x in bands["amber"])
+        and type(bands["red"]) is str
+        and bool(bands["red"].strip())
+    )
+    if not ok:
+        raise _fail(
+            f"exceptions.per_task[{i}].bands must be {{green: [lo, hi], amber: [[lo, hi], [lo, hi]], red: text}} "
+            "(judge spec §5)"
+        )
+    g_lo, g_hi = bands["green"]
+    (a1_lo, a1_hi), (a2_lo, a2_hi) = bands["amber"]
+    if not (a1_lo <= a1_hi < g_lo <= g_hi < a2_lo <= a2_hi):
+        raise _fail(f"exceptions.per_task[{i}].bands must nest: amber-low < green < amber-high")
+    observed = entry["observed"]
+    expected_band = "green" if g_lo <= observed <= g_hi else (
+        "amber" if (a1_lo <= observed <= a1_hi or a2_lo <= observed <= a2_hi) else "red"
+    )
+    if entry["band"] != expected_band:
+        raise _fail(
+            f"exceptions.per_task[{i}]: band={entry['band']!r} but observed={observed} against {bands} is "
+            f"{expected_band!r}"
+        )
+
+
+def _pair(x) -> bool:
+    return isinstance(x, list) and len(x) == 2 and all(_is_int(v) and v >= 0 for v in x) and x[0] <= x[1]
+
+
+def _check_climatology(block: dict) -> None:
+    for i, entry in enumerate(block["per_task"]):
+        nulls = {entry["switch_step"] is None, entry["agreement_mean_abs_z"] is None, entry["agrees"] is None}
+        if len(nulls) != 1:
+            raise _fail(
+                f"climatology.per_task[{i}]: switch_step, agreement_mean_abs_z and agrees are all null "
+                "(the task never left trajectory grading) or all present — never a mixture"
+            )
+
+
+def _check_trust_horizons(block: dict, dt: float) -> None:
+    for i, entry in enumerate(block["per_task"]):
+        expected = entry["steps"] * dt
+        if abs(entry["world_time"] - expected) > 1e-9 * max(1.0, abs(expected)):
+            raise _fail(
+                f"trust_horizons.per_task[{i}]: world_time={entry['world_time']} but steps x dt = {expected}"
+            )
 
 
 def _check_cross_block(blocks: dict) -> None:
@@ -243,6 +316,13 @@ def _check_cross_block(blocks: dict) -> None:
             raise _fail(
                 f"{name} covers different (task, region) pairs than skill: missing {sorted(reference - found)}, "
                 f"extra {sorted(found - reference)} — a verdict is complete or it is not issued (JU-9)"
+            )
+    sizes = {(e["task"], e["region"]): e["n_trials"] for e in blocks["calibration"]["per_task"]}
+    for e in blocks["exceptions"]["per_task"]:
+        if sizes[(e["task"], e["region"])] != e["n_trials"]:
+            raise _fail(
+                f"exceptions n_trials={e['n_trials']} differs from calibration n_trials="
+                f"{sizes[(e['task'], e['region'])]} for {(e['task'], e['region'])} — one shared trial set"
             )
     regions = {r for _, r in reference}
     covered = {e["region"] for e in blocks["error_vs_horizon"]["per_region"]}
@@ -284,6 +364,7 @@ def _check_trials_and_exceptions(trials: dict, exceptions: dict) -> None:
         key = (entry["task"], entry["region"], entry["horizon_step"])
         if key not in by_key:
             raise _fail(f"exceptions.per_task[{i}] {key} has no matching trials entry")
+        _check_exception_bands(i, entry)
         observed_sum, n_points = by_key[key]
         if entry["observed"] != observed_sum:
             raise _fail(
@@ -321,16 +402,29 @@ class Verdict:
         checked = {name: _check_block(name, block) for name, block in self._blocks().items()}
         _check_error_vs_horizon(checked["error_vs_horizon"])
         _check_calibration(checked["calibration"])
+        _check_climatology(checked["climatology"])
+        _check_trust_horizons(checked["trust_horizons"], checked["error_vs_horizon"]["dt"])
         _check_trials_and_exceptions(checked["trials"], checked["exceptions"])
         _check_cross_block(checked)
         for name, block in checked.items():
             object.__setattr__(self, name, _freeze(block))
-        if self.limitations is None or tuple(self.limitations) != JU10_DISCLOSURES:
+        limitations = tuple(self.limitations) if self.limitations is not None else None  # one pass: iterators too
+        not_tested = tuple(self.not_tested) if self.not_tested is not None else None
+        if limitations != JU10_DISCLOSURES:
             raise _fail("limitations must be the seven JU-10 disclosures, verbatim and in order (ADR-J7)")
-        if self.not_tested is None or tuple(self.not_tested) != NOT_TESTED:
+        if not_tested != NOT_TESTED:
             raise _fail("not_tested must be the fixed not-tested list (judge spec §5)")
-        object.__setattr__(self, "limitations", tuple(self.limitations))
-        object.__setattr__(self, "not_tested", tuple(self.not_tested))
+        object.__setattr__(self, "limitations", limitations)
+        object.__setattr__(self, "not_tested", not_tested)
+
+    def __init_subclass__(cls, **kwargs):
+        raise TypeError("Verdict cannot be subclassed: a subclass could carry fields the verdict must not have")
+
+    def __reduce__(self):  # copy / pickle go back through every check
+        return (Verdict, (
+            self.world, self.skill, self.error_vs_horizon, self.calibration, self.sharpness, self.exceptions,
+            self.trials, self.climatology, self.trust_horizons, self.not_tested, self.limitations,
+        ))
 
     def _blocks(self) -> dict:
         """The eight computed groups by name (explicit, so no name lookup by string is needed)."""

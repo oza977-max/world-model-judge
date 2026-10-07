@@ -15,7 +15,7 @@ input cannot even be built (MU-2, TC-MU2-01). Every array is copied and locked r
 and every shape, count and range is checked here, once, so the arithmetic that follows can
 trust it.
 
-Imports only numpy, math, dataclasses and typing, plus this package (cross-cutting ADR-003).
+Imports only numpy, math and dataclasses, plus this package (cross-cutting ADR-003).
 """
 
 from __future__ import annotations
@@ -83,6 +83,17 @@ def _positive_finite(name: str, value) -> float:
     return value
 
 
+def _no_subclass(cls, **kwargs):
+    raise TypeError(f"{cls.__name__}'s parent cannot be subclassed: a subclass could carry fields the judge must not receive")
+
+
+def _as_tuple(name: str, value) -> tuple:
+    try:
+        return tuple(value)
+    except TypeError as exc:
+        raise _bad(f"{name} must be a sequence, got {type(value).__name__}") from exc
+
+
 def _set(obj, name: str, value) -> None:
     object.__setattr__(obj, name, value)
 
@@ -90,6 +101,8 @@ def _set(obj, name: str, value) -> None:
 @dataclass(frozen=True, slots=True)
 class RegionLabel:
     """Which named region a trial started in, and which axis (if any) took it out of range."""
+
+    __init_subclass__ = classmethod(_no_subclass)
 
     region_name: str
     axis: str | None
@@ -103,6 +116,8 @@ class RegionLabel:
 @dataclass(frozen=True, slots=True)
 class TaskSpec:
     """One graded task: its name, its kind, its tolerance and its horizon (worlds spec §4)."""
+
+    __init_subclass__ = classmethod(_no_subclass)
 
     name: str
     kind: str
@@ -124,6 +139,8 @@ class TaskSpec:
 class Forecasts:
     """A set of Gaussian forecasts: a mean and a spread per trial, step and quantity."""
 
+    __init_subclass__ = classmethod(_no_subclass)
+
     mean: np.ndarray
     spread: np.ndarray
 
@@ -143,6 +160,8 @@ class Forecasts:
 class Bands:
     """The pre-registered exception bands: green and the outer edge of amber (judge ADR-J4)."""
 
+    __init_subclass__ = classmethod(_no_subclass)
+
     n: int
     p: float
     green: tuple[int, int]
@@ -152,7 +171,9 @@ class Bands:
         n = _whole("bands n", self.n)
         if n < 1:
             raise _bad(f"bands n must be an int >= 1, got {self.n!r}")
-        if type(self.p) is not float and type(self.p) is not int or not (0.0 < self.p < 1.0):
+        if type(self.p) not in (float, int):
+            raise _bad(f"bands p must be a plain number, got {type(self.p).__name__}")
+        if not (0.0 < self.p < 1.0):
             raise _bad(f"bands p must be strictly between 0 and 1, got {self.p!r}")
         for label, pair in (("green", self.green), ("amber_outer", self.amber_outer)):
             if not isinstance(pair, (tuple, list)) or len(pair) != 2:
@@ -169,6 +190,8 @@ class Bands:
 @dataclass(frozen=True, slots=True, eq=False)
 class Thresholds:
     """Everything fixed in advance (JU-11): bands, the hedging threshold per quantity, the agreement threshold."""
+
+    __init_subclass__ = classmethod(_no_subclass)
 
     bands: Bands
     sharpness_hedge_threshold: np.ndarray
@@ -191,6 +214,8 @@ class Thresholds:
 class ClimatologyBin:
     """One bin of the conditioned climatology: what the world looks like for a range of its invariant."""
 
+    __init_subclass__ = classmethod(_no_subclass)
+
     invariant_lo: float
     invariant_hi: float
     mean: np.ndarray
@@ -201,7 +226,10 @@ class ClimatologyBin:
         for label, v in (("invariant_lo", self.invariant_lo), ("invariant_hi", self.invariant_hi)):
             if type(v) is bool or not isinstance(v, (int, float, np.integer, np.floating)):
                 raise _bad(f"{label} must be a number (infinite ends allowed), got {v!r}")
-        lo, hi = float(self.invariant_lo), float(self.invariant_hi)
+        try:
+            lo, hi = float(self.invariant_lo), float(self.invariant_hi)
+        except OverflowError as exc:
+            raise _bad("invariant_lo / invariant_hi are too large to use") from exc
         if math.isnan(lo) or math.isnan(hi) or not lo < hi:
             raise _bad(f"a climatology bin needs invariant_lo < invariant_hi (infinite ends allowed), got {lo}, {hi}")
         _set(self, "invariant_lo", lo)
@@ -225,12 +253,14 @@ class ClimatologyBin:
 class RegionClimatology:
     """The climatology table for one named region."""
 
+    __init_subclass__ = classmethod(_no_subclass)
+
     region_name: str
     bins: tuple[ClimatologyBin, ...]
 
     def __post_init__(self) -> None:
         _exact_str("climatology region_name", self.region_name)
-        bins = tuple(self.bins)
+        bins = _as_tuple('bins', self.bins)
         if not bins or not all(type(b) is ClimatologyBin for b in bins):
             raise _bad("a region's climatology needs at least one ClimatologyBin")
         if len({b.mean.shape for b in bins}) != 1:
@@ -241,6 +271,8 @@ class RegionClimatology:
 @dataclass(frozen=True, slots=True, eq=False)
 class RegionCurve:
     """The world's drift-from-itself curve for one named region, indexed from step 0 (length H+1)."""
+
+    __init_subclass__ = classmethod(_no_subclass)
 
     region_name: str
     curve: np.ndarray
@@ -266,6 +298,8 @@ class JudgeInput:
     region present; `invariant_bins` is the true invariant's bin index per trial and step.
     `world` is the world's name (the verdict records which world it is about).
     """
+
+    __init_subclass__ = classmethod(_no_subclass)
 
     world: str
     dt: float
@@ -310,13 +344,13 @@ class JudgeInput:
             if fc.mean.shape != outcomes.shape:
                 raise _bad(f"{label} shape {tuple(fc.mean.shape)} does not match outcomes {tuple(outcomes.shape)}")
 
-        labels = tuple(self.region_labels)
+        labels = _as_tuple('region_labels', self.region_labels)
         if len(labels) != n or not all(type(x) is RegionLabel for x in labels):
             raise _bad(f"region_labels needs exactly one RegionLabel per trial ({n}), got {len(labels)}")
         _set(self, "region_labels", labels)
         regions = sorted({x.region_name for x in labels})
 
-        curves = tuple(self.divergence_curves)
+        curves = _as_tuple('divergence_curves', self.divergence_curves)
         if not all(type(c) is RegionCurve for c in curves):
             raise _bad("divergence_curves must be RegionCurve entries")
         if sorted(c.region_name for c in curves) != regions:
@@ -325,7 +359,7 @@ class JudgeInput:
             raise _bad(f"every divergence curve must have H+1 = {steps + 1} points (indexed from step 0)")
         _set(self, "divergence_curves", curves)
 
-        tables = tuple(self.climatology)
+        tables = _as_tuple('climatology', self.climatology)
         if not all(type(t) is RegionClimatology for t in tables):
             raise _bad("climatology must be RegionClimatology entries")
         if sorted(t.region_name for t in tables) != regions:
@@ -343,7 +377,7 @@ class JudgeInput:
             raise _bad("invariant_bins holds a bin index outside its region's climatology table")
         _set(self, "invariant_bins", bins)
 
-        tasks = tuple(self.tasks)
+        tasks = _as_tuple('tasks', self.tasks)
         if not tasks or not all(type(t) is TaskSpec for t in tasks):
             raise _bad("tasks must be a non-empty tuple of TaskSpec")
         if len({t.name for t in tasks}) != len(tasks):

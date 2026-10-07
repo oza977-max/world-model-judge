@@ -260,6 +260,7 @@ def test_tc_ju9_03_property_holds_over_many_random_verdicts():
         trial.update(outcome_distance=[0.1] * n, band_lo=[0.0] * n, band_hi=[0.2] * n, is_exception=flags)
         blocks["exceptions"]["per_task"][0]["observed"] = sum(flags)
         blocks["exceptions"]["per_task"][0]["n_trials"] = n
+        blocks["calibration"]["per_task"][0]["n_trials"] = n
         record = build(blocks).to_dict()
         for e in record["exceptions"]["per_task"]:
             matching = [t for t in record["trials"]["per_task"]
@@ -463,12 +464,46 @@ def test_a_field_the_spec_does_not_define_is_refused_so_no_identity_can_ride_alo
         build(blocks)
 
 
-def test_the_optional_bands_field_of_an_exception_entry_is_allowed_but_must_be_a_mapping():
+GOOD_BANDS = {"green": [12, 29], "amber": [[8, 11], [30, 35]], "red": "outside"}
+
+
+def test_the_optional_bands_field_has_exactly_the_specs_shape_and_agrees_with_the_band_name():
     blocks = blocks_copy()
-    blocks["exceptions"]["per_task"][0]["bands"] = {"green": [12, 29], "amber": [[8, 11], [30, 35]], "red": "outside"}
+    entry = blocks["exceptions"]["per_task"][0]
+    entry["bands"] = dict(GOOD_BANDS)
+    entry["observed"], entry["band"] = 2, "red"  # 2 exceptions is below 8: red
+    blocks["trials"]["per_task"][0]["is_exception"] = [True, True, False, False]
     build(blocks)
-    blocks["exceptions"]["per_task"][0]["bands"] = "green"
-    with pytest.raises(VerdictIncompleteError, match="bands"):
+    for observed, flags, band in ((12, None, "green"), (29, None, "green"), (8, None, "amber"), (11, None, "amber"),
+                                  (30, None, "amber"), (35, None, "amber"), (7, None, "red"), (36, None, "red")):
+        b = blocks_copy()
+        n = 40
+        e = b["exceptions"]["per_task"][0]
+        e.update(bands=dict(GOOD_BANDS), observed=observed, band=band, n_trials=n)
+        b["calibration"]["per_task"][0]["n_trials"] = n
+        b["trials"]["per_task"][0].update(
+            outcome_distance=[0.1] * n, band_lo=[0.0] * n, band_hi=[0.2] * n,
+            is_exception=[True] * observed + [False] * (n - observed) if observed <= n else None)
+        if observed > n:
+            continue
+        build(b)  # the band name matches the count at every edge of every band
+        wrong = {"green": "amber", "amber": "red", "red": "green"}[band]
+        b["exceptions"]["per_task"][0]["band"] = wrong
+        with pytest.raises(VerdictIncompleteError, match="band="):
+            build(b)
+
+
+@pytest.mark.parametrize("bad", [
+    "green", {}, {"green": [12, 29]}, {**GOOD_BANDS, "extra": 1}, {**GOOD_BANDS, "model_name": "ens"},
+    {**GOOD_BANDS, "is_fixture": True}, {**GOOD_BANDS, "green": [12]}, {**GOOD_BANDS, "green": [29, 12]},
+    {**GOOD_BANDS, "green": ["a", "b"]}, {**GOOD_BANDS, "amber": [[8, 11]]}, {**GOOD_BANDS, "amber": [[8, 11], "x"]},
+    {**GOOD_BANDS, "red": 3}, {**GOOD_BANDS, "red": " "}, {**GOOD_BANDS, "amber": [[8, 13], [30, 35]]},
+    {**GOOD_BANDS, "amber": [[8, 11], [28, 35]]},
+])
+def test_a_malformed_or_identity_carrying_bands_field_is_refused(bad):
+    blocks = blocks_copy()
+    blocks["exceptions"]["per_task"][0]["bands"] = bad
+    with pytest.raises(VerdictIncompleteError):
         build(blocks)
 
 
@@ -510,7 +545,7 @@ def test_exceptions_n_trials_must_equal_the_number_of_trial_points():
 def test_trial_points_must_make_sense_non_negative_distances_and_ordered_bands():
     blocks = blocks_copy()
     blocks["trials"]["per_task"][0]["outcome_distance"][0] = -0.1
-    with pytest.raises(VerdictIncompleteError, match="never negative"):
+    with pytest.raises(VerdictIncompleteError, match="outcome_distance must be nonneglist"):
         build(blocks)
     blocks = blocks_copy()
     blocks["trials"]["per_task"][0]["band_lo"][1] = 0.5  # above band_hi (0.2)
@@ -642,7 +677,7 @@ def test_zero_valued_edges_are_legitimate():
     blocks["trials"]["per_task"][0]["band_lo"] = [0.0] * 4
     blocks["trials"]["per_task"][0]["band_hi"] = [0.0, 0.2, 0.2, 0.2]  # lo == hi is allowed
     blocks["calibration"]["per_task"][0]["coverage"] = [0.0, 1.0, 0.5, 0.5]
-    blocks["trust_horizons"]["per_task"][0]["steps"] = 0  # fails tolerance even at step one: 0 by convention
+    blocks["trust_horizons"]["per_task"][0].update(steps=0, world_time=0.0)  # fails even at step one: 0 by convention
     build(blocks)
 
 
@@ -665,3 +700,141 @@ def test_entries_that_are_not_mappings_and_series_that_are_not_lists_are_refused
         blocks["trials"]["per_task"][0][field] = "abcd"
         with pytest.raises(VerdictIncompleteError, match=field):
             build(blocks)
+
+
+# --- review pass 2 -----------------------------------------------------------------------------
+
+
+def test_iterators_cannot_smuggle_an_empty_limitations_or_not_tested_past_the_check():
+    blocks = blocks_copy()
+    v = Verdict(world="lv", **blocks, not_tested=iter(NOT_TESTED), limitations=iter(JU10_DISCLOSURES))
+    assert v.limitations == JU10_DISCLOSURES and v.not_tested == NOT_TESTED
+    v2 = Verdict(world="lv", **blocks_copy(), not_tested=(x for x in NOT_TESTED), limitations=(x for x in JU10_DISCLOSURES))
+    assert len(v2.to_dict()["limitations"]) == 7
+    with pytest.raises(VerdictIncompleteError, match="limitations"):
+        Verdict(world="lv", **blocks_copy(), not_tested=NOT_TESTED, limitations=iter(()))
+
+
+def test_per_dimension_coverage_has_one_numeric_row_per_level_of_equal_length():
+    good = [[0.5, 0.5], [0.8, 0.8], [0.9, 0.9], [0.95, 0.94]]
+    for bad in ([["a"]] * 4, ["a", "b", "c", "d"], [{"model_name": "ens"}] * 4, good[:3], [[0.5, 0.5]] * 3 + [[0.9]],
+                [[0.5, 1.5]] * 4, [[]] * 4, [[True, 0.5]] * 4):
+        blocks = blocks_copy()
+        blocks["calibration"]["per_task"][0]["per_dimension"] = bad
+        with pytest.raises(VerdictIncompleteError, match="per_dimension"):
+            build(blocks)
+    blocks = blocks_copy()
+    blocks["calibration"]["per_task"][0]["per_dimension"] = [[0.5], [0.8], [0.9], [0.95]]  # one quantity
+    build(blocks)
+
+
+def test_calibration_levels_are_the_four_constants_in_order():
+    for bad in ([0.5, 0.8, 0.9, 0.99], [0.95, 0.9, 0.8, 0.5], [0.5, 0.8, 0.9], [0.5, 0.8, 0.9, 0.95, 0.99]):
+        blocks = blocks_copy()
+        blocks["calibration"]["per_task"][0]["levels"] = bad
+        blocks["calibration"]["per_task"][0]["coverage"] = [0.5] * len(bad)
+        with pytest.raises(VerdictIncompleteError, match="levels"):
+            build(blocks)
+
+
+def test_a_verdict_cannot_be_subclassed_and_survives_copy_and_pickle_through_the_checks():
+    import copy
+    import pickle
+
+    with pytest.raises(TypeError, match="cannot be subclassed"):
+        class Tagged(Verdict):
+            pass
+
+    v = build()
+    for clone in (copy.deepcopy(v), pickle.loads(pickle.dumps(v)), copy.copy(v)):
+        assert clone.to_dict() == v.to_dict()
+        with pytest.raises(TypeError):
+            clone.skill["x"] = 1
+
+
+def test_the_same_pair_dropped_from_exceptions_and_trials_together_is_still_refused():
+    blocks = blocks_copy()
+    for group in ("exceptions", "trials"):
+        blocks[group]["per_task"] = [e for e in blocks[group]["per_task"] if e["task"] != "lv-planning"]
+    with pytest.raises(VerdictIncompleteError, match="different"):
+        build(blocks)
+
+
+@pytest.mark.parametrize(("group", "field"), [("climatology", "agrees"), ("exceptions", "low_side_sharpness_flag")])
+def test_flags_are_real_booleans_not_zero_and_one(group, field):
+    blocks = blocks_copy()
+    blocks[group]["per_task"][1 if group == "climatology" else 0][field] = 1
+    with pytest.raises(VerdictIncompleteError, match=field):
+        build(blocks)
+
+
+def test_the_band_vocabulary_is_exactly_green_amber_red():
+    for band in ("green", "amber", "red"):
+        blocks = blocks_copy()
+        blocks["exceptions"]["per_task"][0]["band"] = band
+        build(blocks)
+    for band in ("yellow", "Green", "", None, 1):
+        blocks = blocks_copy()
+        blocks["exceptions"]["per_task"][0]["band"] = band
+        with pytest.raises(VerdictIncompleteError, match="band"):
+            build(blocks)
+
+
+def test_a_dictionary_that_contains_itself_is_refused_cleanly():
+    blocks = blocks_copy()
+    loop = {}
+    loop["me"] = loop
+    blocks["calibration"]["per_task"][0]["per_dimension"] = [loop]
+    with pytest.raises(VerdictIncompleteError, match="nested"):
+        build(blocks)
+
+
+@pytest.mark.parametrize("bad", [[], (), 5, "x"])
+def test_a_group_that_is_not_a_mapping_and_an_empty_entry_list_are_refused(bad):
+    blocks = blocks_copy()
+    blocks["skill"] = bad
+    with pytest.raises(VerdictIncompleteError):
+        build(blocks)
+    blocks = blocks_copy()
+    blocks["skill"]["per_task_region"] = bad
+    with pytest.raises(VerdictIncompleteError):
+        build(blocks)
+
+
+# --- semantic consistency the spec implies ---------------------------------------------------------
+
+
+def test_the_climatology_fields_are_all_null_or_all_present():
+    for patch in ({"switch_step": None, "agrees": True, "agreement_mean_abs_z": 0.5},
+                  {"switch_step": 4, "agrees": None, "agreement_mean_abs_z": 0.5},
+                  {"switch_step": 4, "agrees": True, "agreement_mean_abs_z": None},
+                  {"switch_step": None, "agrees": None, "agreement_mean_abs_z": 0.5}):
+        blocks = blocks_copy()
+        blocks["climatology"]["per_task"][1].update(patch)
+        with pytest.raises(VerdictIncompleteError, match="all null"):
+            build(blocks)
+
+
+def test_world_time_is_steps_times_dt_and_negative_quantities_are_refused():
+    blocks = blocks_copy()
+    blocks["trust_horizons"]["per_task"][0]["world_time"] = 9.99
+    with pytest.raises(VerdictIncompleteError, match="steps x dt"):
+        build(blocks)
+    for group, lst, i, field in (("skill", "per_task_region", 0, "crps"), ("sharpness", "per_task", 0, "mean_width_90"),
+                                 ("trust_horizons", "per_task", 0, "tolerance"), ("exceptions", "per_task", 0, "expected"),
+                                 ("climatology", "per_task", 1, "agreement_mean_abs_z")):
+        blocks = blocks_copy()
+        blocks[group][lst][i][field] = -0.01
+        with pytest.raises(VerdictIncompleteError):
+            build(blocks)
+    blocks = blocks_copy()
+    blocks["error_vs_horizon"]["per_region"][0]["median_error"][1] = -0.1
+    with pytest.raises(VerdictIncompleteError):
+        build(blocks)
+
+
+def test_calibration_and_exceptions_describe_the_same_trial_set():
+    blocks = blocks_copy()
+    blocks["calibration"]["per_task"][0]["n_trials"] = 200
+    with pytest.raises(VerdictIncompleteError, match="one shared trial set"):
+        build(blocks)

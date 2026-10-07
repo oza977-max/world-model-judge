@@ -314,15 +314,9 @@ def test_the_only_text_fields_anywhere_in_the_input_are_the_world_region_task_na
 
 
 def test_a_subclass_or_a_str_subclass_cannot_carry_extra_state_into_the_judge():
-    class F(Forecasts):
-        pass
-
     class S(str):
         pass
 
-    base = forecasts(1)
-    with pytest.raises(JudgeInputError, match="predictions must be a Forecasts"):
-        make_input(predictions=F(base.mean, base.spread))
     for kwargs in ({"world": S("lv")},):
         with pytest.raises(JudgeInputError, match="plain non-blank string"):
             make_input(**kwargs)
@@ -336,16 +330,10 @@ def test_a_subclass_or_a_str_subclass_cannot_carry_extra_state_into_the_judge():
         RegionClimatology(S("r"), (ClimatologyBin(0.0, 1.0, np.zeros(2), np.ones(2), 3),))
     with pytest.raises(JudgeInputError, match="axis"):
         RegionLabel("r", S("state"))
-    with pytest.raises(JudgeInputError, match="thresholds.bands"):
-        class B(Bands):
-            pass
-
-        Thresholds(B(n=200, p=0.1, green=(12, 29), amber_outer=(8, 35)), np.ones(2), 1.0)
-    with pytest.raises(JudgeInputError, match="ClimatologyBin"):
-        class CB(ClimatologyBin):
-            pass
-
-        RegionClimatology("r", (CB(0.0, 1.0, np.zeros(2), np.ones(2), 3),))
+    # subclasses cannot even be defined, so the exact-type checks are a second line of defence
+    for cls in ALL_TYPES:
+        with pytest.raises(TypeError, match="cannot be subclassed"):
+            type("Sub", (cls,), {})
 
 
 @pytest.mark.parametrize("name", ["", "  ", "\t"])
@@ -475,3 +463,78 @@ def test_the_smallest_possible_input_one_trial_one_step_one_quantity_is_accepted
         thresholds=Thresholds(Bands(n=200, p=0.1, green=(12, 29), amber_outer=(8, 35)), np.ones(1), 1.0),
     )
     assert inp.outcomes.shape == (1, 1, 1)
+
+
+# --- review pass 2 ------------------------------------------------------------------------------------
+
+
+def test_copies_carry_the_same_values_not_just_the_same_lock():
+    import copy
+    import pickle
+
+    inp = make_input()
+    for clone in (copy.deepcopy(inp), pickle.loads(pickle.dumps(inp))):
+        assert np.array_equal(clone.persistence.mean, inp.persistence.mean)
+        assert np.array_equal(clone.linear.mean, inp.linear.mean)
+        assert not np.array_equal(clone.persistence.mean, clone.linear.mean)
+        assert np.array_equal(clone.predictions.spread, inp.predictions.spread)
+        assert np.array_equal(clone.predictions.mean, inp.predictions.mean)
+        assert not np.array_equal(clone.predictions.mean, clone.predictions.spread)
+        assert np.array_equal(clone.thresholds.sharpness_hedge_threshold, inp.thresholds.sharpness_hedge_threshold)
+        assert clone.thresholds.agreement_threshold == inp.thresholds.agreement_threshold == 1.0
+        assert clone.thresholds.bands == inp.thresholds.bands
+        assert clone.dt == inp.dt and clone.natural_cycle_length == inp.natural_cycle_length
+        assert clone.world == inp.world and clone.tasks == inp.tasks and clone.region_labels == inp.region_labels
+        assert np.array_equal(clone.invariant_bins, inp.invariant_bins)
+        for a, b in zip(clone.climatology[0].bins, inp.climatology[0].bins, strict=True):
+            assert (a.invariant_lo, a.invariant_hi, a.n_samples) == (b.invariant_lo, b.invariant_hi, b.n_samples)
+            assert np.array_equal(a.mean, b.mean) and np.array_equal(a.sd, b.sd)
+        for a, b in zip(clone.divergence_curves, inp.divergence_curves, strict=True):
+            assert a.region_name == b.region_name and np.array_equal(a.curve, b.curve)
+
+
+@pytest.mark.parametrize("make", [
+    lambda: make_input().thresholds,
+    lambda: make_input().climatology[0].bins[0],
+    lambda: make_input().climatology[0],
+    lambda: make_input().divergence_curves[0],
+])
+def test_array_bearing_types_compare_by_identity_so_comparison_never_raises(make):
+    a, b = make(), make()
+    assert (a == b) is False and a != b
+
+
+def test_value_types_without_arrays_compare_by_value():
+    assert RegionLabel("r", None) == RegionLabel("r", None)
+    assert TaskSpec("a", "control", 0.1, 3) == TaskSpec("a", "control", 0.1, 3)
+    assert Bands(200, 0.1, (12, 29), (8, 35)) == Bands(200, 0.1, (12, 29), (8, 35))
+
+
+def test_bands_p_must_be_a_plain_number_and_the_message_says_which_problem():
+    for p in ("0.1", None, np.float64(0.1), [0.1]):
+        with pytest.raises(JudgeInputError, match="plain number"):
+            Bands(n=200, p=p, green=(12, 29), amber_outer=(8, 35))
+    with pytest.raises(JudgeInputError, match="strictly between"):
+        Bands(n=200, p=1.5, green=(12, 29), amber_outer=(8, 35))
+
+
+def test_bad_containers_and_huge_numbers_raise_the_judges_own_error():
+    for field in ("region_labels", "divergence_curves", "climatology", "tasks"):
+        for bad in (None, 5):
+            with pytest.raises(JudgeInputError, match="sequence"):
+                make_input(**{field: bad})
+    with pytest.raises(JudgeInputError, match="sequence"):
+        RegionClimatology("r", None)
+    with pytest.raises(JudgeInputError, match="too large"):
+        ClimatologyBin(10**400, 10**400 + 1, np.zeros(2), np.ones(2), 3)
+
+
+def test_climatology_bin_ends_are_normalised_to_floats():
+    cb = ClimatologyBin(0, 2, np.zeros(2), np.ones(2), 3)
+    assert type(cb.invariant_lo) is float and type(cb.invariant_hi) is float
+
+
+def test_a_judge_input_cannot_be_subclassed_to_carry_identity():
+    with pytest.raises(TypeError, match="cannot be subclassed"):
+        class Tagged(JudgeInput):
+            model_name: str = "x"

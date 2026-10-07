@@ -96,7 +96,7 @@ def good_blocks() -> dict:
             "divergence_reference": [0.0, 0.2, 0.4]}]},
         "calibration": {"per_task": [{
             "task": t, "region": r, "levels": [0.5, 0.8, 0.9, 0.95], "coverage": [0.5, 0.8, 0.9, 0.94],
-            "n_trials": 200, "per_dimension": [[0.5, 0.5], [0.8, 0.8], [0.9, 0.9], [0.95, 0.94]]} for t, r in keys]},
+            "n_trials": 4, "per_dimension": [[0.5, 0.5], [0.8, 0.8], [0.9, 0.9], [0.95, 0.94]]} for t, r in keys]},
         "sharpness": {"per_task": [{"task": t, "region": r, "mean_width_90": 0.18} for t, r in keys]},
         "exceptions": {"per_task": [
             {"task": t, "region": r, "horizon_step": 1, "n_trials": 4, "expected": 0.4,
