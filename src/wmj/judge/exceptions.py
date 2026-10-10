@@ -16,22 +16,14 @@ from __future__ import annotations
 import numpy as np
 
 from wmj.judge._normal import Z_90
-from wmj.judge.calibration import region_rows, require_finite, task_region_step
+from wmj.judge.calibration import task_region_step
+from wmj.judge.distance import rms_of_sizes
 from wmj.judge.errors import JudgeInputError
+from wmj.judge.regions import region_rows, require_finite
 from wmj.judge.sharpness import compute_sharpness
 from wmj.judge.types import JudgeInput
 
 DISTANCE_UNIT = "rms-normalised: root-mean-square over the quantities, in the harness's normalised units"
-
-
-def _rms(values: np.ndarray) -> np.ndarray:
-    """Root-mean-square over the quantities of each trial, scaled by the row's largest value so tiny or huge
-    values neither vanish nor overflow while squaring (a miss of 1e-170 must not be drawn as a distance of 0)."""
-    largest = np.max(values, axis=1, keepdims=True)  # callers pass absolute values, so this is the row's largest size
-    scale = np.where(largest > 0.0, largest, 1.0)
-    with np.errstate(over="ignore", invalid="ignore"):
-        rms = scale[:, 0] * np.sqrt(np.mean((values / scale) ** 2, axis=1))
-    return require_finite(rms, "a plotted distance")
 
 
 def _band_for(observed: int, green: tuple[int, int], amber_outer: tuple[int, int]) -> str:
@@ -89,9 +81,9 @@ def compute_exceptions_and_trials(inp: JudgeInput) -> tuple[dict, dict]:
                     {
                         **key,
                         "distance_unit": DISTANCE_UNIT,
-                        "outcome_distance": [float(v) for v in _rms(miss)],
+                        "outcome_distance": [float(v) for v in rms_of_sizes(miss)],
                         "band_lo": [0.0] * int(rows.size),
-                        "band_hi": [float(v) for v in _rms(radius)],
+                        "band_hi": [float(v) for v in rms_of_sizes(radius)],
                         "is_exception": [bool(v) for v in is_exception],
                     }
                 )

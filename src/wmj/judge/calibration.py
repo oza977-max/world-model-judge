@@ -17,30 +17,16 @@ import numpy as np
 from wmj.judge._normal import Z_50, Z_80, Z_90, Z_95
 from wmj.judge.climatology import evaluation_step, switch_step
 from wmj.judge.errors import JudgeInputError
+from wmj.judge.regions import region_curve, region_rows, require_finite
 from wmj.judge.types import JudgeInput
 
 LEVELS = (0.5, 0.8, 0.9, 0.95)
 Z_VALUES = (Z_50, Z_80, Z_90, Z_95)
 
 
-def require_finite(array: np.ndarray, what: str) -> np.ndarray:
-    """Refuse an array holding infinity or not-a-number (an overflow), instead of counting with it.
-
-    At absurd magnitudes `inf <= inf` is true, which would report a miss of 3e308 as covered."""
-    if not np.all(np.isfinite(array)):
-        raise JudgeInputError(f"{what} overflowed (a gap or width too large to represent); the judge refuses rather than count with it")
-    return array
-
-
-def region_rows(inp: JudgeInput) -> dict[str, np.ndarray]:
-    """For each region present, the indices of its trials (regions in sorted-name order)."""
-    names = np.array([label.region_name for label in inp.region_labels], dtype=object)  # not fixed-width text: NumPy would strip trailing NULs
-    return {region: np.flatnonzero(names == region) for region in sorted(set(names.tolist()))}
-
-
 def task_region_step(inp: JudgeInput, task, region: str) -> int:
     """The step (1-based) at which this task is judged in this region."""
-    curve = next(c.curve for c in inp.divergence_curves if c.region_name == region)
+    curve = region_curve(inp, region)
     return evaluation_step(switch_step(curve, task.tolerance, task.horizon), task.horizon)
 
 

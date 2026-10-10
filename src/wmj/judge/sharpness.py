@@ -12,8 +12,9 @@ from __future__ import annotations
 import numpy as np
 
 from wmj.judge._normal import Z_90
-from wmj.judge.calibration import region_rows, require_finite, task_region_step
+from wmj.judge.calibration import task_region_step
 from wmj.judge.errors import JudgeInputError
+from wmj.judge.regions import region_rows, require_finite
 from wmj.judge.types import JudgeInput
 
 
