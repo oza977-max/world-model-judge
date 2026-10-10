@@ -25,9 +25,13 @@ DISTANCE_UNIT = "rms-normalised: root-mean-square over the quantities, in the ha
 
 
 def _rms(values: np.ndarray) -> np.ndarray:
-    """Root-mean-square over the quantities of each trial; an overflow while squaring is refused, never charted."""
+    """Root-mean-square over the quantities of each trial, scaled by the row's largest value so tiny or huge
+    values neither vanish nor overflow while squaring (a miss of 1e-170 must not be drawn as a distance of 0)."""
+    largest = np.max(values, axis=1, keepdims=True)  # values are absolute, so this is the row's largest size
+    scale = np.where(largest > 0.0, largest, 1.0)
     with np.errstate(over="ignore", invalid="ignore"):
-        return require_finite(np.sqrt(np.mean(values**2, axis=1)), "a plotted distance")
+        rms = scale[:, 0] * np.sqrt(np.mean((values / scale) ** 2, axis=1))
+    return require_finite(rms, "a plotted distance")
 
 
 def _band_for(observed: int, green: tuple[int, int], amber: tuple[int, int, int, int]) -> str:
@@ -50,8 +54,9 @@ def compute_exceptions_and_trials(inp: JudgeInput) -> tuple[dict, dict]:
             f"the pre-registered bands {bands.green}/{bands.amber_outer} leave no amber range on one side of green "
             "— the judge will not invent one (ADR-J4)"
         )
-    band_record = {"green": [g_lo, g_hi], "amber": [[a_lo, g_lo - 1], [g_hi + 1, a_hi]], "red": "outside"}
-    hedge_threshold = float(np.mean(inp.thresholds.sharpness_hedge_threshold))
+    expected_count = float(bands.n) * float(bands.p)
+    with np.errstate(over="ignore", invalid="ignore"):
+        hedge_threshold = float(require_finite(np.mean(inp.thresholds.sharpness_hedge_threshold), "the hedging threshold"))
     widths = {(e["task"], e["region"]): e["mean_width_90"] for e in compute_sharpness(inp)["per_task"]}
     exception_entries, trial_entries = [], []
     for task in inp.tasks:
@@ -70,13 +75,13 @@ def compute_exceptions_and_trials(inp: JudgeInput) -> tuple[dict, dict]:
                     {
                         **key,
                         "n_trials": int(rows.size),
-                        "expected": float(bands.n * bands.p),
+                        "expected": expected_count,
                         "observed": observed,
                         "band": band,
                         "low_side_sharpness_flag": bool(
                             observed <= g_hi and widths[(task.name, region)] > hedge_threshold
                         ),
-                        "bands": band_record,
+                        "bands": {"green": [g_lo, g_hi], "amber": [[a_lo, g_lo - 1], [g_hi + 1, a_hi]], "red": "outside"},  # a fresh record per entry
                     }
                 )
                 trial_entries.append(

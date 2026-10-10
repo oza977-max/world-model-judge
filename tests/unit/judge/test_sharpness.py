@@ -125,3 +125,12 @@ def test_an_overflowing_width_is_refused_not_reported_as_infinity():
     for spread in (1e308, 1e307):
         with pytest.raises(JudgeInputError, match="overflow"):
             compute_sharpness(_with_spread(spread))
+
+
+def test_an_overflowing_width_is_a_judge_error_even_when_warnings_are_errors():
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        with pytest.raises(JudgeInputError, match="overflow"):
+            compute_sharpness(_with_spread(1.7e308))

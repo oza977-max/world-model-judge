@@ -357,10 +357,14 @@ def test_crps_gaussian_itself_refuses_an_overflow_and_leaks_no_warning():
 
 
 def test_skill_score_refuses_a_result_that_is_not_a_finite_number():
+    import warnings
+
     from wmj.judge.skill import NonFiniteScoreError
 
-    with pytest.raises(NonFiniteScoreError):
-        skill_score(1e100, 1e-300)  # both inputs finite, the ratio is not
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # no leaked overflow warning in front of the judge's own refusal
+        with pytest.raises(NonFiniteScoreError):
+            skill_score(1e100, 1e-300)  # both inputs finite, the ratio is not
     assert skill_score(1e-300, 1e100) == 1.0  # a vanishing ratio is a plain, finite skill of 1
 
 

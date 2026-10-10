@@ -293,3 +293,105 @@ def test_a_width_exactly_at_the_hedge_threshold_is_not_flagged():
                             "thresholds": Thresholds(old.bands, np.array([threshold, threshold]), old.agreement_threshold)})
         e = _get(compute_exceptions_and_trials(inp)[0], "lv-control", "training", 1)
         assert e["low_side_sharpness_flag"] is flagged
+
+
+# --- review pass 1 --------------------------------------------------------------------------------------
+
+
+def _stepwise_spread_input(spread_at_step):
+    """Zero mean, outcome on the mean, and a spread that depends on the step (trials all alike)."""
+    kwargs = judge_input_kwargs()
+    n = len(kwargs["region_labels"])
+    spread = np.broadcast_to(np.array(spread_at_step, dtype=float)[None, :, None], (n, H, D)).copy()
+    kwargs.update(predictions=Forecasts(np.zeros((n, H, D)), spread), outcomes=np.zeros((n, H, D)))
+    return JudgeInput(**kwargs)
+
+
+def test_each_task_and_region_is_flagged_from_its_own_judged_width_and_both_rows_of_a_task_agree():
+    # training: control is judged at step 1 (tight), planning at step 2 (wide); out-of-range: planning is judged at step 1 (tight)
+    inp = _stepwise_spread_input([0.5, 2.0, 0.5, 0.5, 0.5])  # widths 1.64 and 6.58 against a threshold of 3.25
+    flags = {k: e["low_side_sharpness_flag"] for e in compute_exceptions_and_trials(inp)[0]["per_task"]
+             for k in [(e["task"], e["region"], e["horizon_step"])]}
+    assert flags == {
+        ("lv-control", "out-of-range", 1): False,
+        ("lv-control", "training", 1): False,
+        ("lv-planning", "out-of-range", 1): False,
+        ("lv-planning", "training", 1): True,  # the step-1 row of a task carries that task's judged-step width (A32)
+        ("lv-planning", "training", 2): True,
+    }
+
+
+def _three_quantity_input(width_in_spreads_of_unit, threshold):
+    n, d = 3, 3
+    spread = width_in_spreads_of_unit / (2.0 * Z_90)
+    bins = (ClimatologyBin(-np.inf, np.inf, np.zeros(d), np.ones(d), 5),)
+    return JudgeInput(
+        world="w", dt=0.1, natural_cycle_length=None,
+        predictions=Forecasts(np.zeros((n, 1, d)), np.full((n, 1, d), spread)), outcomes=np.zeros((n, 1, d)),
+        persistence=Forecasts(np.zeros((n, 1, d)), np.ones((n, 1, d))), linear=Forecasts(np.zeros((n, 1, d)), np.ones((n, 1, d))),
+        region_labels=tuple(RegionLabel("r", None) for _ in range(n)),
+        divergence_curves=(RegionCurve("r", np.array([0.0, 1.0])),),
+        climatology=(RegionClimatology("r", bins),), invariant_bins=np.zeros((n, 1), dtype=int),
+        tasks=(TaskSpec("t", "control", 0.1, 1),),
+        thresholds=Thresholds(Bands(n=3, p=0.1, green=(1, 1), amber_outer=(0, 2)), np.array(threshold), 1.0),
+    )
+
+
+def test_the_threshold_vector_is_reduced_by_its_mean_not_its_min_max_median_or_first_entry():
+    threshold = [9.0, 1.0, 2.0]  # mean 4, first 9, min 1, median 2, max 9
+    flag = lambda width: compute_exceptions_and_trials(_three_quantity_input(width, threshold))[0]["per_task"][0]["low_side_sharpness_flag"]
+    assert flag(3.0) is False  # below the mean (but above the min and the median)
+    assert flag(5.0) is True  # above the mean (but below the max and the first entry)
+
+
+def test_a_gap_or_width_too_large_to_represent_is_refused_even_when_warnings_are_errors():
+    import warnings
+
+    kwargs = judge_input_kwargs()
+    n = len(kwargs["region_labels"])
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        # (a) only step 1 has an unrepresentable half-width; the task's own judged step (2 in training) is tame
+        spread = np.ones((n, H, D))
+        spread[:, 0, :] = 1.7e308
+        one_task = dict(kwargs, tasks=(TaskSpec("p", "planning", 0.3, 5),), predictions=Forecasts(np.zeros((n, H, D)), spread),
+                        outcomes=np.zeros((n, H, D)))
+        one_task["divergence_curves"] = (RegionCurve("training", np.linspace(0, 1, H + 1)), RegionCurve("out-of-range", np.array([0, 0, 0.4, 0.5, 0.6, 0.7])))
+        with pytest.raises(JudgeInputError, match="overflow"):
+            compute_exceptions_and_trials(JudgeInput(**one_task))
+        # (b) the gap itself overflows
+        gap = dict(kwargs, predictions=Forecasts(np.full((n, H, D), -1.5e308), np.ones((n, H, D))), outcomes=np.full((n, H, D), 1.5e308))
+        with pytest.raises(JudgeInputError, match="overflow"):
+            compute_exceptions_and_trials(JudgeInput(**gap))
+        # (c) a threshold vector whose mean overflows
+        huge = dict(kwargs, thresholds=Thresholds(kwargs["thresholds"].bands, np.array([1.7e308, 1.7e308]), 1.0))
+        with pytest.raises(JudgeInputError, match="threshold"):
+            compute_exceptions_and_trials(JudgeInput(**huge))
+
+
+def test_huge_and_tiny_gaps_are_drawn_at_their_true_size_not_overflowed_or_squared_to_zero():
+    for size in (1e200, 1e-170):
+        kwargs = judge_input_kwargs()
+        n = len(kwargs["region_labels"])
+        kwargs.update(predictions=Forecasts(np.zeros((n, H, D)), np.full((n, H, D), size / 3.0)),
+                      outcomes=np.full((n, H, D), size))
+        t = _get(compute_exceptions_and_trials(JudgeInput(**kwargs))[1], "lv-control", "training", 1)
+        assert t["is_exception"] == [True, True, True]
+        assert t["outcome_distance"] == [pytest.approx(size, rel=1e-12)] * 3
+        assert t["band_hi"] == [pytest.approx(Z_90 * size / 3.0, rel=1e-12)] * 3
+
+
+def test_a_band_range_with_no_amber_above_green_is_also_refused():
+    kwargs = judge_input_kwargs()
+    kwargs["thresholds"] = Thresholds(Bands(n=3, p=0.1, green=(1, 2), amber_outer=(0, 2)), np.array([4.0, 2.5]), 1.0)
+    with pytest.raises(JudgeInputError, match="amber"):
+        compute_exceptions_and_trials(JudgeInput(**kwargs))
+
+
+def test_no_two_entries_share_one_bands_record_so_editing_one_cannot_change_another():
+    exceptions, _ = compute_exceptions_and_trials(make_input())
+    first, second = exceptions["per_task"][0]["bands"], exceptions["per_task"][1]["bands"]
+    assert first == second and first is not second
+    first["green"][0] = 99
+    first["amber"][0][0] = 99
+    assert second == {"green": [1, 1], "amber": [[0, 0], [2, 2]], "red": "outside"}

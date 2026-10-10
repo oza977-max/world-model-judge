@@ -306,3 +306,16 @@ def test_a_gap_too_large_to_represent_is_refused_not_counted_as_covered():
     kwargs["outcomes"] = np.full((n, H, D), 1.5e308)
     with pytest.raises(JudgeInputError, match="overflow"):
         compute_calibration(JudgeInput(**kwargs))
+
+
+def test_an_overflowing_gap_is_refused_as_a_judge_error_even_when_warnings_are_errors():
+    import warnings
+
+    kwargs = judge_input_kwargs()
+    n = len(kwargs["region_labels"])
+    kwargs["predictions"] = Forecasts(np.full((n, H, D), -1.5e308), np.full((n, H, D), 1e308))
+    kwargs["outcomes"] = np.full((n, H, D), 1.5e308)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        with pytest.raises(JudgeInputError, match="overflow"):
+            compute_calibration(JudgeInput(**kwargs))
