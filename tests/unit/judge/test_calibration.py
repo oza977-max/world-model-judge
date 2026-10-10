@@ -20,7 +20,7 @@ from wmj.judge.calibration import (
     task_region_step,
 )
 from wmj.judge.errors import JudgeInputError
-from wmj.judge.types import Forecasts, JudgeInput, TaskSpec
+from wmj.judge.types import Forecasts, JudgeInput, RegionCurve, TaskSpec
 from wmj.judge.verdict import _check_block, _check_calibration
 
 
@@ -244,3 +244,65 @@ def test_regions_come_out_in_sorted_name_order_whatever_the_order_they_arrive_in
     assert {e["n_trials"] for e in block["per_task"]} == {2}
     assert [e["region"] for e in compute_calibration(_many_regions(names[::-1], 4))["per_task"]] == sorted(names)
     assert {e["n_trials"] for e in compute_calibration(_many_regions(names, 4))["per_task"]} == {4}
+
+
+# --- review pass 2: the step actually read, the task's own horizon, the tolerance edge ------------------
+
+
+def _stepwise_input(curves, tasks, *, miss_step, miss_in_spreads):
+    """Mean = s, spread = s at step s; the outcome sits `miss_in_spreads` spreads from the mean at `miss_step`, on the mean elsewhere."""
+    kwargs = judge_input_kwargs()
+    n = len(kwargs["region_labels"])
+    steps = np.arange(1, H + 1, dtype=float)
+    mean = np.broadcast_to(steps[None, :, None], (n, H, D)).copy()
+    spread = mean.copy()
+    outcome = mean.copy()
+    outcome[:, miss_step - 1, :] += miss_in_spreads * spread[:, miss_step - 1, :]
+    kwargs.update(
+        predictions=Forecasts(mean, spread), outcomes=outcome, divergence_curves=curves, tasks=tasks,
+    )
+    return JudgeInput(**kwargs)
+
+
+CURVES_SWITCH_AT_3_AND_4 = (
+    RegionCurve("training", np.array([0.0, 0.01, 0.02, 0.2, 0.5, 0.6])),
+    RegionCurve("out-of-range", np.array([0.0, 0.01, 0.02, 0.2, 0.5, 0.6])),
+)
+
+
+def test_the_mean_and_the_spread_are_read_at_the_judging_step_not_at_step_one_or_the_last():
+    # control (tolerance 0.1) is judged at step 3, planning (0.3) at step 4; only that step's outcome is off, by 1.5 spreads
+    for miss_step, task, covered in ((3, "lv-control", [0.0, 0.0, 1.0, 1.0]), (4, "lv-planning", [0.0, 0.0, 1.0, 1.0])):
+        inp = _stepwise_input(CURVES_SWITCH_AT_3_AND_4, judge_input_kwargs()["tasks"], miss_step=miss_step, miss_in_spreads=1.5)
+        assert _entry(compute_calibration(inp), task, "training")["coverage"] == covered
+    # an outcome off at a step that is not the judging step is invisible
+    inp = _stepwise_input(CURVES_SWITCH_AT_3_AND_4, judge_input_kwargs()["tasks"], miss_step=5, miss_in_spreads=9.0)
+    assert _entry(compute_calibration(inp), "lv-control", "training")["coverage"] == [1.0, 1.0, 1.0, 1.0]
+
+
+def test_a_task_is_searched_and_judged_inside_its_own_horizon_not_the_worlds():
+    # the curve crosses at step 3, after this task's horizon of 2: no switch step, so it is judged at its last step, 2
+    tasks = (TaskSpec("short", "control", 0.1, 2),)
+    inp = _stepwise_input(CURVES_SWITCH_AT_3_AND_4, tasks, miss_step=3, miss_in_spreads=9.0)
+    assert task_region_step(inp, tasks[0], "training") == 2
+    assert _entry(compute_calibration(inp), "short", "training")["coverage"] == [1.0, 1.0, 1.0, 1.0]
+
+
+def test_the_switch_step_uses_the_exact_tolerance_so_a_hair_over_is_a_switch_and_equal_is_not():
+    tolerance = 0.1
+    task = TaskSpec("t", "control", tolerance, 5)
+    over = float(np.nextafter(tolerance, 1.0))
+    for step_value, expected_step in ((over, 1), (tolerance, 5)):
+        curves = (RegionCurve("training", np.array([0.0, step_value, tolerance, tolerance, tolerance, tolerance])),
+                  RegionCurve("out-of-range", np.zeros(H + 1)))
+        inp = _stepwise_input(curves, (task,), miss_step=1, miss_in_spreads=0.0)
+        assert task_region_step(inp, task, "training") == expected_step
+
+
+def test_a_gap_too_large_to_represent_is_refused_not_counted_as_covered():
+    kwargs = judge_input_kwargs()
+    n = len(kwargs["region_labels"])
+    kwargs["predictions"] = Forecasts(np.full((n, H, D), -1.5e308), np.full((n, H, D), 1e308))
+    kwargs["outcomes"] = np.full((n, H, D), 1.5e308)
+    with pytest.raises(JudgeInputError, match="overflow"):
+        compute_calibration(JudgeInput(**kwargs))

@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 
 from wmj.judge._normal import Z_90
-from wmj.judge.calibration import region_rows, task_region_step
+from wmj.judge.calibration import region_rows, require_finite, task_region_step
 from wmj.judge.errors import JudgeInputError
 from wmj.judge.types import JudgeInput
 
@@ -26,6 +26,8 @@ def compute_sharpness(inp: JudgeInput) -> dict:
     for task in inp.tasks:
         for region, rows in rows_by_region.items():
             index = task_region_step(inp, task, region) - 1
-            width = 2.0 * Z_90 * inp.predictions.spread[rows, index, :]
-            entries.append({"task": task.name, "region": region, "mean_width_90": float(np.mean(width))})
+            with np.errstate(over="ignore", invalid="ignore"):
+                width = require_finite(2.0 * Z_90 * inp.predictions.spread[rows, index, :], "a stated 90% interval width")
+                mean_width = require_finite(np.mean(width), "the mean 90% interval width")
+            entries.append({"task": task.name, "region": region, "mean_width_90": float(mean_width)})
     return {"per_task": entries}

@@ -8,7 +8,7 @@ score into a ranking anyone can read: 0 means "no better than the
 baseline", 1 means "essentially perfect", negative means "worse than
 just guessing the baseline's answer".
 
-This module imports only numpy and the judge's own modules — nothing
+This module imports only numpy, the standard `math` module and the judge's own modules — nothing
 else, per this project's own rule that the judge cannot import any other
 wmj package (cross-cutting ADR-003). Its refusals are the judge's own
 `JudgeError` family (`wmj.judge.errors`), never a bare Python error and
@@ -52,13 +52,13 @@ def crps_gaussian(
             f"crps_gaussian requires spread > 0 everywhere, got {spread!r} "
             f"(judge spec §7 sigma<=0 guard)"
         )
-    z = (outcome - mean) / spread
-    with np.errstate(over="ignore", invalid="ignore"):
+    with np.errstate(over="ignore", invalid="ignore"):  # an overflow is reported by the refusal below, not as a warning
+        z = (outcome - mean) / spread
         score = spread * (z * (2.0 * Phi(z) - 1.0) + 2.0 * phi(z) - 1.0 / np.sqrt(np.pi))
     if not np.all(np.isfinite(score)):
         raise NonFiniteScoreError(
             "the CRPS overflowed or is not a number (a spread so small that (outcome − mean)/spread cannot be "
-            "represented); the judge refuses rather than report a skill built on it"
+            "represented, or a gap outcome − mean too large to represent); the judge refuses rather than report a skill built on it"
         )
     return score
 
@@ -91,7 +91,14 @@ def skill_score(crps_model: float, crps_baseline: float) -> float:
             f"skill_score requires crps_baseline > 0, got {crps_baseline!r} "
             f"(judge spec ADR-J1: skill is a ratio to the baseline's CRPS)"
         )
-    return float(1.0 - crps_model / crps_baseline)
+    with np.errstate(over="ignore"):
+        skill = float(1.0 - np.float64(crps_model) / np.float64(crps_baseline))
+    if not math.isfinite(skill):
+        raise NonFiniteScoreError(
+            f"the skill 1 - {crps_model!r} / {crps_baseline!r} is not a finite number (the baseline's CRPS is "
+            "vanishingly small beside the model's); the judge refuses rather than report it"
+        )
+    return skill
 
 
 def _region_crps(forecasts, outcomes: np.ndarray, rows: np.ndarray) -> float:

@@ -111,3 +111,17 @@ def test_compute_sharpness_takes_only_a_real_judge_input():
     for bad in (None, {}, "x"):
         with pytest.raises(JudgeInputError, match="JudgeInput"):
             compute_sharpness(bad)
+
+
+def test_the_width_is_the_mean_not_the_median_over_trials():
+    spread = np.ones((6, H, D))
+    spread[2] = 10.0  # training trials: 1, 1, 10 -> mean 4, median 1
+    spread[5] = 10.0
+    e = _entry(compute_sharpness(_with_spread(spread)), "lv-control", "training")
+    assert e["mean_width_90"] == pytest.approx(2 * Z_90 * 4.0, rel=1e-12)
+
+
+def test_an_overflowing_width_is_refused_not_reported_as_infinity():
+    for spread in (1e308, 1e307):
+        with pytest.raises(JudgeInputError, match="overflow"):
+            compute_sharpness(_with_spread(spread))

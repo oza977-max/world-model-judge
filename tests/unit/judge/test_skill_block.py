@@ -26,8 +26,11 @@ from wmj.judge.errors import JudgeInputError
 from wmj.judge.skill import compute_skill, crps_gaussian, skill_score
 from wmj.judge.types import (
     Bands,
+    ClimatologyBin,
     Forecasts,
     JudgeInput,
+    RegionClimatology,
+    RegionCurve,
     RegionLabel,
     TaskSpec,
     Thresholds,
@@ -336,3 +339,49 @@ def test_tc_ju4_02_even_small_misstatements_of_the_spread_score_worse(factor):
         false_score = float(np.mean(crps_gaussian(np.full_like(y, mu), np.full_like(y, sigma * factor), y)))
         worse += true_score < false_score
     assert worse == 25
+
+
+# --- review pass 2 --------------------------------------------------------------------------------------
+
+
+def test_crps_gaussian_itself_refuses_an_overflow_and_leaks_no_warning():
+    import warnings
+
+    from wmj.judge.skill import NonFiniteScoreError
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # a leaked RuntimeWarning would surface as a raw error, not the judge's refusal
+        for mean, spread, outcome in ((0.0, 1e-320, 1.0), (-1.5e308, 1.0, 1.5e308)):
+            with pytest.raises(NonFiniteScoreError):
+                crps_gaussian(np.array([mean]), np.array([spread]), np.array([outcome]))
+
+
+def test_skill_score_refuses_a_result_that_is_not_a_finite_number():
+    from wmj.judge.skill import NonFiniteScoreError
+
+    with pytest.raises(NonFiniteScoreError):
+        skill_score(1e100, 1e-300)  # both inputs finite, the ratio is not
+    assert skill_score(1e-300, 1e100) == 1.0  # a vanishing ratio is a plain, finite skill of 1
+
+
+def test_quantities_are_averaged_by_the_mean_not_the_median_checked_with_three_quantities():
+    n, d = 3, 3
+    outcome = np.zeros((n, 1, d))
+    outcome[:, 0, :] = [0.0, 1.0, 5.0]  # the three quantities score very differently: mean != median
+    flat = lambda spread: Forecasts(np.zeros((n, 1, d)), np.full((n, 1, d), spread))
+    bins = (ClimatologyBin(-np.inf, np.inf, np.zeros(d), np.ones(d), 5),)
+    inp = JudgeInput(
+        world="w", dt=0.1, natural_cycle_length=None,
+        predictions=flat(1.0), outcomes=outcome, persistence=flat(2.0), linear=flat(3.0),
+        region_labels=tuple(RegionLabel("r", None) for _ in range(n)),
+        divergence_curves=(RegionCurve("r", np.array([0.0, 1.0])),),
+        climatology=(RegionClimatology("r", bins),),
+        invariant_bins=np.zeros((n, 1), dtype=int), tasks=(TaskSpec("t", "control", 0.1, 1),),
+        thresholds=Thresholds(Bands(n=3, p=0.1, green=(1, 1), amber_outer=(0, 2)), np.ones(d), 1.0),
+    )
+    entry = compute_skill(inp)["per_task_region"][0]
+    per_quantity = lambda sigma: [_crps(0.0, sigma, y) for y in (0.0, 1.0, 5.0)]
+    mean = lambda values: sum(values) / len(values)
+    assert entry["crps"] == pytest.approx(mean(per_quantity(1.0)), rel=1e-12)
+    assert entry["vs_persistence"] == pytest.approx(1.0 - mean(per_quantity(1.0)) / mean(per_quantity(2.0)), rel=1e-12)
+    assert entry["vs_linear"] == pytest.approx(1.0 - mean(per_quantity(1.0)) / mean(per_quantity(3.0)), rel=1e-12)

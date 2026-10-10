@@ -23,6 +23,15 @@ LEVELS = (0.5, 0.8, 0.9, 0.95)
 Z_VALUES = (Z_50, Z_80, Z_90, Z_95)
 
 
+def require_finite(array: np.ndarray, what: str) -> np.ndarray:
+    """Refuse an array holding infinity or not-a-number (an overflow), instead of counting with it.
+
+    At absurd magnitudes `inf <= inf` is true, which would report a miss of 3e308 as covered."""
+    if not np.all(np.isfinite(array)):
+        raise JudgeInputError(f"{what} overflowed (a gap or width too large to represent); the judge refuses rather than count with it")
+    return array
+
+
 def region_rows(inp: JudgeInput) -> dict[str, np.ndarray]:
     """For each region present, the indices of its trials (regions in sorted-name order)."""
     names = np.array([label.region_name for label in inp.region_labels], dtype=object)  # not fixed-width text: NumPy would strip trailing NULs
@@ -46,10 +55,12 @@ def compute_calibration(inp: JudgeInput) -> dict:
             index = task_region_step(inp, task, region) - 1
             mean = inp.predictions.mean[rows, index, :]
             spread = inp.predictions.spread[rows, index, :]
-            miss = np.abs(inp.outcomes[rows, index, :] - mean)
+            with np.errstate(over="ignore", invalid="ignore"):
+                miss = require_finite(np.abs(inp.outcomes[rows, index, :] - mean), "outcome minus predicted mean")
+                reach = [require_finite(z * spread, "a stated interval half-width") for z in Z_VALUES]
             joint, per_dimension = [], []
-            for z in Z_VALUES:
-                inside = miss <= z * spread  # closed: exactly z sigma away is still inside
+            for reach_z in reach:
+                inside = miss <= reach_z  # closed: exactly z sigma away is still inside
                 joint.append(float(np.mean(np.all(inside, axis=1))))
                 per_dimension.append([float(v) for v in np.mean(inside, axis=0)])
             entries.append(

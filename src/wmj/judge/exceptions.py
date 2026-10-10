@@ -16,12 +16,18 @@ from __future__ import annotations
 import numpy as np
 
 from wmj.judge._normal import Z_90
-from wmj.judge.calibration import region_rows, task_region_step
+from wmj.judge.calibration import region_rows, require_finite, task_region_step
 from wmj.judge.errors import JudgeInputError
 from wmj.judge.sharpness import compute_sharpness
 from wmj.judge.types import JudgeInput
 
 DISTANCE_UNIT = "rms-normalised: root-mean-square over the quantities, in the harness's normalised units"
+
+
+def _rms(values: np.ndarray) -> np.ndarray:
+    """Root-mean-square over the quantities of each trial; an overflow while squaring is refused, never charted."""
+    with np.errstate(over="ignore", invalid="ignore"):
+        return require_finite(np.sqrt(np.mean(values**2, axis=1)), "a plotted distance")
 
 
 def _band_for(observed: int, green: tuple[int, int], amber: tuple[int, int, int, int]) -> str:
@@ -53,8 +59,9 @@ def compute_exceptions_and_trials(inp: JudgeInput) -> tuple[dict, dict]:
             judged = task_region_step(inp, task, region)
             for step in sorted({1, judged}):
                 mean = inp.predictions.mean[rows, step - 1, :]
-                radius = Z_90 * inp.predictions.spread[rows, step - 1, :]
-                miss = np.abs(inp.outcomes[rows, step - 1, :] - mean)
+                with np.errstate(over="ignore", invalid="ignore"):
+                    radius = require_finite(Z_90 * inp.predictions.spread[rows, step - 1, :], "a stated interval half-width")
+                    miss = require_finite(np.abs(inp.outcomes[rows, step - 1, :] - mean), "outcome minus predicted mean")
                 is_exception = np.any(miss > radius, axis=1)  # the edge itself is inside
                 observed = int(np.sum(is_exception))
                 band = _band_for(observed, bands.green, (a_lo, g_lo - 1, g_hi + 1, a_hi))
@@ -76,9 +83,9 @@ def compute_exceptions_and_trials(inp: JudgeInput) -> tuple[dict, dict]:
                     {
                         **key,
                         "distance_unit": DISTANCE_UNIT,
-                        "outcome_distance": [float(v) for v in np.sqrt(np.mean(miss**2, axis=1))],
+                        "outcome_distance": [float(v) for v in _rms(miss)],
                         "band_lo": [0.0] * int(rows.size),
-                        "band_hi": [float(v) for v in np.sqrt(np.mean(radius**2, axis=1))],
+                        "band_hi": [float(v) for v in _rms(radius)],
                         "is_exception": [bool(v) for v in is_exception],
                     }
                 )

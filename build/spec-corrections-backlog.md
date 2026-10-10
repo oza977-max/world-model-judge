@@ -1200,3 +1200,15 @@ the next design review.
 4. **Bands that cannot be written out.** If the pre-registered bands leave no amber range on one side of green (tiny n), the judge refuses rather than invent one. Unreachable at n = 200.
 
 *Where recorded:* `build/handovers/P4-C04.md`.
+
+### A33 — the step at which calibration, sharpness and exceptions are measured is invisible (found at P4-C03 review, 2026-10-10)
+
+**In plain words:** on the real worlds almost every task/region pair is *never* judged to have drifted past its tolerance, so the rule "judge at the switch step" falls back to "judge at the last step of the task's horizon" (A31). The verdict shows numbers but not which step they were measured at, so a reader cannot tell "calibration at step 700" from "calibration at step 1".
+
+1. **Measured:** with 8 starts and default settings, 10 of 12 task/region pairs have no switch step (curve maxima 2e-7–4e-6 against tolerances 0.1–0.4); only the pendulum's `out-near-inverted` region has one (steps 4386 and 4775).
+2. **Owner decision D20 (2026-10-10):** keep the fallback rule; disclose it.
+3. **Proposed spec change (not applied):** an `evaluation_step` field on every `calibration`, `sharpness` and `exceptions` entry, and one more fixed JU-10 sentence saying most pairs are judged at the end of the horizon. ADR-J7 fixes seven texts and the entry schemas are closed, so this needs a design-review round first.
+4. **Also reconcile:** ADR-J5 says the switch search runs "within the world's declared horizon"; A31 searches the task's horizon. Identical in both built worlds (task horizon = world horizon); P4-C05's trust-horizon cap must use the same rule as `switch_step`.
+5. **Related:** when `h_task == 1` the pair {1, h_task} is one `exceptions` entry, not two (a duplicate key is refused) — P4-C04 emits one.
+
+*Where recorded:* `REMEMBER.md` D20; `build/handovers/P4-C03.md`.

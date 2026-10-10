@@ -668,10 +668,16 @@ def test_the_locked_arrays_cannot_be_unlocked_even_through_their_base():
 
 
 def test_names_with_control_characters_are_refused_so_regions_cannot_merge_by_a_hidden_character():
-    for bad in ("a\x00", "\x00a", "a\nb", "a\tb", "\x7f"):
+    for bad in ("a\x00", "\x00a", "a\nb", "a\tb", "\x7f", "a\x1fb", "a\x1f"):
         with pytest.raises(JudgeInputError, match="control characters"):
             RegionLabel(bad, None)
         with pytest.raises(JudgeInputError, match="control characters"):
             TaskSpec(bad, "control", 0.1, 3)
         with pytest.raises(JudgeInputError, match="control characters"):
             make_input(world=bad)
+
+
+def test_names_with_ordinary_spaces_and_accents_are_accepted_so_only_control_characters_are_refused():
+    for ok in ("out of range", "naïve café", "日本語", " padded "):
+        assert RegionLabel(ok, None).region_name == ok
+        assert TaskSpec(ok, "control", 0.1, 3).name == ok
