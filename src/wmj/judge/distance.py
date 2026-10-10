@@ -26,14 +26,19 @@ def rms_of_sizes(sizes: np.ndarray) -> np.ndarray:
     largest = np.max(sizes, axis=-1, keepdims=True)
     with np.errstate(over="ignore", invalid="ignore"):
         plain = np.sqrt(np.mean(sizes**2, axis=-1))
-        scale = np.where(largest > 0.0, largest, 1.0)
+        # a power of two near the largest size: dividing by it is exact, so scaling cannot disturb an exact tie
+        scale = np.where(largest > 0.0, np.ldexp(1.0, np.frexp(largest)[1] - 1), 1.0)
         scaled = scale[..., 0] * np.sqrt(np.mean((sizes / scale) ** 2, axis=-1))
     ordinary = (largest[..., 0] == 0.0) | ((largest[..., 0] >= SAFE_LOW) & (largest[..., 0] <= SAFE_HIGH))
     return require_finite(np.where(ordinary, plain, scaled), "a distance")
 
 
 def rms_distance(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """Distance between two arrays of quantities, over the last axis (see the module note)."""
+    """Distance between two arrays of quantities, over the last axis (see the module note).
+
+    The final overflow refusals here and in `rms_of_sizes` overlap on purpose (defence in depth: a result
+    that cannot be represented must never be returned, whichever step produced it). Exact ties at a
+    tolerance hold for the worlds' own quantity counts (1, 2, 4) and for any gaps within the ordinary range."""
     with np.errstate(over="ignore", invalid="ignore"):
         gap = require_finite(np.abs(a - b), "a gap between prediction and outcome")
     return rms_of_sizes(gap)

@@ -28,8 +28,8 @@ def test_one_quantity_is_its_absolute_gap_and_several_are_root_mean_square_not_s
 def test_tiny_huge_zero_and_mixed_rows_are_exact():
     rows = np.array([[1e-170, 1e-170], [1e200, 1e200], [0.0, 0.0], [1e200, 1e-170], [1e308, 1e308]])
     got = rms_of_sizes(rows)
-    assert got.tolist() == [pytest.approx(1e-170, rel=1e-12), pytest.approx(1e200, rel=1e-12), 0.0,
-                            pytest.approx(1e200 / math.sqrt(2), rel=1e-12), pytest.approx(1e308, rel=1e-12)]
+    assert got.tolist() == [pytest.approx(1e-170, rel=1e-12, abs=0), pytest.approx(1e200, rel=1e-12, abs=0), 0.0,
+                            pytest.approx(1e200 / math.sqrt(2), rel=1e-12, abs=0), pytest.approx(1e308, rel=1e-12, abs=0)]
 
 
 def test_the_distance_between_two_arrays_is_over_the_last_axis_and_keeps_the_leading_shape():
@@ -63,9 +63,9 @@ def test_region_rows_and_curves_belong_to_their_own_region_in_sorted_order():
 
 
 def test_huge_gaps_of_either_sign_are_measured_not_falsely_refused():
-    assert rms_distance(np.array([[0.0, 0.0]]), np.array([[1e200, 1e200]])).tolist() == [pytest.approx(1e200, rel=1e-12)]
-    assert rms_distance(np.array([[0.0, 0.0]]), np.array([[-1e200, -1e200]])).tolist() == [pytest.approx(1e200, rel=1e-12)]
-    assert rms_distance(np.array([[1e200, -1e200]]), np.array([[-1e200, 1e200]])).tolist() == [pytest.approx(2e200, rel=1e-12)]
+    assert rms_distance(np.array([[0.0, 0.0]]), np.array([[1e200, 1e200]])).tolist() == [pytest.approx(1e200, rel=1e-12, abs=0)]
+    assert rms_distance(np.array([[0.0, 0.0]]), np.array([[-1e200, -1e200]])).tolist() == [pytest.approx(1e200, rel=1e-12, abs=0)]
+    assert rms_distance(np.array([[1e200, -1e200]]), np.array([[-1e200, 1e200]])).tolist() == [pytest.approx(2e200, rel=1e-12, abs=0)]
 
 
 def test_a_tie_is_exact_for_ordinary_rows_even_with_unequal_gaps():
@@ -78,8 +78,39 @@ def test_region_names_that_share_a_prefix_stay_separate():
 
     kwargs = judge_input_kwargs()
     kwargs["region_labels"] = tuple(RegionLabel("a" if i < 3 else "ab", None) for i in range(6))
-    kwargs["divergence_curves"] = (RegionCurve("a", np.linspace(0, 1, 6)), RegionCurve("ab", np.linspace(0, 2, 6)))
+    kwargs["divergence_curves"] = (RegionCurve("ab", np.linspace(0, 2, 6)), RegionCurve("a", np.linspace(0, 1, 6)))  # the longer name first
     kwargs["climatology"] = (RegionClimatology("a", kwargs["climatology"][0].bins), RegionClimatology("ab", kwargs["climatology"][1].bins))
     inp = JudgeInput(**kwargs)
     rows = region_rows(inp)
     assert list(rows) == ["a", "ab"] and rows["a"].tolist() == [0, 1, 2] and rows["ab"].tolist() == [3, 4, 5]
+    assert region_curve(inp, "a")[-1] == 1.0 and region_curve(inp, "ab")[-1] == 2.0
+
+
+def test_tiny_rows_are_never_squared_to_zero_and_huge_rows_never_overflow_across_the_whole_range():
+    from decimal import Decimal, getcontext
+
+    getcontext().prec = 60
+    for exponent in (-300, -170, -155, -151, -150, -149, -100, 0, 100, 149, 150, 151, 153, 154, 155, 200, 300):
+        for mantissa in (1.0, 1.7):
+            sizes = np.array([[mantissa * 10.0**exponent, mantissa * 10.0**exponent * 0.5]])
+            exact = (sum(Decimal(float(v)) ** 2 for v in sizes[0]) / 2).sqrt()
+            got = float(rms_of_sizes(sizes)[0])
+            assert got > 0.0 and abs(Decimal(got) - exact) / exact < Decimal("4e-16"), (exponent, mantissa)
+
+
+def test_rows_straddling_the_hand_over_between_the_plain_and_scaled_forms_agree_on_both_sides():
+    from decimal import Decimal, getcontext
+
+    getcontext().prec = 60
+    for edge in (1e-150, 1e150):
+        for factor in (0.99, 0.9999999, 1.0, 1.0000001, 1.01):
+            sizes = np.array([[edge * factor, edge * factor * 3.0]])
+            exact = (sum(Decimal(float(v)) ** 2 for v in sizes[0]) / 2).sqrt()
+            assert abs(Decimal(float(rms_of_sizes(sizes)[0])) - exact) / exact < Decimal("4e-16"), (edge, factor)
+
+
+def test_a_tie_stays_exact_in_the_scaled_range_too():
+    big = 2.0**500
+    assert rms_of_sizes(np.array([[5.0 * big, 13.0 * big, 35.0 * big, 5.0 * big]])).tolist() == [pytest.approx(19.0 * big, rel=0, abs=0)]
+    small = 2.0**-515
+    assert rms_of_sizes(np.array([[5.0 * small, 13.0 * small, 35.0 * small, 5.0 * small]])).tolist() == [pytest.approx(19.0 * small, rel=0, abs=0)]
