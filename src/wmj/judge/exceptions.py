@@ -5,7 +5,7 @@ range". A miss (an "exception") is any trial where even one of its quantities la
 range; landing exactly on the edge is inside. The misses are counted for each task and region at
 two pre-declared steps — step 1 and the step where that task is judged — and the count is placed
 in the colour band fixed before judging (green is what honest luck looks like, amber is a
-warning, red is out). A count that is *too low* is not rewarded: if it is green-or-better and the
+warning, red is out). A count that is *too low* is not rewarded: if it is at or below the top of green and the
 ranges were very wide, the entry is flagged as possible padding. The same per-trial list of
 hit/miss flags that the count is made from is returned for the main chart, so the chart and the
 count cannot disagree.
@@ -27,17 +27,18 @@ DISTANCE_UNIT = "rms-normalised: root-mean-square over the quantities, in the ha
 def _rms(values: np.ndarray) -> np.ndarray:
     """Root-mean-square over the quantities of each trial, scaled by the row's largest value so tiny or huge
     values neither vanish nor overflow while squaring (a miss of 1e-170 must not be drawn as a distance of 0)."""
-    largest = np.max(values, axis=1, keepdims=True)  # values are absolute, so this is the row's largest size
+    largest = np.max(values, axis=1, keepdims=True)  # callers pass absolute values, so this is the row's largest size
     scale = np.where(largest > 0.0, largest, 1.0)
     with np.errstate(over="ignore", invalid="ignore"):
         rms = scale[:, 0] * np.sqrt(np.mean((values / scale) ** 2, axis=1))
     return require_finite(rms, "a plotted distance")
 
 
-def _band_for(observed: int, green: tuple[int, int], amber: tuple[int, int, int, int]) -> str:
+def _band_for(observed: int, green: tuple[int, int], amber_outer: tuple[int, int]) -> str:
+    """Green inside its range, amber between green and the outer amber edges, red beyond."""
     if green[0] <= observed <= green[1]:
         return "green"
-    if amber[0] <= observed <= green[0] - 1 or green[1] + 1 <= observed <= amber[3]:
+    if amber_outer[0] <= observed <= amber_outer[1]:
         return "amber"
     return "red"
 
@@ -69,7 +70,7 @@ def compute_exceptions_and_trials(inp: JudgeInput) -> tuple[dict, dict]:
                     miss = require_finite(np.abs(inp.outcomes[rows, step - 1, :] - mean), "outcome minus predicted mean")
                 is_exception = np.any(miss > radius, axis=1)  # the edge itself is inside
                 observed = int(np.sum(is_exception))
-                band = _band_for(observed, bands.green, (a_lo, g_lo - 1, g_hi + 1, a_hi))
+                band = _band_for(observed, bands.green, bands.amber_outer)
                 key = {"task": task.name, "region": region, "horizon_step": step}
                 exception_entries.append(
                     {

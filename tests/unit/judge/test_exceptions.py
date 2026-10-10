@@ -395,3 +395,52 @@ def test_no_two_entries_share_one_bands_record_so_editing_one_cannot_change_anot
     first["green"][0] = 99
     first["amber"][0][0] = 99
     assert second == {"green": [1, 1], "amber": [[0, 0], [2, 2]], "red": "outside"}
+
+
+def _n200(offsets_k, *, spread=1.0):
+    n = 200
+    mean = np.zeros((n, 1, 1)); out = np.zeros((n, 1, 1)); out[:offsets_k] = 5.0 * spread
+    return JudgeInput(
+        world="w", dt=0.1, natural_cycle_length=None, predictions=Forecasts(mean, np.full((n, 1, 1), spread)), outcomes=out,
+        persistence=Forecasts(mean, np.ones((n, 1, 1))), linear=Forecasts(mean, np.ones((n, 1, 1))),
+        region_labels=tuple(RegionLabel("r", None) for _ in range(n)),
+        divergence_curves=(RegionCurve("r", np.array([0.0, 1.0])),),
+        climatology=(RegionClimatology("r", (ClimatologyBin(0.0, 1.0, np.zeros(1), np.ones(1), 5),)),),
+        invariant_bins=np.zeros((n, 1), dtype=int), tasks=(TaskSpec("t", "control", 0.1, 1),),
+        thresholds=Thresholds(Bands(n=200, p=0.1, green=(12, 29), amber_outer=(8, 35)), np.array([3.0]), 1.0))
+
+
+def test_bands_and_the_hedging_flag_at_every_edge_of_the_real_two_hundred_trial_bands():
+    want = {7: "red", 8: "amber", 11: "amber", 12: "green", 29: "green", 30: "amber", 35: "amber", 36: "red"}
+    for k, band in want.items():
+        e = compute_exceptions_and_trials(_n200(k, spread=10.0))[0]["per_task"][0]  # width 33 >> 3
+        assert e["observed"] == k and e["band"] == band, k
+        assert e["bands"] == {"green": [12, 29], "amber": [[8, 11], [30, 35]], "red": "outside"}
+        assert e["low_side_sharpness_flag"] is (k <= 29), k  # flag edge is green_hi, not green_lo or amber edges
+
+
+def test_the_mean_and_spread_are_read_at_the_entrys_own_step_not_another():
+    kw = judge_input_kwargs(); n = len(kw["region_labels"])
+    mean = np.zeros((n, H, D)); spread = np.ones((n, H, D))
+    mean[:, 1, :] = 100.0; spread[:, 1, :] = 50.0          # step 2 only
+    out = np.zeros((n, H, D)); out[:, 1, :] = 100.0 + 60.0  # 60 from the step-2 mean: inside 1.645*50=82, outside 1.645*1
+    kw.update(predictions=Forecasts(mean, spread), outcomes=out)
+    inp = JudgeInput(**kw)
+    t = _get(compute_exceptions_and_trials(inp)[1], "lv-planning", "training", 2)
+    assert t["is_exception"] == [False] * 3 and t["band_hi"] == [pytest.approx(Z_90 * 50.0)] * 3 and t["outcome_distance"] == [pytest.approx(60.0)] * 3
+
+
+def test_a_row_with_one_huge_and_one_tiny_gap_is_drawn_at_its_true_size():
+    kw = judge_input_kwargs(); n = len(kw["region_labels"])
+    out = np.zeros((n, H, D)); out[:, :, 0] = 1e200; out[:, :, 1] = 1e-170
+    kw.update(predictions=Forecasts(np.zeros((n, H, D)), np.full((n, H, D), 1.0)), outcomes=out)
+    t = _get(compute_exceptions_and_trials(JudgeInput(**kw))[1], "lv-control", "training", 1)
+    assert t["outcome_distance"] == [pytest.approx(1e200 / math.sqrt(2), rel=1e-12)] * 3
+
+
+def test_calibration_refuses_when_only_some_half_widths_overflow():
+    kw = judge_input_kwargs(); n = len(kw["region_labels"])
+    spread = np.ones((n, H, D)); spread[0, :, 0] = 1.7e308
+    kw.update(predictions=Forecasts(np.zeros((n, H, D)), spread), outcomes=np.zeros((n, H, D)) + 1e300)
+    with pytest.raises(JudgeInputError, match="overflow"):
+        compute_calibration(JudgeInput(**kw))
