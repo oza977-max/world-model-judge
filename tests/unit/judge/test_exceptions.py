@@ -438,9 +438,11 @@ def test_a_row_with_one_huge_and_one_tiny_gap_is_drawn_at_its_true_size():
     assert t["outcome_distance"] == [pytest.approx(1e200 / math.sqrt(2), rel=1e-12)] * 3
 
 
-def test_calibration_refuses_when_only_some_half_widths_overflow():
-    kw = judge_input_kwargs(); n = len(kw["region_labels"])
-    spread = np.ones((n, H, D)); spread[0, :, 0] = 1.7e308
-    kw.update(predictions=Forecasts(np.zeros((n, H, D)), spread), outcomes=np.zeros((n, H, D)) + 1e300)
-    with pytest.raises(JudgeInputError, match="overflow"):
-        compute_calibration(JudgeInput(**kw))
+def test_a_row_with_gaps_near_the_largest_float_is_drawn_at_its_true_size_scaled_by_the_maximum():
+    kwargs = judge_input_kwargs()
+    n = len(kwargs["region_labels"])
+    outcome = np.zeros((n, H, D))
+    outcome[:, :, :] = 1e308  # two quantities: a plain sum of the two would overflow, the maximum-scaled RMS does not
+    kwargs.update(predictions=Forecasts(np.zeros((n, H, D)), np.full((n, H, D), 8e306)), outcomes=outcome)
+    t = _get(compute_exceptions_and_trials(JudgeInput(**kwargs))[1], "lv-control", "training", 1)
+    assert t["outcome_distance"] == [pytest.approx(1e308, rel=1e-12)] * 3
