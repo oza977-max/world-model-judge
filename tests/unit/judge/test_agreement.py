@@ -46,11 +46,11 @@ def _tables():
     return (RegionClimatology("training", table(1.0, 1.0)), RegionClimatology("out-of-range", table(10.0, 5.0)))
 
 
-def _input(z_by_trial_step, bins_by_trial_step, *, curves=CURVES, tasks=None, threshold=1.0):
+def _input(z_by_trial_step, bins_by_trial_step, *, curves=CURVES, tasks=None, threshold=1.0, tables=None):
     """Predicted mean = the chosen bin's mean + z * sd (same z in both quantities) at every [trial, step]."""
     kwargs = judge_input_kwargs()
     n = len(kwargs["region_labels"])
-    tables = _tables()
+    tables = tables or _tables()
     by_region = {t.region_name: t for t in tables}
     regions = [lab.region_name for lab in kwargs["region_labels"]]
     mean = np.zeros((n, H, D))
@@ -213,7 +213,44 @@ def test_a_switch_step_beyond_the_tasks_horizon_is_no_switch_step_for_that_task(
 
 
 def test_a_sum_of_huge_standardised_gaps_is_averaged_without_overflow():
-    z = [[1e307] * H for _ in range(6)]
+    import warnings
+
+    z = [[1.7e308] * H for _ in range(6)]  # a plain sum of these overflows, though their mean is representable
     _, b = _flat(0, 0)
-    e = _entry(compute_climatology(_input(z, b)), "lv-control", "training")
-    assert e["agreement_mean_abs_z"] == pytest.approx(1e307, rel=1e-9)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        e = _entry(compute_climatology(_input(z, b)), "lv-planning", "training")
+    assert e["agreement_mean_abs_z"] == pytest.approx(1.7e308, rel=1e-9)
+
+
+def test_a_tie_at_the_agreement_threshold_is_exact_even_when_the_gaps_are_unequal():
+    # planning, steps 4 and 5, three training trials: |z| = 0.25, 2.5, 0.25 on each -> an exact mean of 1.0
+    z = [[0.0, 0.0, 0.0, 0.25, 0.25], [0.0, 0.0, 0.0, 2.5, 2.5], [0.0, 0.0, 0.0, 0.25, 0.25]] + [[0.0] * H] * 3
+    _, b = _flat(0, 0)
+    exact = tuple(RegionClimatology(r, (ClimatologyBin(-np.inf, np.inf, np.zeros(2), np.ones(2), 5),)) for r in ("training", "out-of-range"))
+    for threshold, agrees in ((1.0, True), (float(np.nextafter(1.0, 0.0)), False)):  # mean 0, sd 1: no rounding in z
+        e = _entry(compute_climatology(_input(z, b, threshold=threshold, tables=exact)), "lv-planning", "training")
+        assert e["agrees"] is agrees and e["agreement_mean_abs_z"] == pytest.approx(1.0, rel=1e-12)
+
+
+def test_the_score_averages_over_all_the_window_steps_not_a_median_of_per_step_means():
+    # a window of three steps (switch at 3, horizon 5): per-step mean |z| = 0, 0, 9 -> mean 3 (a median of the step means would be 0)
+    from wmj.judge.types import TaskSpec
+
+    z = [[0.0, 0.0, 0.0, 0.0, 9.0]] * 6
+    _, b = _flat(0, 0)
+    wide = (TaskSpec("wide", "planning", 0.1, 5),)  # tolerance 0.1: switch at 3 on the test curve
+    e = _entry(compute_climatology(_input(z, b, tasks=wide)), "wide", "training")
+    assert e["agreement_mean_abs_z"] == pytest.approx(3.0, rel=1e-12)
+
+
+def test_an_overflowing_standardised_gap_is_refused_even_when_warnings_are_errors():
+    import warnings
+
+    kwargs = judge_input_kwargs()
+    n = len(kwargs["region_labels"])
+    kwargs.update(predictions=Forecasts(np.full((n, H, D), 1.7e308), np.ones((n, H, D))))
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        with pytest.raises(JudgeInputError, match="overflow"):
+            compute_climatology(JudgeInput(**kwargs))

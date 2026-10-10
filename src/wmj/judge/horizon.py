@@ -28,7 +28,12 @@ def _median_error_curves(inp: JudgeInput) -> dict[str, np.ndarray]:
     for region, rows in region_rows(inp).items():
         distance = rms_distance(inp.predictions.mean[rows], inp.outcomes[rows])  # [trials, H]
         with np.errstate(over="ignore", invalid="ignore"):
-            curves[region] = require_finite(np.median(distance, axis=0), "the median error")
+            median = np.median(distance, axis=0)
+            if not np.all(np.isfinite(median)):  # the average of two huge middle values overflowed: halve before adding
+                ordered = np.sort(distance, axis=0)
+                half = distance.shape[0] // 2
+                median = ordered[half] if distance.shape[0] % 2 else ordered[half - 1] / 2.0 + ordered[half] / 2.0
+            curves[region] = require_finite(median, "the median error")
     return curves
 
 
@@ -63,7 +68,8 @@ def compute_trust_horizons(inp: JudgeInput) -> dict:
             cap = task.horizon if switch is None else switch  # no switch: graded on the task's whole horizon (A31)
             within = medians[region][:cap] <= task.tolerance  # closed: exactly on the tolerance is within it
             steps = int(np.argmin(within)) if not within.all() else cap  # the first failing step s sits at index s - 1
-            world_time = float(steps * inp.dt)
+            with np.errstate(over="ignore", invalid="ignore"):
+                world_time = float(require_finite(np.float64(steps) * np.float64(inp.dt), "the trust horizon in world time"))
             cycle = inp.natural_cycle_length
             with np.errstate(over="ignore", invalid="ignore"):
                 fraction = None if cycle is None else require_finite(np.float64(world_time) / cycle, "the trust horizon in natural cycles")

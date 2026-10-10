@@ -260,16 +260,74 @@ def test_the_typical_error_is_the_true_median_for_odd_and_even_trial_counts_what
         assert compute_error_vs_horizon(inp)["per_region"][0]["median_error"] == [0.0, pytest.approx(expected), pytest.approx(expected)]
 
 
-def test_a_median_too_large_to_represent_is_refused_not_reported_as_infinity():
+def test_a_huge_but_representable_median_is_returned_for_even_counts_just_as_for_odd_ones():
     import warnings
 
     with warnings.catch_warnings():
-        warnings.simplefilter("error")
-        inp = _one_region([1.7e308, 1.7e308, 1.7e308, 1.7e308], bands=FOUR)
-        with pytest.raises(JudgeInputError, match="overflow"):
-            compute_error_vs_horizon(inp)
+        warnings.simplefilter("error")  # the average of the two middle values overflows if added first
+        even = compute_error_vs_horizon(_one_region([1.7e308, 1.7e308, 1.7e308, 1.7e308], bands=FOUR))
+        odd = compute_error_vs_horizon(_one_region([1.7e308, 1.7e308, 1.7e308], bands=THREE))
+    assert even["per_region"][0]["median_error"] == [0.0, 1.7e308, 1.7e308] == odd["per_region"][0]["median_error"]
 
 
+def test_a_world_time_too_large_to_represent_is_refused_not_passed_on_as_infinity():
+    kwargs = judge_input_kwargs()
+    kwargs["dt"] = 1e308
+    n = len(kwargs["region_labels"])
+    kwargs.update(natural_cycle_length=None, predictions=Forecasts(np.zeros((n, H, D)), np.ones((n, H, D))), outcomes=np.zeros((n, H, D)))
+    with pytest.raises(JudgeInputError, match="overflow"):
+        compute_trust_horizons(JudgeInput(**kwargs))
+
+
+def test_a_tie_at_the_tolerance_is_exact_even_when_the_gaps_are_unequal():
+    # gaps (1, 1) and (5): the root-mean-square of (1, 1, 5) is exactly 3, so tolerance 3.0 is still within it
+    inp = _one_region_multi_quantity([1.0, 1.0, 5.0], tolerance=3.0)
+    assert compute_trust_horizons(inp)["per_task"][0]["steps"] == 2
+    inp = _one_region_multi_quantity([1.0, 1.0, 5.0], tolerance=float(np.nextafter(3.0, 0.0)))
+    assert compute_trust_horizons(inp)["per_task"][0]["steps"] == 0
+
+
+def _one_region_multi_quantity(gaps, *, tolerance):
+    """Three trials of one region and ONE step pair; the three quantities are `gaps` away in every trial."""
+    from wmj.judge.types import (
+        Bands,
+        ClimatologyBin,
+        RegionClimatology,
+        RegionLabel,
+        Thresholds,
+    )
+
+    n, d, steps = 3, len(gaps), 2
+    outcomes = np.tile(np.array(gaps, dtype=float), (n, steps, 1))
+    bins = (ClimatologyBin(-np.inf, np.inf, np.zeros(d), np.ones(d), 5),)
+    return JudgeInput(
+        world="w", dt=0.1, natural_cycle_length=None,
+        predictions=Forecasts(np.zeros((n, steps, d)), np.ones((n, steps, d))), outcomes=outcomes,
+        persistence=Forecasts(np.zeros((n, steps, d)), np.ones((n, steps, d))),
+        linear=Forecasts(np.zeros((n, steps, d)), np.ones((n, steps, d))),
+        region_labels=tuple(RegionLabel("r", None) for _ in range(n)),
+        divergence_curves=(RegionCurve("r", np.zeros(steps + 1)),),
+        climatology=(RegionClimatology("r", bins),), invariant_bins=np.zeros((n, steps), dtype=np.int64),
+        tasks=(TaskSpec("t", "control", tolerance, steps),),
+        thresholds=Thresholds(Bands(**THREE), np.ones(d), 1.0),
+    )
+
+
+def test_each_region_gets_its_own_divergence_reference_and_trials_are_paired_with_their_own_outcomes():
+    different = (RegionCurve("training", np.array([0.0, 0.1, 0.2, 0.3, 0.4, 0.5])),
+                 RegionCurve("out-of-range", np.array([0.0, 1.0, 2.0, 3.0, 4.0, 5.0])))
+    kwargs = judge_input_kwargs()
+    n = len(kwargs["region_labels"])
+    predictions = np.zeros((n, H, D))
+    predictions[:, :, :] = np.arange(n, dtype=float)[:, None, None]  # trial i predicts i in every quantity
+    outcomes = predictions + np.array([1.0, 3.0, 2.0, 10.0, 30.0, 20.0])[:, None, None]  # trial i is off by its own gap
+    kwargs.update(predictions=Forecasts(predictions, np.ones((n, H, D))), outcomes=outcomes, divergence_curves=different)
+    block = compute_error_vs_horizon(JudgeInput(**kwargs))
+    assert _region(block, "training")["divergence_reference"] == pytest.approx([0.0, 0.1, 0.2, 0.3, 0.4, 0.5])
+    assert _region(block, "out-of-range")["divergence_reference"] == pytest.approx([0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+    # a trial paired with another trial's outcome would give a different set of gaps and so a different median
+    assert _region(block, "training")["median_error"][1:] == [pytest.approx(2.0)] * H
+    assert _region(block, "out-of-range")["median_error"][1:] == [pytest.approx(20.0)] * H
 def test_a_switch_step_beyond_the_tasks_horizon_does_not_exist_for_that_task_and_trust_stops_at_the_horizon():
     # the world first drifts past the tolerance at step 4, but this task only goes to step 3
     late = np.array([0.0, 0.0, 0.0, 0.0, 5.0, 5.0])

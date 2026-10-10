@@ -60,3 +60,26 @@ def test_region_rows_and_curves_belong_to_their_own_region_in_sorted_order():
     assert rows["training"].tolist() == [0, 1, 2] and rows["out-of-range"].tolist() == [3, 4, 5]
     assert region_curve(inp, "training").tolist() == pytest.approx(np.linspace(0.0, 1.0, 6).tolist())
     assert region_curve(inp, "out-of-range").tolist() == pytest.approx(np.linspace(0.0, 2.0, 6).tolist())
+
+
+def test_huge_gaps_of_either_sign_are_measured_not_falsely_refused():
+    assert rms_distance(np.array([[0.0, 0.0]]), np.array([[1e200, 1e200]])).tolist() == [pytest.approx(1e200, rel=1e-12)]
+    assert rms_distance(np.array([[0.0, 0.0]]), np.array([[-1e200, -1e200]])).tolist() == [pytest.approx(1e200, rel=1e-12)]
+    assert rms_distance(np.array([[1e200, -1e200]]), np.array([[-1e200, 1e200]])).tolist() == [pytest.approx(2e200, rel=1e-12)]
+
+
+def test_a_tie_is_exact_for_ordinary_rows_even_with_unequal_gaps():
+    assert rms_of_sizes(np.array([[1.0, 1.0, 5.0]])).tolist() == [3.0]  # sqrt((1 + 1 + 25) / 3) is exactly 3
+
+
+def test_region_names_that_share_a_prefix_stay_separate():
+    from tests.unit.judge._builders import judge_input_kwargs
+    from wmj.judge.types import JudgeInput, RegionClimatology, RegionCurve, RegionLabel
+
+    kwargs = judge_input_kwargs()
+    kwargs["region_labels"] = tuple(RegionLabel("a" if i < 3 else "ab", None) for i in range(6))
+    kwargs["divergence_curves"] = (RegionCurve("a", np.linspace(0, 1, 6)), RegionCurve("ab", np.linspace(0, 2, 6)))
+    kwargs["climatology"] = (RegionClimatology("a", kwargs["climatology"][0].bins), RegionClimatology("ab", kwargs["climatology"][1].bins))
+    inp = JudgeInput(**kwargs)
+    rows = region_rows(inp)
+    assert list(rows) == ["a", "ab"] and rows["a"].tolist() == [0, 1, 2] and rows["ab"].tolist() == [3, 4, 5]
