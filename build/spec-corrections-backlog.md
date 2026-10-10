@@ -1212,3 +1212,18 @@ the next design review.
 5. **Related:** when `h_task == 1` the pair {1, h_task} is one `exceptions` entry, not two (a duplicate key is refused) — P4-C04 emits one.
 
 *Where recorded:* `REMEMBER.md` D20; `build/handovers/P4-C03.md`.
+
+### A34 — error curve, climatology agreement and trust horizon: conventions pinned while building P4-C05 (2026-10-10)
+
+**In plain words:** the spec describes these three blocks in prose; to compute them, a few small
+choices had to be made. They are written here for the next design review.
+
+1. **Step zero of the error curve is exactly 0.** The curve starts at step 0 (the shared origin, ADR-J5 / worlds §5); no forecast is made there, so its typical error is recorded as 0.0 rather than left out.
+2. **"Median error" is the median over the region's trials of the root-mean-square distance** between the predicted mean and the outcome (ADR-J5's distance), per step. For an even number of trials NumPy's median (the average of the two middle values) is used.
+3. **The agreement window** is the steps `switch .. task.horizon` inclusive — the *task's* horizon (A31), not the world's. The spec says "averaged per dimension over the post-switch window"; the score reported is the single mean of |z| over trials, steps *and* quantities, since the pass mark is one number.
+4. **The climatology bin** is the pre-measured `invariant_bins[trial, step]` for the trial's own region's table; the table's open-ended outer bins make every value fall in one bin (ADR-J5). A bin's per-quantity spread must be > 0 (the input door enforces it).
+5. **Trust-horizon cap with no switch step.** The spec caps at "the world's declared horizon H"; this build caps at the *task's* horizon (the same rule as the switch-step search, A31). Identical in both built worlds (task horizon = H); the cap at a switch step is inclusive (`steps ≤ switch_step`, as the verdict door requires). Tolerance comparisons are closed (an error exactly equal to τ is within it).
+6. **Natural units** are written `"<steps × dt ÷ cycle length, 2 decimals> cycles"`, null where the world has no natural cycle length.
+7. **Module layout:** the spec lists `distance.py` (now exists) and `horizon.py` (now exists); `regions.py` was added for the helpers (`region_rows`, `region_curve`, `require_finite`) shared by every block, which also avoids an import cycle between `climatology.py` and `calibration.py`.
+
+*Where recorded:* `build/handovers/P4-C05.md`.
