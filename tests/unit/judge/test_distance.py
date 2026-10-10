@@ -114,3 +114,32 @@ def test_a_tie_stays_exact_in_the_scaled_range_too():
     assert rms_of_sizes(np.array([[5.0 * big, 13.0 * big, 35.0 * big, 5.0 * big]])).tolist() == [pytest.approx(19.0 * big, rel=0, abs=0)]
     small = 2.0**-515
     assert rms_of_sizes(np.array([[5.0 * small, 13.0 * small, 35.0 * small, 5.0 * small]])).tolist() == [pytest.approx(19.0 * small, rel=0, abs=0)]
+
+
+def test_equal_huge_gaps_near_the_top_of_the_plain_range_are_not_falsely_refused():
+    for value, d in ((1e154, 2), (9.9e153, 4), (1.3e154, 4)):  # a plain sum of the squares would overflow
+        assert rms_of_sizes(np.full((1, d), value)).tolist() == [pytest.approx(value, rel=1e-12, abs=0)]
+
+
+def test_the_smallest_and_largest_representable_gaps_are_exact():
+    tiny, big = 5e-324, 1.7976931348623157e308
+    assert rms_of_sizes(np.array([[tiny]])).tolist() == [tiny]
+    assert rms_of_sizes(np.array([[tiny, tiny]])).tolist() == [tiny]
+    assert rms_of_sizes(np.array([[1e-323, tiny]])).tolist() == [pytest.approx(math.sqrt((1e-323**2 + tiny**2) / 2), rel=0.5)]
+    for d in (1, 2, 4):
+        assert rms_of_sizes(np.full((1, d), big)).tolist() == [big]
+
+
+def test_the_distance_is_computed_row_by_row_for_arrays_with_leading_axes():
+    gaps = np.full((2, 3, 2), 1e200)
+    gaps[1, 2] = [3e200, 4e200]
+    got = rms_of_sizes(gaps)
+    assert got.shape == (2, 3)
+    assert got[1, 2] == pytest.approx(math.sqrt(12.5) * 1e200, rel=1e-14, abs=0)
+    assert got[0, 0] == pytest.approx(1e200, rel=1e-14, abs=0) and got[1, 1] == pytest.approx(1e200, rel=1e-14, abs=0)
+
+
+def test_rms_of_sizes_itself_refuses_infinity_and_nan():
+    for bad in (np.inf, np.nan):
+        with pytest.raises(JudgeInputError, match="overflow"):
+            rms_of_sizes(np.array([[bad, 1.0]]))

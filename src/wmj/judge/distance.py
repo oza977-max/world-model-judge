@@ -5,8 +5,8 @@ quantities: square each quantity's gap, average them, take the square root (the 
 adding a quantity does not by itself make the distance bigger). The arrays already arrive divided by
 each quantity's own scale, so every quantity counts equally. The same yardstick measures the
 error-versus-horizon curve, the tolerances of the tasks and the plotted distances of the main chart.
-Rows with gaps too tiny or too huge to square (below 1e-150 or above 1e150) are scaled by the row's
-largest gap first, so gaps of 1e-170 or 1e200 are neither squared to zero nor overflowed; a result that still cannot be represented is refused.
+Rows with gaps too tiny or too huge to square (below 1e-150 or above 1e150) are first divided by a
+power of two near the row's largest gap (an exact division), so gaps of 1e-170 or 1e200 are neither squared to zero nor overflowed; a result that still cannot be represented is refused.
 """
 
 from __future__ import annotations
