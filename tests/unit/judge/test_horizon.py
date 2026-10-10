@@ -265,9 +265,10 @@ def test_a_huge_but_representable_median_is_returned_for_even_counts_just_as_for
 
     with warnings.catch_warnings():
         warnings.simplefilter("error")  # the average of the two middle values overflows if added first
-        even = compute_error_vs_horizon(_one_region([1.7e308, 1.7e308, 1.7e308, 1.7e308], bands=FOUR))
+        even = compute_error_vs_horizon(_one_region([1.0e308, 1.2e308, 1.6e308, 1.7e308], bands=FOUR))
         odd = compute_error_vs_horizon(_one_region([1.7e308, 1.7e308, 1.7e308], bands=THREE))
-    assert even["per_region"][0]["median_error"] == [0.0, 1.7e308, 1.7e308] == odd["per_region"][0]["median_error"]
+    assert even["per_region"][0]["median_error"] == [0.0, pytest.approx(1.4e308), pytest.approx(1.4e308)]  # (1.2e308 + 1.6e308) / 2
+    assert odd["per_region"][0]["median_error"] == [0.0, 1.7e308, 1.7e308]
 
 
 def test_a_world_time_too_large_to_represent_is_refused_not_passed_on_as_infinity():
