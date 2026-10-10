@@ -319,3 +319,13 @@ def test_an_overflowing_gap_is_refused_as_a_judge_error_even_when_warnings_are_e
         warnings.simplefilter("error")
         with pytest.raises(JudgeInputError, match="overflow"):
             compute_calibration(JudgeInput(**kwargs))
+
+
+def test_a_single_overflowing_half_width_among_finite_ones_is_still_refused():
+    kwargs = judge_input_kwargs()
+    n = len(kwargs["region_labels"])
+    spread = np.ones((n, H, D))
+    spread[0, :, 0] = 1.7e308  # one trial, one quantity: its half-width is infinite and must not read as 'covered'
+    kwargs.update(predictions=Forecasts(np.zeros((n, H, D)), spread), outcomes=np.full((n, H, D), 1e300))
+    with pytest.raises(JudgeInputError, match="overflow"):
+        compute_calibration(JudgeInput(**kwargs))
