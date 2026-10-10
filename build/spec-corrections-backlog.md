@@ -1227,3 +1227,15 @@ choices had to be made. They are written here for the next design review.
 7. **Module layout:** the spec lists `distance.py` (now exists) and `horizon.py` (now exists); `regions.py` was added for the helpers (`region_rows`, `region_curve`, `require_finite`) shared by every block, which also avoids an import cycle between `climatology.py` and `calibration.py`.
 
 *Where recorded:* `build/handovers/P4-C05.md`.
+
+### A35 — P4-C05 split in two: the judge half is done, the harness half is its own chunk (2026-10-10)
+
+**In plain words:** the implementation guide gave P4-C05 both the judge's arithmetic for the
+climatology and the harness code that *produces* the reference table and the per-step bin
+indices. The arithmetic is built and reviewed (P4-C05). The producer — a long reference run, the
+sixteen equal-population bins, and the true-invariant bin of every trial at every step — is a
+separate, larger piece of harness work with its own measurement owed to the owner (D15), so it is
+built next as **P4-C05b** rather than squeezed into the judge chunk. Nothing is dropped: the
+list is in `REMEMBER.md` §3.
+
+Note for the next design review: `JudgeInput` carries only bin *indices* (and each bin's range, which the judge never reads), so "the invariant is re-measured per step, not frozen" (TC-JU6-02) cannot be checked by the judge — it is a harness property and its test belongs with the producer.

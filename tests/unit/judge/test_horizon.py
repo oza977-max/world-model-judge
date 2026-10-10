@@ -213,3 +213,78 @@ def test_a_whole_nine_group_verdict_assembles_from_the_computed_blocks_and_trust
         switch = next(c["switch_step"] for c in record["climatology"]["per_task"]
                       if (c["task"], c["region"]) == (entry["task"], entry["region"]))
         assert switch is None or entry["steps"] <= switch
+
+
+# --- review pass 1 --------------------------------------------------------------------------------------
+
+
+def _one_region(gaps_per_trial, *, bands, task=None, curve=None, steps=2):
+    """One region, `len(gaps_per_trial)` trials, one quantity; trial i is `gaps_per_trial[i]` away at every step."""
+    from wmj.judge.types import (
+        Bands,
+        ClimatologyBin,
+        RegionClimatology,
+        RegionLabel,
+        Thresholds,
+    )
+
+    n = len(gaps_per_trial)
+    outcomes = np.repeat(np.array(gaps_per_trial, dtype=float)[:, None, None], steps, axis=1)
+    bins = (ClimatologyBin(-np.inf, np.inf, np.zeros(1), np.ones(1), 5),)
+    return JudgeInput(
+        world="w", dt=0.1, natural_cycle_length=None,
+        predictions=Forecasts(np.zeros((n, steps, 1)), np.ones((n, steps, 1))), outcomes=outcomes,
+        persistence=Forecasts(np.zeros((n, steps, 1)), np.ones((n, steps, 1))),
+        linear=Forecasts(np.zeros((n, steps, 1)), np.ones((n, steps, 1))),
+        region_labels=tuple(RegionLabel("r", None) for _ in range(n)),
+        divergence_curves=(RegionCurve("r", np.zeros(steps + 1) if curve is None else curve),),
+        climatology=(RegionClimatology("r", bins),), invariant_bins=np.zeros((n, steps), dtype=np.int64),
+        tasks=(task or TaskSpec("t", "control", 1.0, steps),),
+        thresholds=Thresholds(Bands(**bands), np.array([1.0]), 1.0),
+    )
+
+
+THREE = {"n": 3, "p": 0.1, "green": (1, 1), "amber_outer": (0, 2)}
+FOUR = {"n": 4, "p": 0.1, "green": (1, 3), "amber_outer": (0, 4)}
+
+
+def test_the_typical_error_is_the_true_median_for_odd_and_even_trial_counts_whatever_the_order():
+    for gaps, expected in (
+        ([1.0, 2.0, 4.0, 9.0], 3.0),  # even: the average of the two middle values (2 and 4), not either of them
+        ([9.0, 4.0, 2.0, 1.0], 3.0),
+        ([9.0, 1.0, 4.0], 4.0),  # odd, and trial 0 is not the middle
+        ([4.0, 9.0, 1.0], 4.0),
+        ([1.0, 9.0, 4.0], 4.0),
+    ):
+        inp = _one_region(gaps, bands=FOUR if len(gaps) == 4 else THREE)
+        assert compute_error_vs_horizon(inp)["per_region"][0]["median_error"] == [0.0, pytest.approx(expected), pytest.approx(expected)]
+
+
+def test_a_median_too_large_to_represent_is_refused_not_reported_as_infinity():
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        inp = _one_region([1.7e308, 1.7e308, 1.7e308, 1.7e308], bands=FOUR)
+        with pytest.raises(JudgeInputError, match="overflow"):
+            compute_error_vs_horizon(inp)
+
+
+def test_a_switch_step_beyond_the_tasks_horizon_does_not_exist_for_that_task_and_trust_stops_at_the_horizon():
+    # the world first drifts past the tolerance at step 4, but this task only goes to step 3
+    late = np.array([0.0, 0.0, 0.0, 0.0, 5.0, 5.0])
+    task = TaskSpec("short", "control", 1.0, 3)
+    inp = _one_region([0.0, 0.0, 0.0], bands=THREE, task=task, curve=late, steps=5)
+    t = compute_trust_horizons(inp)["per_task"][0]
+    assert t["steps"] == 3  # the task's horizon; not 5, and not "capped at the switch step 4"
+    assert compute_climatology(inp)["per_task"][0]["switch_step"] is None
+
+
+def test_a_natural_cycle_fraction_too_large_to_represent_is_refused():
+    kwargs = judge_input_kwargs()
+    kwargs["natural_cycle_length"] = 1e-300
+    kwargs["dt"] = 1e300
+    n = len(kwargs["region_labels"])
+    kwargs.update(predictions=Forecasts(np.zeros((n, H, D)), np.ones((n, H, D))), outcomes=np.zeros((n, H, D)))
+    with pytest.raises(JudgeInputError, match="overflow"):
+        compute_trust_horizons(JudgeInput(**kwargs))

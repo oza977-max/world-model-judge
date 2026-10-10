@@ -105,8 +105,7 @@ Ordered by when they bite. *(D1–D6, D12 and D14 were settled at Round 10 on
 **Phase 4**
 - **TC-MU6-05(b)** — now owned by P4-C02 (Round 10 closed the wiring gap).
 - Judge-side `wmj/judge/distance.py` (ADR-J5) — chunk not named; place it in P4.
-- **P4-C05 forward note:** reconcile the climatology reference trajectory's population with the drift benchmark's, or narrow the drift bound's rationale (now in the guide's P4-C05 text). **Also measure D15** (kicked trials vs the unkicked climatology).
-- P4-C05 grows the climatology producer in `harness.benchmarks`; the P2-C05 stand-in block's producer swaps to the real `error_vs_horizon`.
+- **P4-C05b — the harness half of P4-C05 (split out 2026-10-10; the judge half is P4-C05, done).** Still to build, as its own chunk next, before the Phase 4 wiring audit: (1) the climatology producer in `harness.benchmarks` (one 200,000-step reference trajectory per world, 16 equal-population bins on the conserved quantity, outermost bins open to ±∞, ≥50 samples per bin asserted, the table handed to the judge as `RegionClimatology`); (2) the per-trial/per-step `invariant_bins` built from the **true trajectory at each step** (TC-JU6-02 — the judge only receives bin indices, so a test that the harness re-measures per step rather than freezing is owed here and again at P6-C01); (3) **measure D15** (kicked trials against the unkicked climatology) and disclose the figure; (4) reconcile the climatology reference population with the drift benchmark's, or narrow the drift bound's rationale; (5) swap the `harness/preview.py` stand-in `error_vs_horizon` for the real one. Recorded in backlog A35.
 - P4-C06: runtime purity harness owns the lint's disclosed residual (`ctypes`, pre-capture).
 
 **Phase 5** — P5-C03: full Chart-2 caption and switch lines. P5-C04: TC-RP7-02 SVG identity, TC-JU12-04, model card, `writer.py` sole writer to `out/`.

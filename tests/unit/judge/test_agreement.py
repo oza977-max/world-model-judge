@@ -178,3 +178,42 @@ def test_it_takes_only_a_real_judge_input():
     for bad in (None, {}, "x"):
         with pytest.raises(JudgeInputError, match="JudgeInput"):
             compute_climatology(bad)
+
+
+# --- review pass 1 --------------------------------------------------------------------------------------
+
+BINS_PER_TRIAL = [[0, 1, 2, 3, 1], [1, 2, 3, 0, 2], [2, 3, 0, 1, 3], [3, 0, 1, 2, 0], [0, 3, 2, 1, 2], [1, 1, 3, 2, 3]]
+
+
+def test_every_trial_and_step_is_compared_with_its_own_measured_bin_for_both_tasks():
+    zero = [[0.0] * H for _ in range(6)]
+    inp = _input(zero, BINS_PER_TRIAL)
+    block = compute_climatology(inp)
+    for task, region in (("lv-control", "training"), ("lv-planning", "training"), ("lv-planning", "out-of-range")):
+        assert _entry(block, task, region)["agreement_mean_abs_z"] == pytest.approx(0.0, abs=1e-9), (task, region)
+    kwargs = {f: getattr(inp, f) for f in ("world", "dt", "natural_cycle_length", "predictions", "outcomes", "persistence",
+                                           "linear", "region_labels", "divergence_curves", "climatology", "tasks", "thresholds")}
+
+    def score(bins):
+        e = _entry(compute_climatology(JudgeInput(invariant_bins=np.array(bins, dtype=np.int64), **kwargs)), "lv-planning", "training")
+        return e["agreement_mean_abs_z"]
+
+    frozen_at_the_switch_step = [[row[3]] * H for row in BINS_PER_TRIAL]  # planning switches at step 4 (index 3)
+    assert score(frozen_at_the_switch_step) > 1.0
+    assert score(BINS_PER_TRIAL[::-1]) > 1.0  # trials swapped end for end
+
+
+def test_a_switch_step_beyond_the_tasks_horizon_is_no_switch_step_for_that_task():
+    late = (RegionCurve("training", np.array([0.0, 0.0, 0.0, 0.0, 5.0, 5.0])), RegionCurve("out-of-range", np.zeros(H + 1)))
+    from wmj.judge.types import TaskSpec
+
+    z, b = _flat(0.0)
+    e = _entry(compute_climatology(_input(z, b, curves=late, tasks=(TaskSpec("short", "control", 1.0, 3),))), "short", "training")
+    assert (e["switch_step"], e["agreement_mean_abs_z"], e["agrees"]) == (None, None, None)
+
+
+def test_a_sum_of_huge_standardised_gaps_is_averaged_without_overflow():
+    z = [[1e307] * H for _ in range(6)]
+    _, b = _flat(0, 0)
+    e = _entry(compute_climatology(_input(z, b)), "lv-control", "training")
+    assert e["agreement_mean_abs_z"] == pytest.approx(1e307, rel=1e-9)

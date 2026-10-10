@@ -104,7 +104,7 @@ Build state (2026-10-07): Phases 1–3 done. Phase 3 (the models and the
 harness around them): P3-C01 to P3-C10, its wiring audit (passed) and its independent
 code review (code-review-002: 0 Critical, 6 Important, all fixed). Phase 4 (the
 judge) in progress: P4-C01 (the input and verdict doors, five review passes), P4-C02 (skill),
-P4-C03 (calibration, sharpness) and P4-C04 (exceptions) done; P4-C05 (trust horizons) next. Round 10 design review closed 2026-09-28. Owner decisions D17/D18
+P4-C03 (calibration, sharpness) and P4-C04 (exceptions) done; P4-C05 (error curve, climatology agreement, trust horizons — the judge half) built and in review, its harness half split out as P4-C05b. Round 10 design review closed 2026-09-28. Owner decisions D17/D18
 were applied on 2026-10-04 (`subsample_pairs` now 100,000). The freeze
 (`prereg/FREEZE`) has not been made; D19 must be settled first. NF-1 is narrowed:
 byte-identity holds on the same CPU family and library build (backlog A29) — see

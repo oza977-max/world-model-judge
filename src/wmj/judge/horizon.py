@@ -18,7 +18,7 @@ import numpy as np
 from wmj.judge.climatology import switch_step
 from wmj.judge.distance import rms_distance
 from wmj.judge.errors import JudgeInputError
-from wmj.judge.regions import region_curve, region_rows
+from wmj.judge.regions import region_curve, region_rows, require_finite
 from wmj.judge.types import JudgeInput
 
 
@@ -27,7 +27,8 @@ def _median_error_curves(inp: JudgeInput) -> dict[str, np.ndarray]:
     curves = {}
     for region, rows in region_rows(inp).items():
         distance = rms_distance(inp.predictions.mean[rows], inp.outcomes[rows])  # [trials, H]
-        curves[region] = np.median(distance, axis=0)
+        with np.errstate(over="ignore", invalid="ignore"):
+            curves[region] = require_finite(np.median(distance, axis=0), "the median error")
     return curves
 
 
@@ -64,6 +65,8 @@ def compute_trust_horizons(inp: JudgeInput) -> dict:
             steps = int(np.argmin(within)) if not within.all() else cap  # the first failing step s sits at index s - 1
             world_time = float(steps * inp.dt)
             cycle = inp.natural_cycle_length
+            with np.errstate(over="ignore", invalid="ignore"):
+                fraction = None if cycle is None else require_finite(np.float64(world_time) / cycle, "the trust horizon in natural cycles")
             entries.append(
                 {
                     "task": task.name,
@@ -71,7 +74,7 @@ def compute_trust_horizons(inp: JudgeInput) -> dict:
                     "tolerance": float(task.tolerance),
                     "steps": steps,
                     "world_time": world_time,
-                    "natural_units": None if cycle is None else f"{world_time / cycle:.2f} cycles",
+                    "natural_units": None if fraction is None else f"{float(fraction):.2f} cycles",
                 }
             )
     return {"per_task": entries}

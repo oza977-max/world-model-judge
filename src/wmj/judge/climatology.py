@@ -64,7 +64,9 @@ def compute_climatology(inp: JudgeInput) -> dict:
                 with np.errstate(over="ignore", invalid="ignore"):
                     gap = np.abs(inp.predictions.mean[rows, window, :] - bin_mean[chosen])
                     z = require_finite(gap / bin_sd[chosen], "a standardised gap from the climatology")
-                    score = float(require_finite(np.mean(z), "the mean standardised gap"))
+                    largest = float(np.max(z))
+                    score = 0.0 if largest == 0.0 else largest * float(np.mean(z / largest))  # scaled: a sum of huge gaps must not overflow
+                    require_finite(np.float64(score), "the mean standardised gap")
                 entry["agreement_mean_abs_z"] = score
                 entry["agrees"] = bool(score <= inp.thresholds.agreement_threshold)
             entries.append(entry)
