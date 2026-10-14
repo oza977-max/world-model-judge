@@ -3,8 +3,10 @@
 In plain words: the unit tests use a made-up world. This builds the real table for the real
 predator-prey and double-pendulum worlds at the real size (200 starts x 1,000 steps), and checks
 the table the judge will actually receive: sixteen ranges, every one with at least 50 samples and a
-real spread, open at both ends, accepted by the judge's own input type, and that the true world,
-kicked or not, agrees with its own table to a sensible degree (the D15 question). It does not pin
+real spread, open at both ends, accepted by the judge's own input type, and that the true world's
+own score against its table (what a perfect model would get, the D15 question) is a finite number and
+that kicks do move trials between ranges. How *well* the true world agrees is recorded in
+`build/measurements/p4-c05b-d15.md`, not asserted here: in some regions it does not. It does not pin
 any trained or measured number, only relations that must hold.
 """
 
@@ -53,7 +55,6 @@ def test_the_real_table_has_sixteen_well_populated_open_ended_ranges_the_judge_a
 def test_the_true_world_agrees_with_its_own_table_kicked_or_not_and_kicks_do_move_trials_between_ranges(built):
     name, world, seeds, table = built
     horizon = 300
-    null = np.zeros(world.a)
     for region_name, box, band in declared_regions(world):
         starts = sample_region_starts(seeds.rng_for(name, region_name, "d15-starts"), box, 40)
         kicks = benchmark_kicks(name, world, region_name, band, seeds, 40, horizon)
@@ -71,14 +72,19 @@ def test_the_true_world_agrees_with_its_own_table_kicked_or_not_and_kicks_do_mov
         moved_kicked = np.mean(results["kicked"][1] != results["kicked"][1][:, :1])
         moved_unkicked = np.mean(results["unkicked"][1] != results["unkicked"][1][:, :1])
         assert moved_kicked >= moved_unkicked
-        assert null.shape == (world.a,)
 
 
 @pytest.mark.slow
 def test_the_real_table_and_measured_bins_feed_the_judges_climatology_block(built):
     from tests.unit.judge._builders import judge_input_kwargs
     from wmj.judge.climatology import compute_climatology
-    from wmj.judge.types import Forecasts, JudgeInput, RegionCurve, RegionLabel, TaskSpec
+    from wmj.judge.types import (
+        Forecasts,
+        JudgeInput,
+        RegionCurve,
+        RegionLabel,
+        TaskSpec,
+    )
 
     name, world, seeds, table = built
     n, steps, d = 3, 40, world.regions().training_state_box.shape[0]

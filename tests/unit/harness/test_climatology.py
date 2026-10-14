@@ -20,6 +20,7 @@ from wmj.harness.climatology import (
     build_climatology_table,
     judge_tables,
     measure_invariant_bins,
+    serialisable_table,
     truth_mean_abs_z,
 )
 from wmj.models.base import SeedSource
@@ -223,3 +224,132 @@ def test_a_bin_with_exactly_the_required_number_of_samples_is_accepted_and_one_f
     assert _table(min_samples=smallest)["n_bins"] == 16
     with pytest.raises(ClimatologyError, match="samples"):
         _table(min_samples=smallest + 1)
+
+
+# --- review pass 1 --------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("flat_y", [0.1, 0.3, 1.0 / 3.0, 123456.789])
+def test_a_flat_quantity_is_refused_even_when_rounding_leaves_a_speck_of_spread(flat_y):
+    class Flat(ToyWorld):
+        def regions(self):
+            return RegionSpec(np.array([[0.0, 1.0], [flat_y, flat_y]]), np.array([[-1.0, 1.0]]), ())
+
+    with pytest.raises(ClimatologyError, match="spread"):
+        _table(Flat())
+
+
+def test_bad_parameters_are_refused_with_the_projects_own_error():
+    for kw in ({"steps_per_start": 0}, {"n_starts": 0}, {"n_bins": 1}, {"n_bins": 4.0}, {"min_samples": 0}, {"n_starts": True}):
+        with pytest.raises(ClimatologyError, match="whole number"):
+            _table(**kw)
+
+
+def test_a_different_number_of_bins_is_honoured():
+    t = _table(n_bins=4, min_samples=5)
+    assert t["n_bins"] == 4 and len(t["bins"]) == 4 and sum(b["n_samples"] for b in t["bins"]) == 800
+
+
+def test_the_table_cannot_be_written_by_the_projects_serializer_until_its_open_ends_are_encoded():
+    from wmj.harness.serialize import canonical_serialize
+
+    t = _table()
+    with pytest.raises(Exception, match="inf"):
+        canonical_serialize(t)
+    safe = serialisable_table(t)
+    assert safe["bins"][0]["invariant_range"][0] is None and safe["bins"][-1]["invariant_range"][1] is None
+    assert safe["bins"][3]["invariant_range"] == t["bins"][3]["invariant_range"]
+    canonical_serialize(safe)  # accepted
+    a, b = judge_tables(t, ("r",))[0], judge_tables(safe, ("r",))[0]
+    assert [(x.invariant_lo, x.invariant_hi, x.n_samples) for x in a.bins] == [(x.invariant_lo, x.invariant_hi, x.n_samples) for x in b.bins]
+    assert t["bins"][0]["invariant_range"][0] == -np.inf  # the original table is untouched
+
+
+def test_each_trial_is_binned_from_its_own_states_and_bad_inputs_are_refused():
+    t = _table()
+    low, high = t["bins"][0]["invariant_range"][1] - 1.0, t["bins"][-1]["invariant_range"][0] + 1.0
+    states = np.zeros((3, 2, 2))
+    states[0, :, 0] = [low, high]
+    states[1, :, 0] = [high, high]
+    states[2, :, 0] = [low, low]
+    assert measure_invariant_bins(ToyWorld(), states, t).tolist() == [[0, 15], [15, 15], [0, 0]]
+    bad = states.copy()
+    bad[1, 0, 0] = np.nan
+    with pytest.raises(ClimatologyError, match="non-finite"):
+        measure_invariant_bins(ToyWorld(), bad, t)
+    with pytest.raises(ClimatologyError, match="n_trials"):
+        measure_invariant_bins(ToyWorld(), states[0], t)
+
+
+def test_the_non_finite_conserved_quantity_of_a_reference_run_is_refused():
+    class Broken(ToyWorld):
+        def conserved(self, state):
+            return float("nan")
+
+    with pytest.raises(ClimatologyError, match="non-finite"):
+        _table(Broken())
+
+
+def test_truth_agreement_averages_signed_offsets_over_several_trials_bins_and_quantities():
+    t = _table()
+    b = t["bins"]
+    states = np.zeros((2, 2, 2))
+    bins = np.array([[1, 7], [12, 3]])
+    offsets = np.array([[[1.0, -2.0], [-3.0, 0.5]], [[0.0, 4.0], [-1.0, 1.5]]])  # in units of the bin's own sd
+    for i in range(2):
+        for j in range(2):
+            states[i, j] = np.array(b[bins[i, j]]["mean"]) + offsets[i, j] * np.array(b[bins[i, j]]["sd"])
+    assert truth_mean_abs_z(t, states, bins) == pytest.approx(np.abs(offsets).mean(), rel=1e-12)
+    assert truth_mean_abs_z(t, states, bins) != pytest.approx(np.median(np.abs(offsets)), rel=1e-3)
+
+
+def test_truth_agreement_can_be_scored_over_the_judges_window_from_a_given_step():
+    t = _table()
+    b = t["bins"][5]
+    states = np.zeros((1, 4, 2))
+    bins = np.full((1, 4), 5, dtype=np.int64)
+    for step, z in enumerate([10.0, 10.0, 1.0, 3.0]):  # steps 1..4
+        states[0, step] = np.array(b["mean"]) + z * np.array(b["sd"])
+    assert truth_mean_abs_z(t, states, bins) == pytest.approx(6.0, rel=1e-12)
+    assert truth_mean_abs_z(t, states, bins, first_step=3) == pytest.approx(2.0, rel=1e-12)
+    assert truth_mean_abs_z(t, states, bins, first_step=4) == pytest.approx(3.0, rel=1e-12)
+    for bad in (0, 5):
+        with pytest.raises(ClimatologyError, match="first_step"):
+            truth_mean_abs_z(t, states, bins, first_step=bad)
+
+
+def test_truth_agreement_refuses_a_non_finite_state_or_a_bin_index_outside_the_table():
+    t = _table()
+    states = np.zeros((1, 2, 2))
+    with pytest.raises(ClimatologyError, match="finite"):
+        truth_mean_abs_z(t, np.where(np.ones_like(states) > 0, np.nan, states), np.zeros((1, 2), dtype=np.int64))
+    for bad in (-1, 16):
+        with pytest.raises(ClimatologyError, match="outside"):
+            truth_mean_abs_z(t, states, np.full((1, 2), bad, dtype=np.int64))
+
+
+def test_a_table_from_a_non_training_region_uses_that_regions_own_seed_stream():
+    class TwoRegions(ToyWorld):
+        def regions(self):
+            from wmj.worlds.base import OutRegion
+
+            far = OutRegion("far", "state", np.array([[5.0, 6.0], [30.0, 40.0]]), np.array([[-1.0, 1.0]]))
+            return RegionSpec(self._box, np.array([[-1.0, 1.0]]), (far,))
+
+    t = _table(TwoRegions(), region_name="far")
+    starts = _seeds().rng_for("toy", "far", "climatology-starts").uniform([5.0, 30.0], [6.0, 40.0], size=(160, 2))
+    samples = np.repeat(starts, 5, axis=0)
+    lo, hi = t["bins"][4]["invariant_range"]
+    inside = samples[(samples[:, 0] >= lo) & (samples[:, 0] < hi)]
+    assert t["bins"][4]["mean"] == pytest.approx(inside.mean(axis=0).tolist(), rel=1e-12)
+
+
+def test_the_spec_sizes_are_the_defaults_and_the_edges_are_linearly_interpolated_quantiles():
+    from wmj.harness import climatology as module
+
+    assert (module.N_BINS, module.MIN_SAMPLES_PER_BIN, module.DEFAULT_N_STARTS * module.DEFAULT_STEPS_PER_START) == (16, 50, 200_000)
+    # conserved values exactly 0..159: the k/16 quantile is at position 159 k / 16 = 9.9375 k (linear interpolation between neighbours)
+    world = ToyWorld(dynamics=lambda states, actions: np.column_stack([np.arange(len(states), dtype=float), states[:, 1]]))
+    t = _table(world, steps_per_start=1, min_samples=1)
+    edges = [b["invariant_range"][1] for b in t["bins"][:-1]]
+    assert edges == pytest.approx([9.9375 * k for k in range(1, 16)], rel=1e-12)
