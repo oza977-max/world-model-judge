@@ -72,6 +72,8 @@ def test_the_true_world_agrees_with_its_own_table_kicked_or_not_and_kicks_do_mov
         moved_kicked = np.mean(results["kicked"][1] != results["kicked"][1][:, :1])
         moved_unkicked = np.mean(results["unkicked"][1] != results["unkicked"][1][:, :1])
         assert moved_kicked >= moved_unkicked
+        if region_name in {"training", "out-large-action"}:
+            assert moved_kicked > 0.0 and moved_unkicked == 0.0  # kicks, and only kicks, move these trials between ranges
 
 
 @pytest.mark.slow
@@ -108,3 +110,43 @@ def test_the_real_table_and_measured_bins_feed_the_judges_climatology_block(buil
         type(kwargs["thresholds"].bands)(n=n, p=0.1, green=(1, 1), amber_outer=(0, 2)), np.ones(d), 1.0)
     entry = compute_climatology(JudgeInput(**kwargs))["per_task"][0]
     assert entry["switch_step"] is not None and np.isfinite(entry["agreement_mean_abs_z"])
+
+
+@pytest.mark.slow
+def test_the_truth_score_over_the_judges_window_equals_the_judges_own_agreement_score(built):
+    from tests.unit.judge._builders import judge_input_kwargs
+    from wmj.judge.climatology import compute_climatology
+    from wmj.judge.types import (
+        Bands,
+        Forecasts,
+        JudgeInput,
+        RegionCurve,
+        RegionLabel,
+        TaskSpec,
+        Thresholds,
+    )
+
+    name, world, seeds, table = built
+    n, steps, switch = 4, 60, 20
+    d = world.regions().training_state_box.shape[0]
+    starts = sample_region_starts(seeds.rng_for(name, "training", "gate-starts-2"), world.regions().training_state_box, n)
+    kicks = benchmark_kicks(name, world, "training", "in", seeds, n, steps)
+    history = np.empty((n, steps, d))
+    for step in range(steps):
+        starts = world.transition_batch(starts, kicks[:, step, :])
+        history[:, step, :] = starts
+    bins = measure_invariant_bins(world, history, table)
+    curve = np.zeros(steps + 1)
+    curve[switch:] = 1.0  # the world's drift first exceeds the tolerance at step `switch`
+    kwargs = judge_input_kwargs()
+    kwargs.update(
+        predictions=Forecasts(history, np.ones((n, steps, d))), outcomes=history,
+        persistence=Forecasts(history, np.ones((n, steps, d))), linear=Forecasts(history, np.ones((n, steps, d))),
+        region_labels=tuple(RegionLabel("training", None) for _ in range(n)),
+        divergence_curves=(RegionCurve("training", curve),), climatology=judge_tables(table, ("training",)),
+        invariant_bins=bins, tasks=(TaskSpec("t", "control", 0.5, steps),),
+        thresholds=Thresholds(Bands(n=n, p=0.1, green=(1, 1), amber_outer=(0, 2)), np.ones(d), 1.0),
+    )
+    entry = compute_climatology(JudgeInput(**kwargs))["per_task"][0]
+    assert entry["switch_step"] == switch
+    assert entry["agreement_mean_abs_z"] == pytest.approx(truth_mean_abs_z(table, history, bins, first_step=switch), rel=1e-12)

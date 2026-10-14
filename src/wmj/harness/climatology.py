@@ -128,7 +128,10 @@ def serialisable_table(table: dict[str, Any]) -> dict[str, Any]:
     """The same table with the two open ends written as `null` (the project's one serializer refuses infinity).
 
     `judge_tables` reads either form: `null` as the lower end means "no lower limit", as the upper end "no upper limit"."""
-    bins = [dict(entry, invariant_range=[None if not np.isfinite(v) else v for v in entry["invariant_range"]]) for entry in table["bins"]]
+    bins = [
+        dict(entry, invariant_range=[None if not np.isfinite(v) else v for v in entry["invariant_range"]], mean=list(entry["mean"]), sd=list(entry["sd"]))
+        for entry in table["bins"]
+    ]
     return dict(table, bins=bins)
 
 

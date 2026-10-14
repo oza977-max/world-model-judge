@@ -353,3 +353,39 @@ def test_the_spec_sizes_are_the_defaults_and_the_edges_are_linearly_interpolated
     t = _table(world, steps_per_start=1, min_samples=1)
     edges = [b["invariant_range"][1] for b in t["bins"][:-1]]
     assert edges == pytest.approx([9.9375 * k for k in range(1, 16)], rel=1e-12)
+
+
+# --- review pass 2 --------------------------------------------------------------------------------------
+
+
+def test_two_bins_are_allowed_and_the_serialisable_copy_shares_nothing_with_the_original():
+    t2 = _table(n_bins=2, min_samples=5)
+    assert t2["n_bins"] == 2 and len(t2["bins"]) == 2
+    t = _table()
+    safe = serialisable_table(t)
+    safe["bins"][3]["mean"][0] = 12345.0
+    safe["bins"][3]["sd"][0] = 12345.0
+    assert t["bins"][3]["mean"][0] != 12345.0 and t["bins"][3]["sd"][0] != 12345.0
+
+
+def test_a_world_that_changes_its_input_array_in_place_does_not_corrupt_the_reference_samples():
+    class InPlace(ToyWorld):
+        def transition_batch(self, states, actions):
+            states += 1.0  # moves the same array it was given and returns it
+            return states
+
+    t = _table(InPlace())
+    rng = _seeds().rng_for("toy", "training", "climatology-starts")
+    starts = rng.uniform([0.0, 10.0], [1.0, 20.0], size=(160, 2))
+    expected = np.concatenate([starts + k for k in range(1, 6)])  # step k adds k to every start
+    assert sum(b["n_samples"] for b in t["bins"]) == 800
+    grand_mean = sum(np.array(b["mean"]) * b["n_samples"] for b in t["bins"]) / 800
+    assert grand_mean == pytest.approx(expected.mean(axis=0).tolist(), rel=1e-12)
+
+
+def test_a_small_but_real_spread_just_above_the_floor_is_accepted():
+    class Thin(ToyWorld):
+        def regions(self):
+            return RegionSpec(np.array([[0.0, 1.0], [5.0, 5.0 + 1e-6]]), np.array([[-1.0, 1.0]]), ())
+
+    assert _table(Thin())["n_bins"] == 16  # spread about 1e-7 of the scale: tiny, but a million times the floor
