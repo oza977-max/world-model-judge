@@ -171,8 +171,11 @@ def test_tasks_are_reported_in_the_order_given_in_every_block_and_regions_in_sor
         for block, key in (("skill", "per_task_region"), ("calibration", "per_task"), ("sharpness", "per_task"), ("exceptions", "per_task"),
                            ("trials", "per_task"), ("climatology", "per_task"), ("trust_horizons", "per_task")):
             assert _task_sequence(record[block][key]) == expected, block
-        entries = record["skill"]["per_task_region"]
-        assert [e["region"] for e in entries[:2]] == ["out-of-range", "training"]
+        for block, key in (("skill", "per_task_region"), ("calibration", "per_task"), ("sharpness", "per_task"), ("exceptions", "per_task"),
+                           ("trials", "per_task"), ("climatology", "per_task"), ("trust_horizons", "per_task")):
+            regions = [e["region"] for e in record[block][key] if e["task"] == expected[0]]
+            assert regions == sorted(regions), block  # within a task, regions in sorted name order
+        assert [e["region"] for e in record["error_vs_horizon"]["per_region"]] == ["out-of-range", "training"]
 
 
 def test_tc_ju1_02_the_order_of_the_regions_curves_tables_and_tasks_makes_no_difference():

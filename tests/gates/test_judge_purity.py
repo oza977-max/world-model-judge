@@ -183,7 +183,7 @@ def test_the_tables_are_pinned_in_full_so_an_entry_cannot_quietly_disappear():
     assert set(guard.OS_FUNCTIONS) >= FULL_OS and set(guard.ENVIRON_METHODS) >= FULL_ENVIRON
     assert set(guard.TIME_FUNCTIONS) >= FULL_TIME and set(guard.SOCKET_FUNCTIONS) >= FULL_SOCKET
     assert set(guard.SUBPROCESS_FUNCTIONS) >= FULL_SUBPROCESS
-    assert {"random", "randint", "randrange", "choice", "shuffle", "sample", "uniform", "gauss", "seed", "getrandbits", "_urandom"} <= set(guard.RANDOM_MODULE_FUNCTIONS)
+    assert {"random", "randint", "randrange", "choice", "shuffle", "sample", "uniform", "gauss", "seed", "getrandbits", "randbytes", "triangular", "betavariate", "expovariate", "gammavariate", "_urandom"} <= set(guard.RANDOM_MODULE_FUNCTIONS)
 
 
 def test_the_installed_check_has_a_negative_control_nothing_is_rigged_outside_the_guard():
