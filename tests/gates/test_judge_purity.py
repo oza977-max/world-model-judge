@@ -38,6 +38,7 @@ from tests.gates import _purity_guard as guard
 from tests.gates._purity_guard import AmbientAccessError, installed, purity_guard
 from tests.gates.test_import_graph import run_judge_gate
 from tests.unit.judge._builders import judge_input_kwargs
+from tests.unit.judge._variants import all_variants
 from wmj.judge.errors import JudgeInputError
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -63,36 +64,25 @@ def _judge_everything(modules, inp):
 
 def test_importing_the_whole_judge_in_a_fresh_interpreter_under_the_guard_makes_no_ambient_call():
     """A module-level read (at import) would never be seen by a guard that starts after the import; so import under it, in a new process."""
+    names = sorted(p.stem for p in JUDGE_SRC.glob("*.py") if p.stem != "__init__")  # every module, found by listing the directory
+    assert len(names) >= 13
     script = (
         "import sys; sys.path[:0] = ['src', '.']\n"
-        "from tests.gates._purity_guard import purity_guard, AmbientAccessError\n"
+        "import importlib\n"
+        "from tests.gates._purity_guard import purity_guard\n"
         "import numpy\n"
         "with purity_guard() as hits:\n"
-        "    import wmj.judge.types, wmj.judge.errors, wmj.judge.limitations, wmj.judge.regions, wmj.judge.distance, wmj.judge._normal\n"
-        "    import wmj.judge.skill, wmj.judge.calibration, wmj.judge.sharpness, wmj.judge.exceptions, wmj.judge.climatology, wmj.judge.horizon, wmj.judge.verdict\n"
+        f"    for name in {names!r}:\n"
+        "        importlib.import_module('wmj.judge.' + name)\n"
         "assert not hits\n"
-        "print('imported-clean')\n"
+        f"print('imported-clean', len({names!r}))\n"
     )
-    result = subprocess.run([sys.executable, "-c", script], cwd=REPO_ROOT, capture_output=True, text=True, check=False)
-    assert result.returncode == 0 and "imported-clean" in result.stdout, result.stderr[-600:]
+    result = subprocess.run([sys.executable, "-B", "-c", script], cwd=REPO_ROOT, capture_output=True, text=True, check=False, timeout=120)
+    assert result.returncode == 0 and f"imported-clean {len(names)}" in result.stdout, result.stderr[-600:]
 
 
 def _modules(package: str = "wmj.judge"):
     return {name: importlib.import_module(f"{package}.{name}") for name in BLOCKS}
-
-
-def _kwargs_variants():
-    """Three inputs: the builder's; a perfect model (non-zero trust, agreement holds); a world that never drifts (no switch step)."""
-    ordinary = judge_input_kwargs()
-    perfect = judge_input_kwargs()
-    n, h, d = perfect["predictions"].mean.shape
-    bin_mean = perfect["climatology"][0].bins[0].mean
-    target = np.broadcast_to(bin_mean, (n, h, d)).copy()
-    perfect.update(predictions=type(perfect["predictions"])(target, np.ones((n, h, d))), outcomes=target.copy(),
-                   invariant_bins=np.zeros((n, h), dtype=np.int64))
-    quiet = judge_input_kwargs()
-    quiet["divergence_curves"] = tuple(type(c)(c.region_name, np.zeros(c.curve.size)) for c in quiet["divergence_curves"])
-    return [ordinary, perfect, quiet]
 
 
 def fires(call) -> bool:
@@ -108,22 +98,29 @@ def fires(call) -> bool:
 # ---- TC-JU12-01: the load-bearing tripwire ------------------------------------------------------------------
 
 
-def test_the_whole_judge_builds_its_input_refuses_a_bad_one_and_computes_every_block_inside_the_guard():
-    from wmj.judge.types import JudgeInput
+def test_the_whole_judge_builds_its_input_refuses_bad_ones_and_computes_every_block_inside_the_guard_for_every_input_shape():
+    from wmj.judge.types import Forecasts, JudgeInput
 
     modules = _modules()
-    variants = _kwargs_variants()  # the arrays are drawn outside (the builder uses a seeded generator); the input *checks* run inside
+    variants = all_variants()  # the arrays are drawn outside (the builders use seeded generators); the input *checks* run inside
     unguarded = [_judge_everything(modules, JudgeInput(**dict(kw))) for kw in variants]
     with purity_guard() as hits:
         guarded = [_judge_everything(modules, JudgeInput(**dict(kw))) for kw in variants]  # the input checks run rigged too
-        bad = dict(variants[0], world="")
-        with pytest.raises(JudgeInputError):
-            JudgeInput(**bad)  # a refusal path
+        def zero_spread():
+            return Forecasts(variants[0]["predictions"].mean, np.zeros_like(variants[0]["predictions"].spread))
+
+        for refusal in (lambda: JudgeInput(**dict(variants[0], world="")), zero_spread):
+            try:
+                refusal()
+            except JudgeInputError:
+                continue
+            raise AssertionError("a bad input was accepted")
     assert guarded == unguarded and not hits
-    ordinary, perfect, quiet = unguarded
-    assert all(e["steps"] == 0 for e in ordinary["trust_horizons"]["per_task"])
-    assert any(e["steps"] > 0 for e in perfect["trust_horizons"]["per_task"]) and any(e["agrees"] is True for e in perfect["climatology"]["per_task"])
-    assert all(e["switch_step"] is None for e in quiet["climatology"]["per_task"])
+    steps = [e["steps"] for record in unguarded for e in record["trust_horizons"]["per_task"]]
+    switches = [e["switch_step"] for record in unguarded for e in record["climatology"]["per_task"]]
+    assert 0 in steps and any(x > 0 for x in steps) and None in switches and any(x is not None for x in switches)
+    assert any(e["agrees"] is True for record in unguarded for e in record["climatology"]["per_task"])
+    assert any(e["natural_units"] is None for record in unguarded for e in record["trust_horizons"]["per_task"])
 
 
 def test_a_harmless_call_does_not_trip_the_guard_so_that_a_trip_means_something():
@@ -156,7 +153,7 @@ def test_every_name_in_every_table_is_rigged_while_the_guard_is_on_and_none_is_c
             assert installed(getattr(uuid, name))
         assert installed(socket.socket.__init__) and installed(subprocess.Popen.__init__)
         assert installed(open) and installed(io.open)
-        assert issubclass(datetime.datetime, datetime.datetime) and datetime.datetime is not datetime.datetime.__mro__[1]
+        assert datetime.datetime.__name__ == "GuardedDatetime" and datetime.date.__name__ == "GuardedDate"
 
 
 FULL_OS = {
@@ -247,6 +244,7 @@ def test_every_place_numpy_keeps_a_reference_to_a_random_class_or_to_datetime64_
         ("time.clock_gettime", lambda: time.clock_gettime(time.CLOCK_REALTIME)),
         ("time.perf_counter", lambda: time.perf_counter()),
         ("datetime.now", lambda: datetime.datetime.now()),
+        ("datetime.now(tz)", lambda: datetime.datetime.now(datetime.UTC)),
         ("datetime.utcnow", lambda: datetime.datetime.utcnow()),
         ("datetime.today", lambda: datetime.datetime.today()),
         ("date.today", lambda: datetime.date.today()),
@@ -313,6 +311,16 @@ def test_everything_is_put_back_exactly_after_a_normal_exit_an_error_an_interrup
     assert _same(before, _snapshot()) == []
     assert os.getcwd() and time.time() > 0 and np.random.default_rng(1).random() >= 0.0 and np.datetime64("now")
     assert datetime.datetime.now() and stdlib_random.random() >= 0.0
+
+
+def test_a_swallowed_call_made_in_the_outer_guard_after_an_inner_guard_has_left_is_still_recorded():
+    with pytest.raises(AmbientAccessError, match="swallowed"), purity_guard():
+        with purity_guard():
+            pass
+        try:
+            os.getcwd()
+        except BaseException:  # noqa: BLE001, S110  (this is the swallowing the guard must still notice)
+            pass
 
 
 def test_the_guard_does_not_leak_state_between_uses():
