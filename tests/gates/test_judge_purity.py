@@ -1,40 +1,52 @@
-# ruff: noqa: DTZ003, DTZ005, DTZ011, SIM115  (the tests deliberately call the clock and open files to prove the guard stops them)
+# ruff: noqa: DTZ002, DTZ003, DTZ005, DTZ011, SIM115  (the tests deliberately call the clock and open files to prove the guard stops them)
 """TC-JU12-01..04: the judge's runtime purity tripwire, its phantom-gate proofs, and the stated residual.
 
-In plain words: while the whole judge runs on a realistic input, every known route to the outside
-world (clock, files, environment variables, network, other programs, random numbers) is rigged to
-raise; the judge must finish without tripping one and give exactly the verdict it gives unrigged.
-Then the rigging itself is proved to work, in both directions: each rigged route really raises
-and is really put back afterwards, and a copy of the judge deliberately made impure — including by
-the sneaky routes (`__globals__['os']`, `numpy.datetime64('now')`) — is caught by the rigging, while
-the unmodified copy is not. Finally the specs are checked to say plainly what this cannot catch.
+In plain words: while the whole judge runs — building its input, refusing a bad one, and computing every
+block — every known route to the outside world (clock, files, environment variables, network, other programs,
+random numbers) is rigged to raise; the judge must finish without tripping one, even by an error it tries to
+swallow, and give exactly the verdict it gives unrigged. Then the rigging itself is proved to work: a table-
+driven check that every named route (and every place numpy keeps its own reference to a random-number class or
+to `datetime64`) is rigged, a before-and-after snapshot that everything is put back exactly, and copies of the
+judge deliberately made impure — one hidden from the static source scan, one swallowing the error, one inside
+the input checks — that the rigging catches while the unmodified copy passes. Finally the specs are checked to
+state, in the right paragraph, what this cannot catch. Nothing here executes a dangerous call for real: process
+replacement and forking are proved by identity or by an impossible target, so a broken guard fails loudly
+instead of replacing the test process.
 """
 
 from __future__ import annotations
 
+import ast
 import datetime
 import importlib
+import io
 import os
+import random as stdlib_random
+import re
 import shutil
 import socket
 import subprocess
 import sys
 import time
+import uuid
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from tests.gates._purity_guard import AmbientAccessError, purity_guard
-from tests.unit.judge._builders import make_input
+from tests.gates import _purity_guard as guard
+from tests.gates._purity_guard import AmbientAccessError, installed, purity_guard
+from tests.gates.test_import_graph import run_judge_gate
+from tests.unit.judge._builders import judge_input_kwargs
+from wmj.judge.errors import JudgeInputError
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 JUDGE_SRC = REPO_ROOT / "src" / "wmj" / "judge"
+BLOCKS = ("skill", "horizon", "calibration", "sharpness", "exceptions", "climatology", "verdict")
 
 
-def _judge_everything(modules):
+def _judge_everything(modules, inp):
     """The judge's whole public call graph on one input, returned as plain data."""
-    inp = modules["input"]
     skill = modules["skill"].compute_skill(inp)
     error = modules["horizon"].compute_error_vs_horizon(inp)
     calibration = modules["calibration"].compute_calibration(inp)
@@ -49,33 +61,116 @@ def _judge_everything(modules):
     return verdict.to_dict()
 
 
-def _real_modules(package: str = "wmj.judge"):
-    names = ("skill", "horizon", "calibration", "sharpness", "exceptions", "climatology", "verdict")
-    modules = {name: importlib.import_module(f"{package}.{name}") for name in names}
-    modules["input"] = make_input()
-    return modules
+def _modules(package: str = "wmj.judge"):
+    return {name: importlib.import_module(f"{package}.{name}") for name in BLOCKS}
+
+
+def _kwargs_variants():
+    """Three inputs: the builder's; a perfect model (non-zero trust, agreement holds); a world that never drifts (no switch step)."""
+    ordinary = judge_input_kwargs()
+    perfect = judge_input_kwargs()
+    n, h, d = perfect["predictions"].mean.shape
+    bin_mean = perfect["climatology"][0].bins[0].mean
+    target = np.broadcast_to(bin_mean, (n, h, d)).copy()
+    perfect.update(predictions=type(perfect["predictions"])(target, np.ones((n, h, d))), outcomes=target.copy(),
+                   invariant_bins=np.zeros((n, h), dtype=np.int64))
+    quiet = judge_input_kwargs()
+    quiet["divergence_curves"] = tuple(type(c)(c.region_name, np.zeros(c.curve.size)) for c in quiet["divergence_curves"])
+    return [ordinary, perfect, quiet]
 
 
 def fires(call) -> bool:
-    """True iff `call()` trips the guard. The guard is left before anything is asserted about it."""
-    with purity_guard():
+    """True iff `call()` makes a rigged call (even if the error is swallowed). The guard is left before anything is asserted."""
+    with purity_guard(expect_hits=True) as hits:
         try:
             call()
         except AmbientAccessError:
-            return True
-    return False
+            pass
+        return bool(hits)
 
 
-# ---- TC-JU12-01: the load-bearing tripwire ------------------------------------------------------------
+# ---- TC-JU12-01: the load-bearing tripwire ------------------------------------------------------------------
 
 
-def test_the_whole_judge_runs_inside_the_guard_without_tripping_it_and_gives_the_unguarded_verdict():
-    modules = _real_modules()
-    unguarded = _judge_everything(modules)
+def test_the_whole_judge_builds_its_input_refuses_a_bad_one_and_computes_every_block_inside_the_guard():
+    from wmj.judge.types import JudgeInput
+
+    modules = _modules()
+    variants = _kwargs_variants()  # the arrays are drawn outside (the builder uses a seeded generator); the input *checks* run inside
+    unguarded = [_judge_everything(modules, JudgeInput(**dict(kw))) for kw in variants]
+    with purity_guard() as hits:
+        guarded = [_judge_everything(modules, JudgeInput(**dict(kw))) for kw in variants]  # the input checks run rigged too
+        bad = dict(variants[0], world="")
+        with pytest.raises(JudgeInputError):
+            JudgeInput(**bad)  # a refusal path
+    assert guarded == unguarded and not hits
+    ordinary, perfect, quiet = unguarded
+    assert all(e["steps"] == 0 for e in ordinary["trust_horizons"]["per_task"])
+    assert any(e["steps"] > 0 for e in perfect["trust_horizons"]["per_task"]) and any(e["agrees"] is True for e in perfect["climatology"]["per_task"])
+    assert all(e["switch_step"] is None for e in quiet["climatology"]["per_task"])
+
+
+def test_a_harmless_call_does_not_trip_the_guard_so_that_a_trip_means_something():
+    assert fires(lambda: np.sqrt(np.arange(5.0)).sum() + sum(range(3))) is False
+    assert fires(lambda: os.getcwd()) is True
+
+
+# ---- the guard proves itself: table-driven, by identity, and with a full before/after snapshot --------------
+
+
+def test_every_name_in_every_table_is_rigged_while_the_guard_is_on_and_none_is_called_for_real():
     with purity_guard():
-        guarded = _judge_everything(modules)
-    assert guarded == unguarded
-    assert unguarded["skill"]["per_task_region"] and unguarded["trust_horizons"]["per_task"]
+        for name in guard.OS_FUNCTIONS:
+            if hasattr(os, name):
+                assert installed(getattr(os, name)), f"os.{name}"
+        for name in guard.ENVIRON_METHODS:
+            assert installed(type(os.environ).__dict__[name]), f"os.environ.{name}"
+        for name in guard.TIME_FUNCTIONS:
+            if hasattr(time, name):
+                assert installed(getattr(time, name)), f"time.{name}"
+        for name in guard.RANDOM_MODULE_FUNCTIONS:
+            if hasattr(stdlib_random, name):
+                assert installed(getattr(stdlib_random, name)), f"random.{name}"
+        for name in guard.SOCKET_FUNCTIONS:
+            if hasattr(socket, name):
+                assert installed(getattr(socket, name)), f"socket.{name}"
+        for name in guard.SUBPROCESS_FUNCTIONS:
+            assert installed(getattr(subprocess, name)), f"subprocess.{name}"
+        for name in ("uuid1", "getnode"):
+            assert installed(getattr(uuid, name))
+        assert installed(socket.socket.__init__) and installed(subprocess.Popen.__init__)
+        assert installed(open) and installed(io.open)
+        assert issubclass(datetime.datetime, datetime.datetime) and datetime.datetime is not datetime.datetime.__mro__[1]
+
+
+def test_the_tables_still_contain_every_route_the_spec_names_so_they_cannot_quietly_shrink():
+    assert {"system", "getcwd", "getenv", "urandom", "getpid", "listdir", "stat", "fork", "execve", "execv", "posix_spawn", "spawnv"} <= set(guard.OS_FUNCTIONS)
+    assert {"__getitem__", "__contains__", "__iter__", "__len__", "get", "keys", "values", "items"} <= set(guard.ENVIRON_METHODS)
+    assert {"time", "time_ns", "monotonic", "perf_counter", "sleep", "localtime", "gmtime"} <= set(guard.TIME_FUNCTIONS)
+    assert {"create_connection", "getaddrinfo", "gethostbyname"} <= set(guard.SOCKET_FUNCTIONS)
+    assert {"run", "call", "check_call", "check_output"} <= set(guard.SUBPROCESS_FUNCTIONS)
+    assert {"random", "randint", "shuffle", "seed", "_urandom"} <= set(guard.RANDOM_MODULE_FUNCTIONS)
+
+
+def test_every_place_numpy_keeps_a_reference_to_a_random_class_or_to_datetime64_is_rigged():
+    random_sites = {
+        (module.__name__, attribute)
+        for name in guard._random_names()
+        for module, attribute in guard.bindings_of(getattr(np.random, name), "numpy.random")
+    }
+    datetime64_sites = {(module.__name__, attribute) for module, attribute in guard.bindings_of(np.datetime64, "numpy")}
+    # the places the review found by hand, so the identity search cannot quietly stop finding them
+    assert {("numpy.random._pickle", "Generator"), ("numpy.random._pickle", "PCG64"), ("numpy.random._pcg64", "PCG64"),
+            ("numpy.random._generator", "Generator"), ("numpy.random.mtrand", "_MT19937"), ("numpy.random.bit_generator", "SeedSequence"),
+            ("numpy.random._philox", "Philox"), ("numpy.random._sfc64", "SFC64"), ("numpy.random._mt19937", "MT19937")} <= random_sites
+    assert {("numpy", "datetime64"), ("numpy.core.numerictypes", "datetime64"), ("numpy.core.numeric", "datetime64"),
+            ("numpy.core", "datetime64"), ("numpy._typing._array_like", "datetime64")} <= datetime64_sites
+    with purity_guard():
+        for module_name, attribute in random_sites:
+            assert installed(getattr(sys.modules[module_name], attribute)), (module_name, attribute)
+        for module_name, attribute in datetime64_sites:
+            assert getattr(sys.modules[module_name], attribute) is guard._GuardedDatetime64, (module_name, attribute)
+        assert installed(sys.modules["numpy.random.mtrand"]._rand)
 
 
 @pytest.mark.parametrize(
@@ -84,84 +179,99 @@ def test_the_whole_judge_runs_inside_the_guard_without_tripping_it_and_gives_the
         ("os.getcwd", lambda: os.getcwd()),
         ("os.getenv", lambda: os.getenv("HOME")),
         ("os.urandom", lambda: os.urandom(4)),
-        ("os.getpid", lambda: os.getpid()),
+        ("os.getrandom", lambda: os.getrandom(4)),
         ("os.listdir", lambda: os.listdir(".")),
         ("os.stat", lambda: os.stat(".")),
-        ("os.system", lambda: os.system("true")),
-        ("os.fork", lambda: os.fork()),
-        ("os.execv", lambda: os.execv("/bin/true", ["true"])),
-        ("os.posix_spawn", lambda: os.posix_spawn("/bin/true", ["true"], {})),
-        ("os.spawnv", lambda: os.spawnv(os.P_WAIT, "/bin/true", ["true"])),
+        ("os.open", lambda: os.open(__file__, os.O_RDONLY)),
+        ("os.execv (impossible target: a broken guard raises OSError, never replaces the process)", lambda: os.execv("/nonexistent/x", ["x"])),
+        ("os.posix_spawn (impossible target)", lambda: os.posix_spawn("/nonexistent/x", ["x"], {})),
+        ("os.spawnv (impossible target)", lambda: os.spawnv(os.P_WAIT, "/nonexistent/x", ["x"])),
         ("os.environ[x]", lambda: os.environ["HOME"]),
         ("x in os.environ", lambda: "HOME" in os.environ),
         ("dict(os.environ)", lambda: dict(os.environ)),
+        ("list(os.environ)", lambda: list(os.environ)),
         ("os.environ.get", lambda: os.environ.get("HOME")),
         ("len(os.environ)", lambda: len(os.environ)),
         ("open", lambda: open(__file__)),
-        ("io.open", lambda: __import__("io").open(__file__)),
+        ("io.open", lambda: open(__file__)),
         ("time.time", lambda: time.time()),
+        ("time.gmtime()", lambda: time.gmtime()),
+        ("time.clock_gettime", lambda: time.clock_gettime(time.CLOCK_REALTIME)),
         ("time.perf_counter", lambda: time.perf_counter()),
-        ("time.sleep", lambda: time.sleep(0)),
         ("datetime.now", lambda: datetime.datetime.now()),
         ("datetime.utcnow", lambda: datetime.datetime.utcnow()),
+        ("datetime.today", lambda: datetime.datetime.today()),
         ("date.today", lambda: datetime.date.today()),
+        ("stdlib random", lambda: stdlib_random.random()),
         ("socket.socket", lambda: socket.socket()),
-        ("socket.create_connection", lambda: socket.create_connection(("localhost", 9))),
-        ("subprocess.run", lambda: subprocess.run(["true"], check=False)),
-        ("subprocess.Popen", lambda: subprocess.Popen(["true"])),
+        ("socket.gethostbyaddr", lambda: socket.gethostbyaddr("127.0.0.1")),
+        ("socket.getnameinfo", lambda: socket.getnameinfo(("127.0.0.1", 80), 0)),
+        ("subprocess.run (impossible target)", lambda: subprocess.run(["/nonexistent/x"], check=False)),
+        ("subprocess.Popen (impossible target, explicit env)", lambda: subprocess.Popen(["/nonexistent/x"], env={})),
         ("np.random.normal", lambda: np.random.normal()),
-        ("np.random.rand", lambda: np.random.rand(2)),
-        ("np.random.seed", lambda: np.random.seed(1)),
         ("np.random.default_rng", lambda: np.random.default_rng()),
-        ("np.random.Generator", lambda: np.random.Generator(np.random.PCG64(1))),
-        ("PCG64 via the private module", lambda: __import__("numpy.random._pcg64", fromlist=["PCG64"]).PCG64()),
-        ("Generator via the private module", lambda: __import__("numpy.random._generator", fromlist=["Generator"]).Generator(None)),
-        ("SeedSequence via bit_generator", lambda: __import__("numpy.random.bit_generator", fromlist=["SeedSequence"]).SeedSequence()),
+        ("np.random.Generator(PCG64)", lambda: np.random.Generator(np.random.PCG64(1))),
+        ("legacy singleton mtrand._rand", lambda: sys.modules["numpy.random.mtrand"]._rand.random_sample()),
+        ("legacy MT19937 via mtrand", lambda: sys.modules["numpy.random.mtrand"]._MT19937()),
+        ("the pickle helper's entropy Generator", lambda: sys.modules["numpy.random._pickle"].__generator_ctor()),
+        ("PCG64 via the private module", lambda: sys.modules["numpy.random._pcg64"].PCG64()),
+        ("SeedSequence via bit_generator", lambda: sys.modules["numpy.random.bit_generator"].SeedSequence()),
         ("np.datetime64('now')", lambda: np.datetime64("now")),
+        ("np.datetime64(' NOW ')", lambda: np.datetime64(" NOW ")),
+        ("np.datetime64 through numpy.core.numerictypes", lambda: np.core.numerictypes.datetime64("now")),
     ],
 )
-def test_every_known_outside_world_route_trips_the_guard(label, call):
+def test_a_known_outside_world_route_trips_the_guard(label, call):
     assert fires(call), label
 
 
-def test_harmless_numpy_and_python_work_is_not_blocked_by_the_guard():
+def _snapshot():
+    """Every attribute of every object the guard touches, by identity — and numpy's modules, where it rebinds."""
+    objects = [os, type(os.environ), __import__("builtins"), io, time, socket, socket.socket, subprocess, subprocess.Popen,
+               datetime, stdlib_random, uuid, np, np.random]
+    objects += [m for name, m in list(sys.modules.items()) if m is not None and (name == "numpy" or name.startswith("numpy."))]
+    seen, snap = set(), []
+    for obj in objects:
+        if id(obj) not in seen:
+            seen.add(id(obj))
+            snap.append((obj, dict(vars(obj))))
+    return snap
+
+
+def _same(snap_a, snap_b) -> list[str]:
+    differences = []
+    for (obj, before), (_, after) in zip(snap_a, snap_b, strict=True):
+        for key in before.keys() | after.keys():
+            if before.get(key, _same) is not after.get(key, _same):
+                differences.append(f"{getattr(obj, '__name__', obj)}.{key}")
+    return differences
+
+
+def test_everything_is_put_back_exactly_after_a_normal_exit_an_error_an_interrupt_and_nested_use():
+    before = _snapshot()
     with purity_guard():
-        values = np.sqrt(np.arange(5.0)) + np.datetime64("2026-01-01").astype("datetime64[D]").astype(int) * 0
-        total = sum(v for v in values.tolist())
-        text = "".join(["a", "x", "b"])
-    assert total > 0 and text == "axb"
+        assert _same(before, _snapshot())  # the snapshot really sees the rigging
+    assert _same(before, _snapshot()) == []
+    for exception in (RuntimeError("boom"), KeyboardInterrupt(), AmbientAccessError("swallowed")):
+        with pytest.raises(type(exception)), purity_guard(expect_hits=True):
+            raise exception
+        assert _same(before, _snapshot()) == []
+    with purity_guard():
+        with purity_guard():
+            pass
+        assert installed(os.getcwd)  # the inner exit did not unrig the outer guard
+    assert _same(before, _snapshot()) == []
+    assert os.getcwd() and time.time() > 0 and np.random.default_rng(1).random() >= 0.0 and np.datetime64("now")
+    assert datetime.datetime.now() and stdlib_random.random() >= 0.0
 
 
-def test_every_rigged_route_is_put_back_exactly_afterwards_even_if_the_body_fails():
-    saved = {
-        "getcwd": os.getcwd, "time": time.time, "env": type(os.environ).__dict__["__getitem__"], "open": open,
-        "normal": np.random.normal, "rng": np.random.default_rng, "dt64": np.datetime64, "dt": datetime.datetime,
-        "popen_init": subprocess.Popen.__init__, "sock_init": socket.socket.__init__, "gen": np.random.Generator,
-    }
-
-    def snapshot():
-        return {
-            "getcwd": os.getcwd, "time": time.time, "env": type(os.environ).__dict__["__getitem__"], "open": open,
-            "normal": np.random.normal, "rng": np.random.default_rng, "dt64": np.datetime64, "dt": datetime.datetime,
-            "popen_init": subprocess.Popen.__init__, "sock_init": socket.socket.__init__, "gen": np.random.Generator,
-        }
-
-    assert snapshot() == saved
-    with pytest.raises(RuntimeError, match="boom"), purity_guard():
-        assert snapshot() != saved
-        raise RuntimeError("boom")
-    assert snapshot() == saved
-    assert os.getcwd() and time.time() > 0 and np.random.default_rng(1).random() >= 0.0  # really usable again
-    assert np.datetime64("now") and datetime.datetime.now()
-
-
-def test_the_guard_is_not_nested_state_that_leaks_between_uses():
+def test_the_guard_does_not_leak_state_between_uses():
     for _ in range(3):
         assert fires(lambda: os.getcwd())
         assert os.getcwd()
 
 
-# ---- TC-JU12-02 / -03: phantom-gate proofs on a scratch copy of the judge ---------------------------------
+# ---- TC-JU12-02 / -03: phantom-gate proofs on a scratch copy of the judge -----------------------------------
 
 
 @pytest.fixture()
@@ -181,92 +291,140 @@ def scratch_judge(tmp_path):
             del sys.modules[module]
 
 
-def _mutate(target: Path, filename: str, old: str, new: str) -> None:
+def _mutate(target: Path, filename: str, old: str, new: str) -> str:
+    """Apply the mutation to the scratch copy; returns the mutated source as it would read in the real package (for the static lint)."""
     path = target / filename
     text = path.read_text()
     assert old in text, f"the mutation anchor {old!r} is not in {filename}"
-    path.write_text(text.replace(old, new, 1))
+    mutated = text.replace(old, new, 1)
+    path.write_text(mutated)
+    return mutated.replace(target.name, "wmj.judge")
 
 
-def _scratch_input_and_run(name: str):
-    modules = _real_modules(name)
-    # the scratch package has its own types, so the input must be built from them
-    types = importlib.import_module(f"{name}.types")
-    import tests.unit.judge._builders as builders
+def _scratch_input(name: str, real_kwargs: dict):
+    """Rebuild a real input's kwargs out of the scratch package's own types (class identities differ between copies)."""
+    t = importlib.import_module(f"{name}.types")
 
-    original = builders.JudgeInput, builders.Bands, builders.Forecasts, builders.RegionLabel, builders.RegionCurve, builders.RegionClimatology, builders.ClimatologyBin, builders.TaskSpec, builders.Thresholds
-    try:
-        builders.JudgeInput, builders.Bands, builders.Forecasts = types.JudgeInput, types.Bands, types.Forecasts
-        builders.RegionLabel, builders.RegionCurve, builders.RegionClimatology = types.RegionLabel, types.RegionCurve, types.RegionClimatology
-        builders.ClimatologyBin, builders.TaskSpec, builders.Thresholds = types.ClimatologyBin, types.TaskSpec, types.Thresholds
-        modules["input"] = builders.make_input()
-    finally:
-        (builders.JudgeInput, builders.Bands, builders.Forecasts, builders.RegionLabel, builders.RegionCurve,
-         builders.RegionClimatology, builders.ClimatologyBin, builders.TaskSpec, builders.Thresholds) = original
-    return lambda: _judge_everything(modules)
+    def forecasts(f):
+        return t.Forecasts(f.mean, f.spread)
+
+    out = dict(real_kwargs)
+    for key in ("predictions", "persistence", "linear"):
+        out[key] = forecasts(real_kwargs[key])
+    out["region_labels"] = tuple(t.RegionLabel(x.region_name, x.axis) for x in real_kwargs["region_labels"])
+    out["divergence_curves"] = tuple(t.RegionCurve(c.region_name, c.curve) for c in real_kwargs["divergence_curves"])
+    out["climatology"] = tuple(
+        t.RegionClimatology(c.region_name, tuple(t.ClimatologyBin(b.invariant_lo, b.invariant_hi, b.mean, b.sd, b.n_samples) for b in c.bins))
+        for c in real_kwargs["climatology"]
+    )
+    out["tasks"] = tuple(t.TaskSpec(x.name, x.kind, x.tolerance, x.horizon) for x in real_kwargs["tasks"])
+    th = real_kwargs["thresholds"]
+    out["thresholds"] = t.Thresholds(t.Bands(th.bands.n, th.bands.p, th.bands.green, th.bands.amber_outer), th.sharpness_hedge_threshold, th.agreement_threshold)
+    return t.JudgeInput(**out)
+
+
+def _build_and_run(name: str):
+    """A function that builds the scratch package's input from pre-drawn arrays (so the input checks run in whatever context calls it) and runs every block."""
+    real_kwargs = judge_input_kwargs()  # drawn here, outside any guard
+    modules = _modules(name)
+
+    def run():
+        return _judge_everything(modules, _scratch_input(name, real_kwargs))
+
+    return run
+
+
+def _lint_clean(real_source: str) -> bool:
+    return run_judge_gate(ast.parse(real_source)) == []
 
 
 def test_the_unmodified_scratch_copy_passes_the_guard_which_proves_the_mutations_below_are_what_trips_it(scratch_judge):
     name, _ = scratch_judge
-    run = _scratch_input_and_run(name)
+    run = _build_and_run(name)
     with purity_guard():
         assert run()["skill"]
 
 
-def test_tc_ju12_02_a_globals_routed_os_read_hidden_from_the_static_lint_is_caught(scratch_judge):
+def test_tc_ju12_02_a_read_that_imports_nothing_and_names_nothing_banned_is_invisible_to_the_static_lint_but_caught_here(scratch_judge):
     name, target = scratch_judge
-    _mutate(target, "skill.py", "def compute_skill(inp: JudgeInput) -> dict:", "def compute_skill(inp: JudgeInput) -> dict:\n    np.get_include.__globals__['os'].getcwd()")
-    run = _scratch_input_and_run(name)
-    assert fires(run)
+    source = _mutate(target, "skill.py", "def compute_skill(inp: JudgeInput) -> dict:", "def compute_skill(inp: JudgeInput) -> dict:\n    np.lib.utils.os.getcwd()")
+    assert _lint_clean(source)  # the static gate sees nothing wrong: this is exactly the case the runtime guard exists for
+    assert fires(_build_and_run(name))
 
 
-def test_tc_ju12_02_a_plain_environment_read_is_caught_and_would_be_flagged_by_nothing_else_here(scratch_judge):
+def test_tc_ju12_03_numpys_own_clock_is_invisible_to_the_static_lint_but_caught_here(scratch_judge):
     name, target = scratch_judge
-    _mutate(target, "sharpness.py", 'if type(inp) is not JudgeInput:', 'import os as _o; _o.environ["HOME"]\n    if type(inp) is not JudgeInput:')
-    run = _scratch_input_and_run(name)
-    assert fires(run)
+    source = _mutate(target, "horizon.py", "def compute_error_vs_horizon(inp: JudgeInput) -> dict:", "def compute_error_vs_horizon(inp: JudgeInput) -> dict:\n    np.datetime64('now')")
+    assert _lint_clean(source)
+    assert fires(_build_and_run(name))
 
 
-def test_tc_ju12_03_numpys_own_clock_is_caught(scratch_judge):
+def test_the_older_routes_are_caught_by_both_layers_independently_the_lint_and_the_guard(tmp_path):
+    cases = (
+        ("sharpness.py", "def compute_sharpness(inp: JudgeInput) -> dict:", "import os as _o; _o.environ['HOME']"),
+        ("calibration.py", "def compute_calibration(inp: JudgeInput) -> dict:", "np.random.default_rng().random()"),
+        ("exceptions.py", "def compute_exceptions_and_trials(inp: JudgeInput) -> tuple[dict, dict]:", "__import__('time').time()"),
+        ("skill.py", "def compute_skill(inp: JudgeInput) -> dict:", "np.get_include.__globals__['os'].getcwd()"),
+    )
+    for index, (filename, anchor, injected) in enumerate(cases):
+        name = f"judge_scratch_older_{index}"
+        target = tmp_path / name
+        shutil.copytree(JUDGE_SRC, target, ignore=shutil.ignore_patterns("__pycache__"))
+        for path in target.glob("*.py"):
+            path.write_text(path.read_text().replace("wmj.judge", name))
+        sys.path.insert(0, str(tmp_path))
+        try:
+            source = _mutate(target, filename, anchor, anchor + "\n    " + injected)
+            assert not _lint_clean(source), filename  # the static gate flags these, as a second, independent layer
+            assert fires(_build_and_run(name)), filename
+        finally:
+            sys.path.remove(str(tmp_path))
+            for module in [m for m in sys.modules if m == name or m.startswith(name + ".")]:
+                del sys.modules[module]
+
+
+def test_an_ambient_call_whose_error_the_judge_swallows_still_fails_the_guard(scratch_judge):
     name, target = scratch_judge
-    _mutate(target, "horizon.py", "def compute_error_vs_horizon(inp: JudgeInput) -> dict:", "def compute_error_vs_horizon(inp: JudgeInput) -> dict:\n    np.datetime64('now')")
-    run = _scratch_input_and_run(name)
-    assert fires(run)
+    _mutate(target, "skill.py", "def compute_skill(inp: JudgeInput) -> dict:",
+            "def compute_skill(inp: JudgeInput) -> dict:\n    try:\n        np.lib.utils.os.getcwd()\n    except BaseException:\n        pass")
+    run = _build_and_run(name)
+    with pytest.raises(AmbientAccessError, match="swallowed"), purity_guard():
+        run()
 
 
-def test_a_random_number_slipped_into_the_scratch_copy_is_caught(scratch_judge):
+def test_an_ambient_read_inside_an_input_check_is_caught_because_the_input_is_built_under_the_guard(scratch_judge):
     name, target = scratch_judge
-    _mutate(target, "calibration.py", "def compute_calibration(inp: JudgeInput) -> dict:", "def compute_calibration(inp: JudgeInput) -> dict:\n    np.random.default_rng().random()")
-    run = _scratch_input_and_run(name)
-    assert fires(run)
+    _mutate(target, "types.py", "def _exact_str(name: str, value) -> str:", "def _exact_str(name: str, value) -> str:\n    np.lib.utils.os.getcwd()")
+    assert fires(_build_and_run(name))
 
 
-def test_a_wall_clock_read_and_a_file_read_slipped_into_the_scratch_copy_are_caught(scratch_judge):
-    name, target = scratch_judge
-    _mutate(target, "exceptions.py", "def compute_exceptions_and_trials(inp: JudgeInput) -> tuple[dict, dict]:", "def compute_exceptions_and_trials(inp: JudgeInput) -> tuple[dict, dict]:\n    __import__('time').time()")
-    assert fires(_scratch_input_and_run(name))
+# ---- TC-JU12-04: the residual is stated, in the specs, neither wider nor narrower ---------------------------
 
 
-# ---- TC-JU12-04: the residual is stated, in the specs, neither wider nor narrower -------------------------
+def _spec_body(name: str) -> str:
+    """The spec without its change notes (lines starting with '>'), which narrate history rather than state the current rule."""
+    return "\n".join(line for line in (REPO_ROOT / "specs" / name).read_text().splitlines() if not line.startswith(">"))
 
 
-def test_tc_ju12_04_the_specs_state_the_residual_and_the_byte_identity_backstop_in_plain_words():
-    import re
+def test_tc_ju12_04_the_residual_paragraph_names_exactly_the_two_remaining_routes_and_the_backstop():
+    cross_cutting = _spec_body("cross-cutting.md")
+    start = cross_cutting.index("What this control does NOT catch")
+    residual = cross_cutting[start: cross_cutting.index("JU-12 is delivered by the harness", start)]
+    assert "Two routes remain" in residual
+    assert "(a)" in residual and "ctypes" in residual
+    assert "(b)" in residual and "before the harness installs" in residual
+    assert "(c)" not in residual  # no third, unlisted route
+    assert "TC-NF1-01" in residual and "byte-identity" in residual and "separate processes" in residual
+    # the closed route is described as caught — never as still open
+    closed = [s for s in re.split(r"(?<=[.;])\s", residual) if "getrandom" in s]
+    assert closed and all(re.search(r"closes|now raises|actually \*\*caught\*\*|actually caught", s) for s in closed), closed
+    assert not any(re.search(r"remains (open|uncaught)|still (open|uncaught)", s) for s in closed)
 
-    def body(path: str) -> str:  # the change notes (lines starting with ">") narrate history, they are not the current statement
-        return "\n".join(line for line in (REPO_ROOT / "specs" / path).read_text().splitlines() if not line.startswith(">"))
 
-    judge_spec, cross_cutting = body("judge.md"), body("cross-cutting.md")
-    for text in (judge_spec, cross_cutting):
-        assert "ctypes" in text and "TC-NF1-01" in text and "byte-identity" in text
-        assert "best-effort" in text or "tripwire" in text
-        assert "before the harness installs" in text  # the pre-captured-reference residual
-    # the closed route (an unseeded Generator reaching getrandom()) must not be presented as still open
-    for text in (judge_spec, cross_cutting):
-        for sentence in re.split(r"(?<=[.;])\s", text):
-            if "getrandom" in sentence and "Generator(PCG64())" in sentence:
-                assert re.search(r"caught|closes|closed|raises", sentence), sentence[:200]
-    # the residual is what remains after that route was closed: ctypes and pre-captured names only
-    residual = cross_cutting[cross_cutting.index("What this control does NOT catch"):]
-    residual = residual[: residual.index("JU-12 is delivered by the harness")]
-    assert "Two routes remain" in residual and "ctypes" in residual
+def test_tc_ju12_04_the_judge_spec_states_the_same_residual_and_the_backstop():
+    judge_spec = _spec_body("judge.md")
+    start = judge_spec.index("What TC-JU12-01 does not catch")
+    residual = judge_spec[start: judge_spec.index("\n\n", start)]  # this paragraph only
+    assert "ctypes" in residual and "bound to a local name before the harness installs" in residual
+    assert "TC-NF1-01" in residual and "separate processes" in residual
+    assert "primary tripwire" in judge_spec[judge_spec.index("Purity enforcement"): start]

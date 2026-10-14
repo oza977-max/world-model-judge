@@ -1257,3 +1257,17 @@ the region instead, same total size (200 starts × 1,000 steps = 200,000 samples
 7. **`reference_run_steps`** now means the total pooled samples (starts × steps per start), not one run's length.
 
 *Where recorded:* `build/handovers/P4-C05b.md`.
+
+### A37 — the runtime purity harness: spec wording to correct, routes to disclose (found at P4-C06, 2026-10-14)
+
+**In plain words:** building the purity guard and having it reviewed showed that the spec's description of it is slightly wrong in four places and that several routes need either rigging or an honest mention in the list of things it cannot catch.
+
+1. **"Exactly one disclosed rebind" is false.** `numpy.datetime64`, `datetime.datetime` and `datetime.date` are all C types that cannot be changed in place, so all three are *replaced* by subclasses (cross-cutting ADR-002 rule 3 names only `datetime64`). Side effect to disclose: inside the guard `isinstance(np.datetime64('2020'), np.datetime64)` and `np.issubdtype(.., np.datetime64)` are False, and a `datetime` made inside the guard is an instance of a local class.
+2. **`numpy.datetime64` is bound in five modules** (`numpy`, `numpy.core`, `numpy.core.numeric`, `numpy.core.numerictypes`, `numpy._typing._array_like`); the spec speaks of one. The guard rebinds all five, found by identity.
+3. **`numpy.random` bindings:** besides the six private submodules the spec lists, `numpy.random._pickle` and `numpy.random.mtrand` (`_MT19937`, and the hidden legacy singleton `_rand`) also bind the classes; the guard finds every binding by identity and replaces `_rand` with a raising stand-in. The spec's list should say "every module that binds the object".
+4. **`os.environ`:** judge spec §4 (and TC-JU12-01's wording "→ a raising proxy") still describe guarding the *instance*; cross-cutting ADR-002 and the guard mutate the *class* (`os._Environ`).
+5. **Undisclosed C-clock routes** that the guard does not stop (add to the residual or rig): `np.dtype('M8[s]').type('now')`, `np.array('now', dtype='M8[s]')`, `np.asarray(['now'], dtype='datetime64[ns]')`, `np.datetime64(b'now')`.
+6. **Routes beyond the spec's list that the guard now also rigs** (siblings of listed names): `time.gmtime`/`clock_gettime*`, `os.getrandom`/`os.open`, stdlib `random`, `uuid.uuid1`/`getnode`, more `socket` lookups, process-creation siblings. Still unrigged and not in the spec's list: `secrets`, `platform`, `multiprocessing`, `resource`, `threading`, `print`/`sys.stdout`/`sys.stdin`, `pathlib` file methods (they reach the rigged `io.open`/`os` underneath), `_io.open`, `posix.*`, `_socket.*`, `_posixsubprocess`, `import` of a not-yet-loaded module (the loader reads files). The next design review should decide which belong in the list.
+7. **"No guard fired" was not observable** if the judge caught the error. The guard now records every rigged call and refuses to exit cleanly if any was made; the error type derives from `BaseException` so an ordinary `except Exception` cannot swallow it.
+
+*Where recorded:* `build/handovers/P4-C06.md`.
