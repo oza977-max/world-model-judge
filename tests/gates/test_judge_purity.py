@@ -17,6 +17,7 @@ instead of replacing the test process.
 from __future__ import annotations
 
 import ast
+import copy
 import datetime
 import importlib
 import io
@@ -38,7 +39,7 @@ from tests.gates import _purity_guard as guard
 from tests.gates._purity_guard import AmbientAccessError, installed, purity_guard
 from tests.gates.test_import_graph import run_judge_gate
 from tests.unit.judge._builders import judge_input_kwargs
-from tests.unit.judge._variants import all_variants
+from tests.unit.judge._variants import all_variants, mid_horizon_entries
 from wmj.judge.errors import JudgeInputError
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -105,7 +106,8 @@ def test_the_whole_judge_builds_its_input_refuses_bad_ones_and_computes_every_bl
     variants = all_variants()  # the arrays are drawn outside (the builders use seeded generators); the input *checks* run inside
     unguarded = [_judge_everything(modules, JudgeInput(**dict(kw))) for kw in variants]
     with purity_guard() as hits:
-        guarded = [_judge_everything(modules, JudgeInput(**dict(kw))) for kw in variants]  # the input checks run rigged too
+        # deepcopy re-runs every leaf object's own checks (RegionLabel, TaskSpec, Forecasts, Bands, ...) through their __reduce__, here, under the guard
+        guarded = [_judge_everything(modules, JudgeInput(**copy.deepcopy(kw))) for kw in variants]
         def zero_spread():
             return Forecasts(variants[0]["predictions"].mean, np.zeros_like(variants[0]["predictions"].spread))
 
@@ -119,6 +121,7 @@ def test_the_whole_judge_builds_its_input_refuses_bad_ones_and_computes_every_bl
     steps = [e["steps"] for record in unguarded for e in record["trust_horizons"]["per_task"]]
     switches = [e["switch_step"] for record in unguarded for e in record["climatology"]["per_task"]]
     assert 0 in steps and any(x > 0 for x in steps) and None in switches and any(x is not None for x in switches)
+    assert 1 in switches and any(mid_horizon_entries(kw, record) for kw, record in zip(variants, unguarded, strict=True))
     assert any(e["agrees"] is True for record in unguarded for e in record["climatology"]["per_task"])
     assert any(e["natural_units"] is None for record in unguarded for e in record["trust_horizons"]["per_task"])
 

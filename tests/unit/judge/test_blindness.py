@@ -16,7 +16,7 @@ from pathlib import Path
 
 import numpy as np
 
-from tests.unit.judge._variants import all_variants, random_kwargs
+from tests.unit.judge._variants import all_variants, mid_horizon_entries, random_kwargs
 from wmj.judge.calibration import compute_calibration
 from wmj.judge.climatology import compute_climatology
 from wmj.judge.exceptions import compute_exceptions_and_trials
@@ -116,6 +116,11 @@ def test_the_inputs_really_reach_the_branches_a_random_input_never_does():
     agrees = [e["agrees"] for r in records for e in r["climatology"]["per_task"]]
     assert 0 in steps and any(x > 0 for x in steps)
     assert True in agrees and False in agrees
+    assert any(mid_horizon_entries(kw, r) for kw, r in zip(all_variants(), records, strict=True))  # a task that stops part-way through its horizon
+    switch_ones = [e["switch_step"] for r in records for e in r["climatology"]["per_task"]]
+    assert 1 in switch_ones
+    mixed = records[-1]["climatology"]["per_task"]
+    assert {e["switch_step"] is None for e in mixed} == {True, False}  # one region drifts, the other does not
     assert None in [e["switch_step"] for r in records for e in r["climatology"]["per_task"]]  # the whole-horizon (no switch step) path
     assert any(e["switch_step"] is not None for r in records for e in r["climatology"]["per_task"])
     flags = [e["low_side_sharpness_flag"] for r in records for e in r["exceptions"]["per_task"]]
@@ -130,9 +135,15 @@ def test_identical_content_judged_twice_from_separately_built_inputs_gives_ident
 
 
 def test_tc_ju1_02_relabelling_regions_tasks_and_world_changes_only_the_labels_whichever_way_the_names_sort():
+    check_relabelling(preserve_task_order=False)
+    check_relabelling(preserve_task_order=True)
+
+
+def check_relabelling(preserve_task_order: bool) -> None:
     for index, kwargs in enumerate(all_variants()):
         for regions in ({"training": "zeta", "out-of-range": "alpha"}, {"training": "aaa", "out-of-range": "zzz"}, {"training": "out-of-range", "out-of-range": "training"}):
-            tasks = {t.name: f"{'zz' if i == 0 else 'aa'}-renamed-{i}" for i, t in enumerate(kwargs["tasks"])}  # also flips the sort order
+            names = sorted(t.name for t in kwargs["tasks"])
+            tasks = {name: f"t{(names.index(name) if preserve_task_order else len(names) - names.index(name)):02d}" for name in names}  # reversed: the alphabetically first task becomes last, and so on
             original = _verdict(JudgeInput(**kwargs))
             relabelled = _verdict(JudgeInput(**_renamed(kwargs, regions, tasks, world="renamed-world")))
             identity_regions, identity_tasks = {v: v for v in regions.values()}, {v: v for v in tasks.values()}

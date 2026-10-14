@@ -74,4 +74,29 @@ def all_variants() -> list[dict]:
         quiet = random_kwargs(seed, near_perfect=seed == 301)
         quiet["divergence_curves"] = tuple(RegionCurve(c.region_name, np.zeros(c.curve.size)) for c in quiet["divergence_curves"])
         variants.append(quiet)
-    return [*variants, no_cycle, axes, three_tasks]
+    # error that grows with the step, so a task stops being within tolerance part-way through its horizon (the ordinary real case)
+    mid = random_kwargs(400, near_perfect=True)
+    h = mid["predictions"].mean.shape[1]
+    growth = (0.08 * np.arange(1, h + 1))[None, :, None]
+    mid["predictions"] = Forecasts(mid["outcomes"] + growth, mid["predictions"].spread)
+    # ... and a world where one region has a switch step at step 1 and the other has none
+    mixed = random_kwargs(401, near_perfect=True)
+    mixed["predictions"] = Forecasts(mixed["outcomes"] + growth, mixed["predictions"].spread)
+    mixed["divergence_curves"] = (
+        RegionCurve("training", np.zeros(h + 1)),
+        RegionCurve("out-of-range", np.array([0.0, 0.5, 0.6, 0.7, 0.8, 0.9])),
+    )
+    return [*variants, no_cycle, axes, three_tasks, mid, mixed]
+
+
+def mid_horizon_entries(kwargs: dict, record: dict) -> list[dict]:
+    """Trust-horizon entries that stopped part-way: 0 < steps < the cap (the switch step, or the task's horizon when there is none)."""
+    horizons = {t.name: t.horizon for t in kwargs["tasks"]}
+    switches = {(e["task"], e["region"]): e["switch_step"] for e in record["climatology"]["per_task"]}
+    found = []
+    for e in record["trust_horizons"]["per_task"]:
+        switch = switches[(e["task"], e["region"])]
+        cap = horizons[e["task"]] if switch is None else switch
+        if 0 < e["steps"] < cap:
+            found.append(e)
+    return found
