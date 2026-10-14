@@ -1239,3 +1239,18 @@ built next as **P4-C05b** rather than squeezed into the judge chunk. Nothing is 
 list is in `REMEMBER.md` §3.
 
 Note for the next design review: `JudgeInput` carries only bin *indices* (and each bin's range, which the judge never reads), so "the invariant is re-measured per step, not frozen" (TC-JU6-02) cannot be checked by the judge — it is a harness property and its test belongs with the producer.
+
+### A36 — the climatology reference cannot be "one trajectory from the training region's centre" (found at P4-C05b, 2026-10-14)
+
+**In plain words:** the spec builds the judge's reference table from one long run starting in the
+middle of the training region. In both worlds the middle of the region is a resting point, so that
+run never moves: it has one conserved value, no sixteen ranges and zero spread (the judge refuses a
+zero spread). The owner ruled (2026-10-14) to build the table from many seeded starts spread over
+the region instead, same total size (200 starts × 1,000 steps = 200,000 samples).
+
+1. **Recipe now built:** `harness/climatology.py` — starts from `rng_for(world, "training", "climatology-starts")`, null actions, pooled, quantile edges (`k/16`), open outer ranges, a value on an edge goes to the upper range, mean and population sd per range, refusals for fewer than 16 distinct values, a range under 50 samples or with a zero-spread quantity.
+2. **Spec text to correct:** worlds §5 and judge ADR-J5 ("one continuous 200,000-step … trajectory … from the world's training-region centre").
+3. **Open (D21):** the true world does not agree with a training-region table in the state-axis out-of-range regions (truth score 1.24 and ≈ 5 against a pass mark of 1.0). Per-region tables fix most of that (`region_name` parameter, no judge change). See `build/measurements/p4-c05b-d15.md`.
+4. **D15 answered:** kicks do not upset the reference in the training region (truth score 0.885 vs 0.885 for LV; 0.835 vs 0.851 for the pendulum) although they move 33–59% of trials between ranges. They do inflate the pendulum's `out-large-action` score (0.83 → 1.26 with the training table; 0.84 → 1.47 with its own).
+
+*Where recorded:* `build/handovers/P4-C05b.md`.
