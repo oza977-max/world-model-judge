@@ -1272,3 +1272,14 @@ the region instead, same total size (200 starts × 1,000 steps = 200,000 samples
 
 7a. **Further findings, pass 2:** `np.datetime64('today')` (and `b'now'`, `' NOW '`) read the wall clock through the same C entry point and are now tripped; `np.busday_count/offset(.., 'today')` and `np.sctypeDict['datetime64']('now')` still read it and are not rigged (add to item 5); a module-level read at import time was invisible to a guard that started after the import — the guard test now imports the judge in a fresh interpreter under the guard, and the scratch copies are imported under it; `types.py` `_plain_number` tests `isinstance(.., np.datetime64)`, which is False for real values inside the guard — inert (such values are refused either way) but worth knowing; further unrigged siblings: `os.access/read/write/pipe/umask/nice/getpgrp`, `time.mktime/tzset`, local-timezone readers (`datetime.fromtimestamp`, `astimezone`, naive `.timestamp()`).
 *Where recorded:* `build/handovers/P4-C06.md`.
+
+### A38 — Phase 4 wiring audit: matrix rows to add (2026-10-14)
+
+**In plain words:** the audit asks "is every module that was built actually used by the thing that is supposed to use it?" At the end of Phase 4 the judge's pieces are all built and tested, but only the final assembly (`wmj run`, Phase 6) will call them, so three of them have no caller in the program yet. That is expected, but the guide's table needs rows for the new modules so the Phase 6 audit can check them.
+
+1. **Verified now (P4-C01's rows):** `judge.limitations` → `judge.verdict` ✓; `judge.types` is imported by `calibration`, `sharpness`, `exceptions`, `climatology`, `horizon`, `skill`, `regions`. The row says "every judge module": `distance.py` (array arithmetic only) and `verdict.py` (checks plain dictionaries by design) do not import it — the row should say "every judge module that takes a `JudgeInput`".
+2. **No caller in `src/` yet (expected; wired at P6-C01):** `judge.exceptions`, `judge.horizon`, `judge.verdict` (all three are named in the `wmj run` row); `judge.calibration`/`judge.sharpness`/`judge.climatology`/`judge.skill` are imported only by other judge modules, tests and the early slices (`skill`).
+3. **Rows to add:** `judge.regions` (producer; consumed by `calibration`, `sharpness`, `exceptions`, `horizon`, `climatology`; wired P4-C03/P4-C05); `judge.distance` (producer; consumed by `exceptions`, `horizon`; P4-C04/P4-C05); `harness.climatology` (producer: climatology table, `judge_tables`, `serialisable_table`, `measure_invariant_bins`, `truth_mean_abs_z`; consumed by `wmj run`; wiring chunk **P6-C01**, demanded by TC-JU6-02 end to end); `harness.fingerprint` (A29; P6-C01).
+4. **The module-audit script** (`gvm-build/scripts/_module_audit.py`) looks for `scripts/_shared/*.py`, which this project does not have; it was not applicable and the audit was done by hand-run greps as at Phase 3.
+
+*Where recorded:* `REMEMBER.md` §3 (P6-C01 notes).
