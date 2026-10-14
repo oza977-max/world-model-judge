@@ -61,6 +61,22 @@ def _judge_everything(modules, inp):
     return verdict.to_dict()
 
 
+def test_importing_the_whole_judge_in_a_fresh_interpreter_under_the_guard_makes_no_ambient_call():
+    """A module-level read (at import) would never be seen by a guard that starts after the import; so import under it, in a new process."""
+    script = (
+        "import sys; sys.path[:0] = ['src', '.']\n"
+        "from tests.gates._purity_guard import purity_guard, AmbientAccessError\n"
+        "import numpy\n"
+        "with purity_guard() as hits:\n"
+        "    import wmj.judge.types, wmj.judge.errors, wmj.judge.limitations, wmj.judge.regions, wmj.judge.distance, wmj.judge._normal\n"
+        "    import wmj.judge.skill, wmj.judge.calibration, wmj.judge.sharpness, wmj.judge.exceptions, wmj.judge.climatology, wmj.judge.horizon, wmj.judge.verdict\n"
+        "assert not hits\n"
+        "print('imported-clean')\n"
+    )
+    result = subprocess.run([sys.executable, "-c", script], cwd=REPO_ROOT, capture_output=True, text=True, check=False)
+    assert result.returncode == 0 and "imported-clean" in result.stdout, result.stderr[-600:]
+
+
 def _modules(package: str = "wmj.judge"):
     return {name: importlib.import_module(f"{package}.{name}") for name in BLOCKS}
 
@@ -143,6 +159,38 @@ def test_every_name_in_every_table_is_rigged_while_the_guard_is_on_and_none_is_c
         assert issubclass(datetime.datetime, datetime.datetime) and datetime.datetime is not datetime.datetime.__mro__[1]
 
 
+FULL_OS = {
+    "system", "getcwd", "getcwdb", "getenv", "getenvb", "urandom", "getpid", "getppid", "listdir", "scandir", "stat", "lstat", "uname",
+    "getlogin", "times", "fork", "forkpty", "kill", "popen", "getrandom", "open", "cpu_count", "getuid", "geteuid", "getgid", "getegid",
+    "sched_getaffinity", "sysconf", "getloadavg", "putenv", "unsetenv", "mkdir", "makedirs", "remove", "unlink", "rmdir", "rename",
+    "chdir", "readlink", "walk", "execl", "execle", "execlp", "execlpe", "execv", "execve", "execvp", "execvpe", "posix_spawn",
+    "posix_spawnp", "spawnl", "spawnle", "spawnlp", "spawnlpe", "spawnv", "spawnve", "spawnvp", "spawnvpe",
+}
+FULL_ENVIRON = {"__getitem__", "__contains__", "__iter__", "__len__", "get", "keys", "values", "items", "copy"}
+FULL_TIME = {
+    "time", "time_ns", "monotonic", "monotonic_ns", "perf_counter", "perf_counter_ns", "process_time", "process_time_ns", "thread_time",
+    "thread_time_ns", "sleep", "localtime", "gmtime", "ctime", "asctime", "strftime", "clock_gettime", "clock_gettime_ns", "clock_getres",
+    "get_clock_info",
+}
+FULL_SOCKET = {
+    "create_connection", "getaddrinfo", "gethostbyname", "gethostbyname_ex", "gethostbyaddr", "gethostname", "getnameinfo", "getservbyname",
+    "getservbyport", "socketpair", "create_server", "fromfd",
+}
+FULL_SUBPROCESS = {"run", "call", "check_call", "check_output", "getoutput", "getstatusoutput"}
+
+
+def test_the_tables_are_pinned_in_full_so_an_entry_cannot_quietly_disappear():
+    assert set(guard.OS_FUNCTIONS) >= FULL_OS and set(guard.ENVIRON_METHODS) >= FULL_ENVIRON
+    assert set(guard.TIME_FUNCTIONS) >= FULL_TIME and set(guard.SOCKET_FUNCTIONS) >= FULL_SOCKET
+    assert set(guard.SUBPROCESS_FUNCTIONS) >= FULL_SUBPROCESS
+    assert {"random", "randint", "randrange", "choice", "shuffle", "sample", "uniform", "gauss", "seed", "getrandbits", "_urandom"} <= set(guard.RANDOM_MODULE_FUNCTIONS)
+
+
+def test_the_installed_check_has_a_negative_control_nothing_is_rigged_outside_the_guard():
+    assert not installed(os.getcwd) and not installed(time.time) and not installed(open) and not installed(np.random.normal)
+    assert not installed(sys.modules["numpy.random.mtrand"]._rand) and not installed(type(os.environ).__dict__["__getitem__"])
+
+
 def test_the_tables_still_contain_every_route_the_spec_names_so_they_cannot_quietly_shrink():
     assert {"system", "getcwd", "getenv", "urandom", "getpid", "listdir", "stat", "fork", "execve", "execv", "posix_spawn", "spawnv"} <= set(guard.OS_FUNCTIONS)
     assert {"__getitem__", "__contains__", "__iter__", "__len__", "get", "keys", "values", "items"} <= set(guard.ENVIRON_METHODS)
@@ -218,6 +266,8 @@ def test_every_place_numpy_keeps_a_reference_to_a_random_class_or_to_datetime64_
         ("SeedSequence via bit_generator", lambda: sys.modules["numpy.random.bit_generator"].SeedSequence()),
         ("np.datetime64('now')", lambda: np.datetime64("now")),
         ("np.datetime64(' NOW ')", lambda: np.datetime64(" NOW ")),
+        ("np.datetime64('today')", lambda: np.datetime64("today")),
+        ("np.datetime64(b'now')", lambda: np.datetime64(b"now")),
         ("np.datetime64 through numpy.core.numerictypes", lambda: np.core.numerictypes.datetime64("now")),
     ],
 )
@@ -326,9 +376,9 @@ def _scratch_input(name: str, real_kwargs: dict):
 def _build_and_run(name: str):
     """A function that builds the scratch package's input from pre-drawn arrays (so the input checks run in whatever context calls it) and runs every block."""
     real_kwargs = judge_input_kwargs()  # drawn here, outside any guard
-    modules = _modules(name)
 
     def run():
+        modules = _modules(name)  # imported inside whatever context calls this, so a module-level read is seen too
         return _judge_everything(modules, _scratch_input(name, real_kwargs))
 
     return run
@@ -345,7 +395,7 @@ def test_the_unmodified_scratch_copy_passes_the_guard_which_proves_the_mutations
         assert run()["skill"]
 
 
-def test_tc_ju12_02_a_read_that_imports_nothing_and_names_nothing_banned_is_invisible_to_the_static_lint_but_caught_here(scratch_judge):
+def test_tc_ju12_02_a_read_reached_through_numpys_own_os_reference_is_invisible_to_the_static_lint_but_caught_here(scratch_judge):
     name, target = scratch_judge
     source = _mutate(target, "skill.py", "def compute_skill(inp: JudgeInput) -> dict:", "def compute_skill(inp: JudgeInput) -> dict:\n    np.lib.utils.os.getcwd()")
     assert _lint_clean(source)  # the static gate sees nothing wrong: this is exactly the case the runtime guard exists for
@@ -356,6 +406,19 @@ def test_tc_ju12_03_numpys_own_clock_is_invisible_to_the_static_lint_but_caught_
     name, target = scratch_judge
     source = _mutate(target, "horizon.py", "def compute_error_vs_horizon(inp: JudgeInput) -> dict:", "def compute_error_vs_horizon(inp: JudgeInput) -> dict:\n    np.datetime64('now')")
     assert _lint_clean(source)
+    assert fires(_build_and_run(name))
+
+
+def test_a_module_level_ambient_read_at_import_time_is_caught_because_the_scratch_copy_is_imported_under_the_guard(scratch_judge):
+    name, target = scratch_judge
+    source = _mutate(target, "skill.py", "from __future__ import annotations", "from __future__ import annotations\n\nimport numpy as np\n\n_X = np.lib.utils.os.getcwd()")
+    assert _lint_clean(source)
+    assert fires(_build_and_run(name))
+
+
+def test_a_module_level_clock_read_at_import_time_is_caught(scratch_judge):
+    name, target = scratch_judge
+    _mutate(target, "horizon.py", "from __future__ import annotations", "from __future__ import annotations\n\nimport numpy as np\n\n_X = np.datetime64('now')")
     assert fires(_build_and_run(name))
 
 
@@ -373,6 +436,7 @@ def test_the_older_routes_are_caught_by_both_layers_independently_the_lint_and_t
         for path in target.glob("*.py"):
             path.write_text(path.read_text().replace("wmj.judge", name))
         sys.path.insert(0, str(tmp_path))
+        importlib.invalidate_caches()
         try:
             source = _mutate(target, filename, anchor, anchor + "\n    " + injected)
             assert not _lint_clean(source), filename  # the static gate flags these, as a second, independent layer

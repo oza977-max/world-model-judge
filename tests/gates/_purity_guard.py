@@ -12,7 +12,7 @@ fails.
 What it cannot do, stated honestly: it guards a finite list of known routes, not every possible
 one. It cannot see `ctypes` (raw system calls with no Python object to rig) or an object captured
 before the guard was switched on; and `numpy.datetime64` and `datetime` are C types that cannot be
-changed in place, so those two are *replaced* (a disclosed difference). The ten-run, separate-process
+changed in place, so those three (`numpy.datetime64`, `datetime.datetime`, `datetime.date`) are *replaced* (a disclosed difference). The ten-run, separate-process
 byte-identity gate (TC-NF1-01) is the real backstop for an accidental slip; this guard's value is
 saying *which* outside call was made.
 """
@@ -135,8 +135,8 @@ class _GuardedDatetime64(np.datetime64):
     """`numpy.datetime64` is an immutable C type: a subclass that refuses 'now' replaces it (a disclosed rebind)."""
 
     def __new__(cls, *args: Any, **kwargs: Any):  # type: ignore[no-untyped-def]
-        if args and isinstance(args[0], str) and args[0].strip().lower() == "now":
-            _trip("numpy.datetime64('now')")
+        if args and isinstance(args[0], str | bytes) and (args[0].decode() if isinstance(args[0], bytes) else args[0]).strip().lower() in {"now", "today"}:
+            _trip("numpy.datetime64('now' / 'today')")
         return super().__new__(cls, *args, **kwargs)
 
 

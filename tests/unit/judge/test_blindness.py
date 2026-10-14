@@ -71,7 +71,7 @@ def _random_kwargs(seed: int, *, near_perfect: bool = False) -> dict:
         )
         for name, scale in (("training", 1.0), ("out-of-range", 7.0))
     )
-    kwargs["tasks"] = (TaskSpec("alpha-task", "control", 0.1, 3), TaskSpec("beta-task", "planning", 0.3, 5))
+    kwargs["tasks"] = (TaskSpec("lv-control", "control", 0.1, 3), TaskSpec("lv-planning", "planning", 0.3, 5))
     if near_perfect:
         bins = np.zeros((n, h), dtype=np.int64)
         means = np.stack([kwargs["climatology"][0 if x.region_name == "training" else 1].bins[0].mean for x in kwargs["region_labels"]])
@@ -130,26 +130,34 @@ def _rename_in_verdict(record: dict, regions: dict[str, str], tasks: dict[str, s
     return renamed
 
 
-def _same_up_to_rounding(a, b, path="") -> None:
-    """Equal structure and text; counts and flags exactly; floats to 1e-12 (summing trials in another order rounds differently)."""
+def _same_up_to_rounding(a, b, path="", tolerance=1e-12) -> None:
+    """Equal structure and text; counts and flags exactly; floats to `tolerance` (summing trials in another order rounds differently)."""
     assert type(a) is type(b), path
     if isinstance(a, dict):
         assert a.keys() == b.keys(), path
         for k in a:
-            _same_up_to_rounding(a[k], b[k], f"{path}/{k}")
+            _same_up_to_rounding(a[k], b[k], f"{path}/{k}", tolerance)
     elif isinstance(a, list | tuple):
         assert len(a) == len(b), path
         for i, (x, y) in enumerate(zip(a, b, strict=True)):
-            _same_up_to_rounding(x, y, f"{path}[{i}]")
+            _same_up_to_rounding(x, y, f"{path}[{i}]", tolerance)
     elif isinstance(a, float):
-        assert a == b or abs(a - b) <= 1e-12 * max(1.0, abs(a), abs(b)), (path, a, b)
+        assert a == b or abs(a - b) <= tolerance * max(1.0, abs(a), abs(b)), (path, a, b)
     else:
         assert a == b, (path, a, b)
 
 
 def _variants():
-    """Random inputs and near-perfect ones (non-zero trust horizons, agreement holding)."""
-    return [_random_kwargs(seed) for seed in range(8)] + [_random_kwargs(100 + seed, near_perfect=True) for seed in range(4)]
+    """Random inputs and near-perfect ones (non-zero trust horizons, agreement holding), plus structural variants:
+    no natural cycle (the pendulum's case), out-of-region axes, and a third task."""
+    variants = [_random_kwargs(seed) for seed in range(8)] + [_random_kwargs(100 + seed, near_perfect=True) for seed in range(4)]
+    no_cycle = _random_kwargs(200, near_perfect=True)
+    no_cycle["natural_cycle_length"] = None
+    axes = _random_kwargs(201)
+    axes["region_labels"] = tuple(RegionLabel(x.region_name, ("action", "both", "state")[i % 3] if x.region_name != "training" else None) for i, x in enumerate(axes["region_labels"]))
+    three_tasks = _random_kwargs(202, near_perfect=True)
+    three_tasks["tasks"] = (*three_tasks["tasks"], TaskSpec("lv-extra", "planning", 0.05, 4))
+    return [*variants, no_cycle, axes, three_tasks]
 
 
 def test_the_inputs_really_reach_the_branches_a_random_input_never_does():
@@ -169,14 +177,25 @@ def test_identical_content_judged_twice_from_separately_built_inputs_gives_ident
 def test_tc_ju1_02_relabelling_regions_tasks_and_world_changes_only_the_labels_whichever_way_the_names_sort():
     for index, kwargs in enumerate(_variants()):
         for regions in ({"training": "zeta", "out-of-range": "alpha"}, {"training": "aaa", "out-of-range": "zzz"}, {"training": "out-of-range", "out-of-range": "training"}):
-            tasks = {"alpha-task": "zz-first", "beta-task": "aa-second"}
+            tasks = {t.name: f"{'zz' if i == 0 else 'aa'}-renamed-{i}" for i, t in enumerate(kwargs["tasks"])}  # also flips the sort order
             original = _verdict(JudgeInput(**kwargs))
-            relabelled = _verdict(JudgeInput(**_renamed(kwargs, regions, tasks, world="a-different-world")))
+            relabelled = _verdict(JudgeInput(**_renamed(kwargs, regions, tasks, world="renamed-world")))
             identity_regions, identity_tasks = {v: v for v in regions.values()}, {v: v for v in tasks.values()}
             _same_up_to_rounding(
-                _rename_in_verdict(relabelled, identity_regions, identity_tasks, "a-different-world"),  # (only puts the lists in sorted order)
-                _rename_in_verdict(original, regions, tasks, "a-different-world"),
+                _rename_in_verdict(relabelled, identity_regions, identity_tasks, "renamed-world"),  # (only puts the lists in sorted order)
+                _rename_in_verdict(original, regions, tasks, "renamed-world"),
+                tolerance=0.0,  # relabelling must not move a single bit
             )
+
+
+def test_tasks_are_reported_in_the_order_given_and_regions_in_sorted_name_order():
+    kwargs = _random_kwargs(3)
+    first = _verdict(JudgeInput(**kwargs))
+    swapped = _verdict(JudgeInput(**dict(kwargs, tasks=tuple(reversed(kwargs["tasks"])))))
+    for record, expected in ((first, ["lv-control", "lv-planning"]), (swapped, ["lv-planning", "lv-control"])):
+        entries = record["skill"]["per_task_region"]
+        assert [e["task"] for e in entries] == [t for t in expected for _ in range(2)]
+        assert [e["region"] for e in entries[:2]] == ["out-of-range", "training"]
 
 
 def test_tc_ju1_02_the_order_of_the_regions_curves_tables_and_tasks_makes_no_difference():
@@ -185,7 +204,8 @@ def test_tc_ju1_02_the_order_of_the_regions_curves_tables_and_tasks_makes_no_dif
         for seed in range(4):
             permuted = _verdict(JudgeInput(**_permuted(kwargs, index * 10 + seed)))
             # tasks are reported in the order given, so compare after sorting by name
-            a, b = (_rename_in_verdict(r, {"training": "training", "out-of-range": "out-of-range"}, {"alpha-task": "alpha-task", "beta-task": "beta-task"}, "lv") for r in (original, permuted))
+            same_regions, same_tasks = {"training": "training", "out-of-range": "out-of-range"}, {t.name: t.name for t in kwargs["tasks"]}
+            a, b = (_rename_in_verdict(r, same_regions, same_tasks, "lv") for r in (original, permuted))
             _same_up_to_rounding(a, b)
 
 
@@ -219,11 +239,36 @@ def test_the_input_has_no_field_that_could_carry_a_model_identity_so_there_is_no
 
 # ---- TC-JU13-01 -----------------------------------------------------------------------------------------
 
-LEARNED_VOCABULARY = re.compile(
-    r"^(torch|tensorflow|sklearn|scikit.*|keras|jax|onnx|pickle|joblib|state_dict|checkpoint|backprop|optimi[sz]er|gradient_descent|"
-    r"train(ed|ing|er)?|epochs?|fit|fit_transform|predict|forward|weights?|biases|bias)$", re.IGNORECASE)
+LEARNED_TOKENS = {
+    "torch", "tensorflow", "sklearn", "scikit", "keras", "jax", "onnx", "pickle", "joblib", "checkpoint", "backprop", "optimizer",
+    "optimiser", "gradient", "epoch", "epochs", "trained", "trainer", "fit", "predict", "forward", "weights", "biases", "layer",
+    "layers", "hidden", "neuron", "neurons", "loss", "lr", "learning",
+}
 WEIGHT_FILE_SUFFIXES = {".pt", ".pth", ".npz", ".npy", ".pkl", ".pickle", ".h5", ".onnx", ".bin", ".safetensors", ".joblib"}
-LOADERS = {"load", "loads", "fromfile", "memmap", "loadtxt", "genfromtxt"}
+LOADERS = {"load", "loads", "fromfile", "fromstring", "memmap", "loadtxt", "genfromtxt"}
+FITTERS = {"lstsq", "polyfit", "curve_fit", "pinv"}
+
+
+def _tokens(identifier: str) -> set[str]:
+    spaced = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", identifier)
+    return {t.lower() for t in spaced.split("_") if t}
+
+
+def _number(node: ast.AST) -> bool:
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub | ast.UAdd):
+        return _number(node.operand)
+    return isinstance(node, ast.Constant) and isinstance(node.value, int | float) and not isinstance(node.value, bool)
+
+
+def _count_numbers(node: ast.AST) -> int:
+    """Numbers written out literally inside a list/tuple/set/dict (any nesting, signs allowed)."""
+    if _number(node):
+        return 1
+    if isinstance(node, ast.List | ast.Tuple | ast.Set):
+        return sum(_count_numbers(e) for e in node.elts)
+    if isinstance(node, ast.Dict):
+        return sum(_count_numbers(v) for v in node.values if v is not None)
+    return 0
 
 
 def learned_component_findings(source: str) -> list[str]:
@@ -238,20 +283,22 @@ def learned_component_findings(source: str) -> list[str]:
             names.add(node.id)
         elif isinstance(node, ast.Attribute):
             names.add(node.attr)
-            if node.attr in LOADERS:
-                findings.append(f"loads data from outside: .{node.attr}")
         elif isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
             names.add(node.name)
         elif isinstance(node, ast.arg) or isinstance(node, ast.keyword) and node.arg:
             names.add(node.arg)
         elif isinstance(node, ast.alias):
             names.add(node.name.split(".")[-1])
-        elif isinstance(node, ast.Constant) and isinstance(node.value, bytes) and len(node.value) > 100:
-            findings.append(f"a literal of {len(node.value)} bytes (embedded weights?)")
-        elif isinstance(node, ast.List | ast.Tuple) and len(node.elts) > 40 and all(isinstance(e, ast.Constant) and isinstance(e.value, int | float) for e in node.elts):
-            findings.append(f"a literal array of {len(node.elts)} numbers (embedded weights?)")
-    findings += [f"learning vocabulary: {n}" for n in sorted(names) if LEARNED_VOCABULARY.match(n)]
-    return findings
+        if isinstance(node, ast.Attribute | ast.Name) and getattr(node, "attr", getattr(node, "id", "")) in LOADERS | FITTERS:
+            findings.append(f"loads data or fits a model: {getattr(node, 'attr', getattr(node, 'id', ''))}")
+        if isinstance(node, ast.ImportFrom) and any(a.name in LOADERS | FITTERS for a in node.names):
+            findings.append(f"imports a loader or fitter: {[a.name for a in node.names]}")
+        if isinstance(node, ast.Constant) and isinstance(node.value, bytes | str) and len(node.value) > 200 and len(set(node.value)) > 12 and not (isinstance(node.value, str) and any(c.isspace() for c in node.value)):
+            findings.append(f"a literal of {len(node.value)} characters (encoded weights?)")
+        if isinstance(node, ast.List | ast.Tuple | ast.Set | ast.Dict) and _count_numbers(node) > 40:
+            findings.append(f"a literal holding {_count_numbers(node)} numbers (embedded weights?)")
+    findings += [f"learning vocabulary: {n}" for n in sorted(names) if _tokens(n) & LEARNED_TOKENS]
+    return sorted(set(findings))
 
 
 def test_tc_ju13_01_the_judge_directory_holds_only_source_no_weights_files():
@@ -274,11 +321,24 @@ def test_tc_ju13_01_the_same_inspection_flags_planted_learned_components():
         "a predict method": "class Net:\n    def predict(self, x):\n        return x\n",
         "a forward method": "class Net:\n    def forward(self, x):\n        return x\n",
         "embedded weights": f"W = [{weights}]\n",
+        "signed embedded weights": "W = [" + ", ".join(str(((-1) ** i) * i / 7) for i in range(60)) + "]\n",
+        "nested embedded weights": "W = [[" + ", ".join(str(i / 3) for i in range(30)) + "], [" + ", ".join(str(-i / 3) for i in range(30)) + "]]\n",
+        "weights in a dict": "W = {" + ", ".join(f"'k{i}': {i / 5}" for i in range(60)) + "}\n",
+        "encoded weights": "B = '" + "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789+/" * 8 + "'\n",
+        "a loader imported by name": "from numpy import load\nw = load('w.npy')\n",
+        "a fromstring loader": "import numpy as np\nw = np.fromstring('1 2 3', sep=' ')\n",
+        "a fit at judge time": "import numpy as np\nc = np.polyfit([1, 2, 3], [1, 2, 3], 1)\n",
+        "a learning-rate variable": "learning_rate = 0.1\n",
+        "a model-weights variable": "model_weights = 1\n",
+        "a hidden layer": "hidden_layer = 1\n",
+        "a camel-case trainer": "class NetTrainer:\n    pass\n",
+        "a loss variable": "loss = 1\n",
         "a weights loader": "import numpy as np\nw = np.load('w.npy')\n",
         "a trainer keyword": "def f(x):\n    return g(x, epochs=3)\n",
         "a weights variable": "import numpy as np\nweights = np.zeros(3)\n",
-        "embedded bytes": f"B = {b'x' * 200!r}\n",
+        "embedded bytes": f"B = {bytes(range(33, 253))!r}\n",
     }
     for label, source in planted.items():
         assert learned_component_findings(source), label
     assert learned_component_findings("import numpy as np\n\n\ndef f(x):\n    return np.sqrt(x)\n") == []
+    assert learned_component_findings("import numpy as np\n\nz = np.array([1.0, -2.0, 3.0])\nm = np.average(z)\n") == []  # a short signed literal is fine
