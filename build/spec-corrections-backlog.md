@@ -1283,3 +1283,20 @@ the region instead, same total size (200 starts × 1,000 steps = 200,000 samples
 4. **The module-audit script** (`gvm-build/scripts/_module_audit.py`) looks for `scripts/_shared/*.py`, which this project does not have; it was not applicable and the audit was done by hand-run greps as at Phase 3.
 
 *Where recorded:* `REMEMBER.md` §3 (P6-C01 notes).
+
+### A39 — code-review-003: the exception test is a joint 90% region; other spec text to correct (2026-10-22)
+
+**In plain words:** the independent review of Phase 4 found that the spec's "a miss is any quantity outside its own 90% range" makes a perfectly honest model look overconfident when it predicts several quantities (10% per quantity becomes about 19% with two and 34% with four). The owner ruled (2026-10-22) that a miss means *the whole answer falls outside the joint 90% region*, so an honest model misses 10% of the time however many quantities it states. The spec text below must be corrected at the next design review; the code was changed first because the review found it wrong.
+
+1. **Joint region (judge ADR-J2, ADR-J4, ADR-J7; TC-JU4-*, TC-JU8-*):** a trial is covered at level L when sqrt(Σ((y−μ)/σ)²) ≤ sqrt(χ²ᵈ(L)) (`judge/_chi2.py`, bisection on the regularised incomplete gamma, pure `math`). The limit depends on the number of quantities d (d=1: 1.645; d=2: 2.146; d=4: 2.790 at 90%). The per-quantity rates are kept in calibration as `per_dimension` for diagnosis only. The sharpness width (2·1.6449·σ) is unchanged.
+2. **Chart (judge §5, reporting):** the exception chart's `band_hi` is now the joint limit / √d × RMS(σ), and `outcome_distance` is RMS(y−μ), so "above the band" is exactly "outside the joint region" in the chart's own units; the spec's "2·1.6449·σ in the normalised distance" no longer applies for d > 1.
+3. **Hedge flag (amends A32 item 3):** each exception entry's low-side flag uses the mean 90% width at *its own* step (step 1 or the judged step), not the judged step's width for both.
+4. **Bands (ADR-J4):** `Bands.p` must be exactly 0.1 — the exception test is the 90% region, so a miss has probability 0.1; any other p is refused at the door.
+5. **Table units (amends A30):** the judge's `RegionClimatology` must be in the judge's units (divided by the world's scale vector). `harness.climatology.judge_tables(table, region_names, scale)` now requires the scale and divides; `measure_invariant_bins` still takes RAW states (the conserved quantity is a function of the world's own units). Owed in P6-C01: pass `world.scale` when building the judge input.
+6. **`Verdict` lives in `judge.verdict`**, not `judge.types`; `TaskSpec` carries name, kind, tolerance and horizon only. The implementation guide's import lines should say so.
+7. **Trust-horizon cap** now uses the one shared `evaluation_step(switch, horizon)` (no behaviour change).
+8. **Citation:** the "same metric as the worlds" claim is worlds spec §4 (TC-WD6-02); `judge.distance.rms_distance` of scaled arrays now has a cross-module test against `worlds.base.distance`.
+
+**Deferred door-tightening (REMEMBER §3, P5–P6):** require the horizon-step-1 entry in each exception/trials pair, require `steps` to equal `range(1, H+1)`, check tolerance consistency across blocks, handle a zero-error chart; one shared pipeline helper across four test files; rename `task_region_step`; a shape variant with 3 regions and d=4; mixed-element list tests; the `io.open` guard case.
+
+*Where recorded:* `code-review/code-review-003.html`, commits 8d5689f, f0f9927, ff692db.
