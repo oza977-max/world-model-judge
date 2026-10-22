@@ -109,11 +109,11 @@ climatology table and measured bins) and P4-C06 (blindness and purity gates, fiv
 done and reviewed to zero Critical/Important each; the Phase 4 wiring audit passed (matrix rows owed,
 backlog A38). The Phase 4 independent code review (code-review-003, 2026-10-22: Merge with caveats) is
 closed — its Critical (the exception test now uses the joint 90% region, backlog A39) and Important
-findings are fixed. Next: Phase 5 (reporting) and Phase 6 (full wiring). Two owner decisions are open before the freeze: D19 (the build-time held-out calibration
-look) and **D21 (the climatology-agreement test cannot be passed by a perfect model where it runs —
-`build/measurements/p4-c05b-d15.md`)**. Round 10 design review closed 2026-09-28. Owner decisions D17/D18
+findings are fixed. Next: Phase 5 (reporting) and Phase 6 (full wiring). Owner decisions D19 (disclosed; prediction unchanged) and D21 (agreement mark measured
+from the true world: pendulum 1.63; the test is weak and its statistic goes to the next design review)
+were settled on 2026-10-22, after an independent fix-check of code-review-003. Round 10 design review closed 2026-09-28. Owner decisions D17/D18
 were applied on 2026-10-04 (`subsample_pairs` now 100,000). The freeze
-(`prereg/FREEZE`) has not been made; D19 must be settled first. NF-1 is narrowed:
+(`prereg/FREEZE`) has not been made; the next design review must first ratify backlog A39. NF-1 is narrowed:
 byte-identity holds on the same CPU family and library build (backlog A29) — see
 `REMEMBER.md` §3 and §7. `HANDOVER.md` is a historical record
 up to 2026-08-31.

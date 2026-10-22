@@ -1305,6 +1305,12 @@ the region instead, same total size (200 starts × 1,000 steps = 200,000 samples
 12. **Overflow counts as a miss.** A miss too large to represent in its stated sizes (ratio above about 1e308) is held at the largest float and counted as a miss. Before, the judge refused the whole input.
 13. **Not fixed, by owner choice:** `_is_int`/`_is_num` accept 2**63 (int64 tops out at 2**63−1). The per-quantity diagnostic and the sharpness width use the spec's rounded 1.6449, while the d = 1 joint line is the exact 1.644854; about 1 trial in 100,000 can differ.
 
+**D21 (2026-10-22, owner-decided; `build/measurements/d21-pass-mark.md`):**
+
+14. **Agreement mark per world (judge ADR-J5, `prereg/thresholds.json`):** `agreement_threshold` is now a `{world: mark}` map: pendulum 1.63 (1.10 × the largest of 100 perfect-model scores), predator–prey 1.0 (inert, because there is no switch step anywhere). The judge's `Thresholds` still takes one number per world's input.
+15. **Tables (worlds §5):** one per region, 50 starts × 20,000 null-action steps (now the default), not one 200,000-step run nor 200 × 1,000.
+16. **The statistic needs replacing (next design review):** measured, mean |z| cannot tell a forecast frozen at its start (0.32–0.80) or one with 10% too much energy (0.84–1.50) from the truth (0.82–1.48). It rewards sitting near the middle of an energy level's spread of states. A candidate replacement asks "does the forecast keep the truth's energy level?". JU-10 sentence 10 discloses the weakness until then.
+
 **Deferred door-tightening (REMEMBER §3, P5–P6):** require the horizon-step-1 entry in each exception/trials pair, require `steps` to equal `range(1, H+1)`, check tolerance consistency across blocks, handle a zero-error chart; one shared pipeline helper across four test files; rename `task_region_step`; a shape variant with 3 regions and d=4; mixed-element list tests; the `io.open` guard case.
 
 *Where recorded:* `code-review/code-review-003.html`, commits 8d5689f, f0f9927, ff692db.
