@@ -100,15 +100,16 @@ src/wmj/                        the code: worlds, models, judge, harness, report
 tests/                          unit tests and gates
 ```
 
-Build state (2026-10-14): Phases 1–4 built. Phase 3 (the models and the
+Build state (2026-10-22): Phases 1–4 built. Phase 3 (the models and the
 harness around them): P3-C01 to P3-C10, its wiring audit (passed) and its independent
 code review (code-review-002: 0 Critical, 6 Important, all fixed). Phase 4 (the judge):
 P4-C01 (the input and verdict doors), P4-C02 (skill), P4-C03 (calibration, sharpness), P4-C04
 (exceptions), P4-C05 (error curve, climatology agreement, trust horizons), P4-C05b (the harness's
 climatology table and measured bins) and P4-C06 (blindness and purity gates, five review passes) are
 done and reviewed to zero Critical/Important each; the Phase 4 wiring audit passed (matrix rows owed,
-backlog A38). Next: the Phase 4 independent code review, then Phase 5 (reporting) and Phase 6 (full
-wiring). Two owner decisions are open before the freeze: D19 (the build-time held-out calibration
+backlog A38). The Phase 4 independent code review (code-review-003, 2026-10-22: Merge with caveats) is
+closed — its Critical (the exception test now uses the joint 90% region, backlog A39) and Important
+findings are fixed. Next: Phase 5 (reporting) and Phase 6 (full wiring). Two owner decisions are open before the freeze: D19 (the build-time held-out calibration
 look) and **D21 (the climatology-agreement test cannot be passed by a perfect model where it runs —
 `build/measurements/p4-c05b-d15.md`)**. Round 10 design review closed 2026-09-28. Owner decisions D17/D18
 were applied on 2026-10-04 (`subsample_pairs` now 100,000). The freeze
