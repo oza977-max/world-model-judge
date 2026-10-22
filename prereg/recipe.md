@@ -286,3 +286,8 @@ reason. Earlier versions stay readable in git history.
   "Units and loss scaling" — they were pinned in code and the build notes but not
   here, so a re-implementer from this file alone would have trained different
   weights. (4) The seed-purpose list gained `"heldout-kick"`. Unchanged: every key.
+- **2026-10-22 — a disclosure in `prereg/prediction.md`, before the freeze and
+  before any model was judged** (owner decision D19). It records that the
+  build-time held-out calibration was seen (direct close to honest, the
+  ensemble too narrow; one-step, training region), and that the prediction was
+  deliberately left unchanged. No key in this file changed.

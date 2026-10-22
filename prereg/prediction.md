@@ -64,3 +64,27 @@ no longer described the recipe it was written against. The owner chose to
 keep the prediction and restate why. No model had been trained, and no
 result of any kind existed, when this was written — which is what keeps it
 a prediction.
+
+## Disclosure (2026-10-22 — before the freeze, before any model was judged; owner decision D19)
+
+**In plain words:** while building the ensemble, we looked at how honest both
+models' error bars were on the held-out training pairs, and the answer went
+against this prediction. We are saying so here, and we are leaving the
+prediction exactly as it was.
+
+What was seen (`build/measurements/p3-c04-model-b-real-run.md`, 2026-10-04):
+on the 10,000 held-out pairs, which are one-step and from the training region
+(not evaluation trials), **direct's error bars were close to honest** (z
+standard deviation 0.80–0.98; 82–90% of truths inside one error bar), and
+**the ensemble's were too narrow** (z standard deviation up to 3.8 on
+predator–prey; 22–48% inside one error bar on the quantities it
+under-states). That is the opposite of the prediction above, measured on
+the easiest ground: one step, inside the training region.
+
+What we did: nothing. No model, recipe key or threshold was changed because
+of it, and the prediction is deliberately **not** revised. Revising it now
+would turn a prediction into a description of something already seen. The
+prediction is about out-of-region trials and longer horizons, which nobody
+has looked at. If the judge confirms the held-out picture there too, the
+prediction is published as contradicted (MU-6). The verdict's list of the
+judge's own limits also records that this look happened.
