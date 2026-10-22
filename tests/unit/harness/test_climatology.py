@@ -344,10 +344,10 @@ def test_a_table_from_a_non_training_region_uses_that_regions_own_seed_stream():
     assert t["bins"][4]["mean"] == pytest.approx(inside.mean(axis=0).tolist(), rel=1e-12)
 
 
-def test_the_spec_sizes_are_the_defaults_and_the_edges_are_linearly_interpolated_quantiles():
+def test_the_d21_sizes_are_the_defaults_and_the_edges_are_linearly_interpolated_quantiles():
     from wmj.harness import climatology as module
 
-    assert (module.N_BINS, module.MIN_SAMPLES_PER_BIN, module.DEFAULT_N_STARTS * module.DEFAULT_STEPS_PER_START) == (16, 50, 200_000)
+    assert (module.N_BINS, module.MIN_SAMPLES_PER_BIN, module.DEFAULT_N_STARTS, module.DEFAULT_STEPS_PER_START) == (16, 50, 50, 20_000)
     # conserved values exactly 0..159: the k/16 quantile is at position 159 k / 16 = 9.9375 k (linear interpolation between neighbours)
     world = ToyWorld(dynamics=lambda states, actions: np.column_stack([np.arange(len(states), dtype=float), states[:, 1]]))
     t = _table(world, steps_per_start=1, min_samples=1)

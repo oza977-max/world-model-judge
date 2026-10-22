@@ -1,15 +1,16 @@
 """wmj.judge.limitations — what this judge says about itself, word for word (JU-10, ADR-J7).
 
 In plain words: a verdict that only reports good news is a sales pitch. Every verdict
-this judge issues carries the same nine plain sentences about what it cannot do —
+this judge issues carries the same ten plain sentences about what it cannot do —
 that it validates the middle of the distribution and not the extremes, that a toy
 world validates the harness and not a real model, that the judge's author also wrote the
 models (blind is not independent), that it borrows banking's backtesting but not its
 power to force a stop, that its thresholds are modelling decisions, that the worlds hold
 no genuine surprises, that "control" and "planning" grade passive prediction, not
 decisions, that the 90% region reads each model's stated spreads as independent, and that the author
-looked at both practice models' held-out calibration before the judged run (owner decision D19).
-The last two were added after code-review-003 and its fix-check (backlog A39). They are fixed text: no formatting, no parameters, no softening per run.
+looked at both practice models' held-out calibration before the judged run (owner decision D19), and
+that the climatology-agreement test is weak (owner decision D21). The last three were added after
+code-review-003, its fix-check and the D21 measurement (backlog A39). They are fixed text: no formatting, no parameters, no softening per run.
 A verdict may add detail elsewhere, never fewer or reworded versions of these.
 """
 
@@ -25,6 +26,7 @@ JU10_DISCLOSURES: tuple[str, ...] = (
     "'Control' and 'planning' name the tolerance regime used to grade a passive prediction, not a closed-loop decision. This judge does not test whether a model can choose its own actions to reach a goal — the actions it is graded against were chosen by someone else.",
     "The 90% region takes each model at its word: its stated spreads are read as independent of one another, because the uncertainty format has no way to say how errors move together. A model whose errors are correlated misses that region more often than one time in ten even when each quantity's spread is honest, and so reads as somewhat overconfident; the per-quantity coverage is reported alongside so a reader can see it.",
     "Before the judged run, the author looked at both practice models' calibration on held-out training pairs (one step, inside the training region): the self-predicted error bar was close to honest and the ensemble's too narrow, the opposite of the pre-registered prediction. The prediction was deliberately left unchanged, and the look is recorded in prereg/prediction.md.",
+    "The climatology-agreement test's pass mark was set from the true world's own measured scores, because the reference table is itself sampled and even the truth scores near, not at, the ideal. Measured before any model was judged, the test could not tell a forecast frozen at its start, or one with 10% too much energy, from the truth: it catches only forecasts that leave the world's typical states altogether.",
 )
 
 NOT_TESTED: tuple[str, ...] = (

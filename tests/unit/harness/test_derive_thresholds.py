@@ -53,9 +53,9 @@ def test_sharpness_hedge_threshold_is_the_world_scale_vector():
     assert np.array_equal(sharpness_hedge_threshold(scale), scale)
 
 
-def test_agreement_threshold_is_one():
-    # Climatology agreement holds when standardised deviation |z| <= 1.
-    assert AGREEMENT_THRESHOLD == 1.0
+def test_the_agreement_mark_is_the_measured_d21_value_per_world():
+    # D21: 1.10 x the largest of 100 perfect-model scores, rounded up (pendulum); predator-prey is inert at 1.0
+    assert AGREEMENT_THRESHOLD == {"lv": 1.0, "pendulum": 1.63}
 
 
 def test_build_thresholds_has_both_worlds_and_the_bands():
@@ -63,7 +63,7 @@ def test_build_thresholds_has_both_worlds_and_the_bands():
     assert t["bands"]["green"] == [12, 29]
     assert set(t["sharpness_hedge_threshold"]) == {"lv", "pendulum"}
     assert t["sharpness_hedge_threshold"]["lv"] == [4.0, 2.5]
-    assert t["agreement_threshold"] == 1.0
+    assert t["agreement_threshold"] == {"lv": 1.0, "pendulum": 1.63}
 
 
 def test_write_thresholds_is_byte_reproducible(tmp_path):

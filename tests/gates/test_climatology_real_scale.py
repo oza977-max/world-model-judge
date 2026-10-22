@@ -43,9 +43,9 @@ def built(request):
 def test_the_real_table_has_sixteen_well_populated_open_ended_ranges_the_judge_accepts(built):
     _, world, _, table = built
     bins = table["bins"]
-    assert len(bins) == 16 and table["reference_run_steps"] == 200_000
+    assert len(bins) == 16 and table["reference_run_steps"] == 1_000_000
     assert bins[0]["invariant_range"][0] == -np.inf and bins[-1]["invariant_range"][1] == np.inf
-    assert min(b["n_samples"] for b in bins) >= 50 and sum(b["n_samples"] for b in bins) == 200_000
+    assert min(b["n_samples"] for b in bins) >= 50 and sum(b["n_samples"] for b in bins) == 1_000_000
     assert all(min(b["sd"]) > 0.0 for b in bins)
     names = ("training", *(o.region_name for o in world.regions().out_regions))
     assert [t.region_name for t in judge_tables(table, names, world.scale)] == list(names)

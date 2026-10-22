@@ -309,15 +309,15 @@ def test_the_per_trial_arrays_must_exist_and_have_equal_lengths(field):
 # --- TC-JU10-01: the fixed text cannot be altered ------------------------------------------------
 
 
-def test_tc_ju10_01_every_verdict_carries_the_nine_disclosures_verbatim():
-    assert build().limitations == JU10_DISCLOSURES and len(build().limitations) == 9
+def test_tc_ju10_01_every_verdict_carries_the_ten_disclosures_verbatim():
+    assert build().limitations == JU10_DISCLOSURES and len(build().limitations) == 10
 
 
 def test_the_limitations_and_not_tested_text_is_checked_word_for_word_on_direct_construction():
     good = dict(world="lv", **blocks_copy())
     Verdict(**good, not_tested=NOT_TESTED, limitations=JU10_DISCLOSURES)
     for bad in (None, (), JU10_DISCLOSURES[:-1], JU10_DISCLOSURES[::-1],
-                JU10_DISCLOSURES[:8] + (JU10_DISCLOSURES[8] + " ",),
+                JU10_DISCLOSURES[:9] + (JU10_DISCLOSURES[9] + " ",),
                 tuple(s.replace("middle", "tails") for s in JU10_DISCLOSURES)):
         with pytest.raises(VerdictIncompleteError, match="limitations"):
             Verdict(**{**good, **blocks_copy()}, not_tested=NOT_TESTED, limitations=bad)
@@ -342,7 +342,7 @@ def test_the_verdict_holds_its_own_copy_and_to_dict_returns_fresh_copies():
     out = verdict.to_dict()
     out["skill"]["per_task_region"][0]["crps"] = 5.0
     out["limitations"].append("extra")
-    assert verdict.skill["per_task_region"][0]["crps"] == 0.03 and len(verdict.limitations) == 9
+    assert verdict.skill["per_task_region"][0]["crps"] == 0.03 and len(verdict.limitations) == 10
     assert verdict.to_dict() != out
 
 
@@ -724,7 +724,7 @@ def test_iterators_cannot_smuggle_an_empty_limitations_or_not_tested_past_the_ch
     v = Verdict(world="lv", **blocks, not_tested=iter(NOT_TESTED), limitations=iter(JU10_DISCLOSURES))
     assert v.limitations == JU10_DISCLOSURES and v.not_tested == NOT_TESTED
     v2 = Verdict(world="lv", **blocks_copy(), not_tested=(x for x in NOT_TESTED), limitations=(x for x in JU10_DISCLOSURES))
-    assert len(v2.to_dict()["limitations"]) == 9
+    assert len(v2.to_dict()["limitations"]) == 10
     with pytest.raises(VerdictIncompleteError, match="limitations"):
         Verdict(world="lv", **blocks_copy(), not_tested=NOT_TESTED, limitations=iter(()))
 

@@ -2,8 +2,10 @@
 
 In plain words: the judge asks, past the point where nobody can promise the exact path, "does the
 model's guess still look like the world?". That needs a reference. This module builds it: it
-starts the true world from 200 seeded points spread across the training region, lets each run 1,000
-steps with no actions (200,000 samples in all), sorts every sample by the world's conserved
+starts the true world from 50 seeded points spread across a region (by default the training region;
+the judged run builds one table per region), lets each run 20,000 steps with no actions (1,000,000
+samples in all — owner decision D21: the spec's 200 x 1,000 was too short for even the true world to
+agree with it at a 5,000-step task's late steps), sorts every sample by the world's conserved
 quantity (energy, or the predator-prey "orbit number") and cuts them into sixteen bins holding
 equally many samples. For each range it records the typical state and how widely the states
 vary. The outermost bins are open-ended, so every possible value has a bin.
@@ -31,8 +33,10 @@ from wmj.harness.benchmarks import declared_regions, sample_region_starts
 from wmj.judge.types import ClimatologyBin, RegionClimatology
 from wmj.models.base import SeedSource
 
-DEFAULT_N_STARTS = 200
-DEFAULT_STEPS_PER_START = 1_000
+# D21 (2026-10-22): long runs, so the table reaches the late states a 5,000-step task visits; the spec's
+# 200 x 1,000 made even the true world fail the agreement test (build/measurements/d21-pass-mark.md)
+DEFAULT_N_STARTS = 50
+DEFAULT_STEPS_PER_START = 20_000
 N_BINS = 16
 MIN_SAMPLES_PER_BIN = 50
 BIN_METHOD = "equal-population"

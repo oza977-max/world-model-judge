@@ -1,5 +1,8 @@
 {
-  "agreement_threshold": 1.0,
+  "agreement_threshold": {
+    "lv": 1.0,
+    "pendulum": 1.63
+  },
   "bands": {
     "amber_outer": [
       8,

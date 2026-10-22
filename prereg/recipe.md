@@ -291,3 +291,19 @@ reason. Earlier versions stay readable in git history.
   build-time held-out calibration was seen (direct close to honest, the
   ensemble too narrow; one-step, training region), and that the prediction was
   deliberately left unchanged. No key in this file changed.
+- **2026-10-22 — one open revision to `thresholds.json`, before the freeze and
+  before any model was judged** (owner decision D21; measurement
+  `build/measurements/d21-pass-mark.md`, whose recipe was committed in 4bd2728
+  before anything was measured). `agreement_threshold` changes from one number,
+  1.0, to one per world: **pendulum 1.63**, predator–prey 1.0 (inert, because no
+  region or task of predator–prey has a switch step, so the test never runs there).
+  Why: in the one place the test runs (pendulum `out-near-inverted`, control task,
+  steps 4,750–5,000), the true world itself scores 0.82–1.48 against tables built
+  from that region's own long runs (50 starts × 20,000 steps), so a mark of 1.0
+  would fail a perfect model. The mark is 1.10 × the largest of the 100 perfect-model
+  scores, rounded up. Disclosed: the same measurement found that the test cannot
+  tell a forecast frozen at its start (0.32–0.80) or one with 10% too much energy
+  (0.84–1.50) from the truth. A replacement statistic goes to the next design
+  review. The tables the judged run uses must be built per region with 50 × 20,000,
+  not the 200 × 1,000 default. Unchanged: every other threshold and every recipe key.
+

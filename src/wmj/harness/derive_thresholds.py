@@ -35,9 +35,14 @@ import numpy as np
 from wmj.harness.serialize import canonical_serialize
 from wmj.worlds import lv, pendulum
 
-# Climatology agreement holds when the standardised deviation |z| <= 1
-# (judge spec, conditioned-climatology section). A constant, not world-specific.
-AGREEMENT_THRESHOLD = 1.0
+# Climatology agreement holds when the mean standardised deviation |z| is at or below this mark.
+# The spec's 1.0 was set by reasoning; measured, the true world itself scores up to 1.48 in the one
+# place the test runs, so owner decision D21 (2026-10-22) set each world's mark from a perfect model's
+# own scores: 1.10 x the largest of 100 (20 tables x 5 trial sets), rounded up
+# (build/measurements/d21-pass-mark.md, recipe committed before measuring). Predator-prey has no
+# switch step anywhere, so its test never runs and its 1.0 is inert. The same measurement found the
+# test cannot tell a frozen forecast or a 10% energy error from the truth (disclosed in JU-10).
+AGREEMENT_THRESHOLD = {"lv": 1.0, "pendulum": 1.63}
 
 # The pinned evaluation test (judge ADR-J4): exact two-sided binomial at these.
 _N = 200

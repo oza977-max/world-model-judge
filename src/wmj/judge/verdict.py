@@ -3,7 +3,7 @@
 In plain words: the verdict is the product. It has nine required groups — skill scores,
 error against the world's own drift, calibration and sharpness, exception counts against the
 pre-registered bands, the per-trial points behind those counts, the climatology check, the
-trust horizons, what was never tested, and the nine limitations. This module makes a
+trust horizons, what was never tested, and the ten limitations. This module makes a
 `Verdict` that cannot be built unless all nine are present: it refuses (raises) if any
 group is missing, empty or null, if any entry lacks one of its required fields or carries one
 the spec does not define (so no identity field can ride along), if a number is not finite,
@@ -439,7 +439,7 @@ class Verdict:
         limitations = tuple(self.limitations) if self.limitations is not None else None  # one pass: iterators too
         not_tested = tuple(self.not_tested) if self.not_tested is not None else None
         if limitations != JU10_DISCLOSURES:
-            raise _fail("limitations must be the nine JU-10 disclosures, verbatim and in order (ADR-J7)")
+            raise _fail("limitations must be the ten JU-10 disclosures, verbatim and in order (ADR-J7)")
         if not_tested != NOT_TESTED:
             raise _fail("not_tested must be the fixed not-tested list (judge spec §5)")
         object.__setattr__(self, "limitations", JU10_DISCLOSURES)  # the constants themselves, not the caller's objects
