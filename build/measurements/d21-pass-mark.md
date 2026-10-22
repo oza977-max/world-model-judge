@@ -40,6 +40,38 @@ are built from the truth alone.
    We report whether each lands above the mark. If one does not, the report says the test cannot
    tell that bad forecast from the truth in that cell. The mark is not changed to make it work.
 
-## Results
+## Results (measured 2026-10-22, after the recipe above was committed in 4bd2728)
 
-(Measured after this recipe was committed; see below.)
+Run: `PYTHONPATH=src:. OMP_NUM_THREADS=1 python build/measurements/d21-reproduce.py` (169 s). The script
+checks that its shortcut bin lookup and its score equal the harness's own `measure_invariant_bins` and
+`truth_mean_abs_z` exactly on the first combination.
+
+**Cells.** The test runs in exactly one cell: pendulum, `out-near-inverted`, `dp-control`, switch step
+4,750, window 4,750–5,000. Predator–prey has no switch step in any region or task, so its mark stays
+1.0 and is inert.
+
+**The perfect model (the true world), 100 scores** (20 tables × 5 trial sets of 200 kicked trials):
+
+| | min | median | 95th percentile | max |
+|---|---|---|---|---|
+| true world | 0.821 | 1.049 | 1.371 | 1.479 |
+
+**The mark, by the pinned rule:** 1.10 × 1.4785 = 1.6263, rounded up to **1.63**.
+
+**The bad-forecast check (step 6), on the same 100 combinations:**
+
+| bad forecast | min | median | max | above 1.63? |
+|---|---|---|---|---|
+| persistence (start state held) | 0.323 | 0.459 | 0.796 | never |
+| true path, energy +10% (checked: exactly +10% of \|E\|) | 0.839 | 1.068 | 1.497 | never |
+
+**In plain words — what this shows:** the measured mark does what it was asked to: the true world never
+fails it. But neither plainly wrong forecast fails it either. A forecast that freezes the pendulum at its
+start scores *better* than the truth (0.46 against 1.05), and one with 10% too much energy is
+indistinguishable from the truth (1.07 against 1.05). The statistic, mean |state − typical state for
+this energy| in typical spreads, rewards forecasts that sit near the middle of the energy level's spread
+of states. A frozen state is a perfectly ordinary state of its energy, so it is not caught. And the
+spread of states at one energy level is so wide that a 10% energy error moves the score by less than the
+table-to-table noise. **As specified, the test cannot tell these bad forecasts from the truth in the one
+place it runs.** Following the recipe, the mark has not been changed to make it work; the finding goes
+to the owner.
