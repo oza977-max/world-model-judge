@@ -145,7 +145,7 @@ def test_a_bin_with_no_spread_in_some_quantity_is_refused():
 
 def test_judge_tables_are_accepted_by_the_judge_for_every_region_name_and_carry_the_same_bins():
     t = _table()
-    tables = judge_tables(t, ("training", "out-of-range"))
+    tables = judge_tables(t, ("training", "out-of-range"), np.ones(2))
     assert [x.region_name for x in tables] == ["training", "out-of-range"]
     assert all(len(x.bins) == 16 and x.bins[0].invariant_lo == -np.inf and x.bins[-1].invariant_hi == np.inf for x in tables)
     assert tables[0].bins[3].mean.tolist() == t["bins"][3]["mean"] and tables[0].bins[3].n_samples == t["bins"][3]["n_samples"]
@@ -260,7 +260,7 @@ def test_the_table_cannot_be_written_by_the_projects_serializer_until_its_open_e
     assert safe["bins"][0]["invariant_range"][0] is None and safe["bins"][-1]["invariant_range"][1] is None
     assert safe["bins"][3]["invariant_range"] == t["bins"][3]["invariant_range"]
     canonical_serialize(safe)  # accepted
-    a, b = judge_tables(t, ("r",))[0], judge_tables(safe, ("r",))[0]
+    a, b = judge_tables(t, ("r",), np.ones(2))[0], judge_tables(safe, ("r",), np.ones(2))[0]
     assert [(x.invariant_lo, x.invariant_hi, x.n_samples) for x in a.bins] == [(x.invariant_lo, x.invariant_hi, x.n_samples) for x in b.bins]
     assert t["bins"][0]["invariant_range"][0] == -np.inf  # the original table is untouched
 
@@ -389,3 +389,50 @@ def test_a_small_but_real_spread_just_above_the_floor_is_accepted():
             return RegionSpec(np.array([[0.0, 1.0], [5.0, 5.0 + 1e-6]]), np.array([[-1.0, 1.0]]), ())
 
     assert _table(Thin())["n_bins"] == 16  # spread about 1e-7 of the scale: tiny, but a million times the floor
+
+
+def test_the_judge_tables_are_in_the_judges_units_the_worlds_scale_divides_every_mean_and_spread():
+    t = _table()
+    scale = np.array([2.0, 4.0])
+    scaled = judge_tables(t, ("r",), scale)[0]
+    plain = judge_tables(t, ("r",), np.ones(2))[0]
+    for a, b in zip(scaled.bins, plain.bins, strict=True):
+        assert a.mean.tolist() == pytest.approx((b.mean / scale).tolist(), rel=1e-15) and a.sd.tolist() == pytest.approx((b.sd / scale).tolist(), rel=1e-15)
+    assert scaled.bins[3].mean.tolist() == pytest.approx((np.array(t["bins"][3]["mean"]) / scale).tolist(), rel=1e-15)
+    assert t["bins"][3]["mean"] == judge_tables(t, ("r",), np.ones(2))[0].bins[3].mean.tolist()  # the table itself is not touched
+
+
+def test_the_scale_is_required_and_must_be_one_positive_finite_number_per_quantity():
+    t = _table()
+    with pytest.raises(TypeError):
+        judge_tables(t, ("r",))  # type: ignore[call-arg]
+    for bad in (np.ones(3), np.array([1.0, 0.0]), np.array([1.0, -1.0]), np.array([1.0, np.nan]), np.array([1.0, np.inf]), np.ones((2, 1))):
+        with pytest.raises(ClimatologyError, match="scale"):
+            judge_tables(t, ("r",), bad)
+
+
+def test_the_agreement_score_is_unchanged_by_the_choice_of_units_when_table_and_forecasts_are_scaled_together():
+    from tests.unit.judge._builders import judge_input_kwargs
+    from wmj.judge.climatology import compute_climatology
+    from wmj.judge.types import Forecasts, JudgeInput, RegionCurve, RegionLabel, TaskSpec
+
+    t = _table()
+    n, steps = 3, 6
+    rng = np.random.default_rng(4)
+    raw = np.stack([rng.uniform(0.0, 1.0, (n, steps)), rng.uniform(10.0, 20.0, (n, steps))], axis=-1)  # raw states, as the world produces them
+    bins = measure_invariant_bins(ToyWorld(), raw, t)
+    scores = {}
+    for scale in (np.ones(2), np.array([2.0, 4.0]), np.array([0.25, 8.0])):
+        kwargs = judge_input_kwargs()
+        kwargs.update(
+            predictions=Forecasts(raw / scale, np.ones((n, steps, 2))), outcomes=raw / scale,
+            persistence=Forecasts(raw / scale, np.ones((n, steps, 2))), linear=Forecasts(raw / scale, np.ones((n, steps, 2))),
+            region_labels=tuple(RegionLabel("training", None) for _ in range(n)),
+            divergence_curves=(RegionCurve("training", np.linspace(0.0, 1.0, steps + 1)),),
+            climatology=judge_tables(t, ("training",), scale), invariant_bins=bins, tasks=(TaskSpec("t", "control", 0.1, steps),),
+        )
+        th = kwargs["thresholds"]
+        kwargs["thresholds"] = type(th)(type(th.bands)(n=n, p=0.1, green=(1, 1), amber_outer=(0, 2)), np.ones(2), 1.0)
+        scores[tuple(scale)] = compute_climatology(JudgeInput(**kwargs))["per_task"][0]["agreement_mean_abs_z"]
+    assert truth_mean_abs_z(t, raw, bins, first_step=1) == pytest.approx(next(iter(scores.values())), rel=1e-12)
+    assert all(v == pytest.approx(next(iter(scores.values())), rel=1e-12) for v in scores.values())

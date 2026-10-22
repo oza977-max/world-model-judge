@@ -135,14 +135,24 @@ def serialisable_table(table: dict[str, Any]) -> dict[str, Any]:
     return dict(table, bins=bins)
 
 
-def judge_tables(table: dict[str, Any], region_names: tuple[str, ...]) -> tuple[RegionClimatology, ...]:
-    """The judge's input type: the one table, under each region's name."""
+def judge_tables(table: dict[str, Any], region_names: tuple[str, ...], scale: np.ndarray) -> tuple[RegionClimatology, ...]:
+    """The judge's input type: the one table, under each region's name, **in the judge's units**.
+
+    The table is built in the world's own units (rabbit counts, radians). The judge is handed forecasts and
+    outcomes already divided by the world's scale vector (backlog A30), so the table's typical state and spread
+    must be divided by the same vector or the agreement score compares numbers in different units. `scale` is
+    required for that reason: a caller cannot forget it. (`measure_invariant_bins` still takes RAW states —
+    the conserved quantity is a function of the world's own units.)"""
+    scale = np.asarray(scale, dtype=float)
+    width = len(table["bins"][0]["mean"])
+    if scale.shape != (width,) or not np.all(np.isfinite(scale)) or not np.all(scale > 0.0):
+        raise ClimatologyError(f"scale must be {width} positive finite numbers (one per quantity), got {scale.tolist()}")
     bins = tuple(
         ClimatologyBin(
             invariant_lo=-np.inf if entry["invariant_range"][0] is None else entry["invariant_range"][0],
             invariant_hi=np.inf if entry["invariant_range"][1] is None else entry["invariant_range"][1],
-            mean=np.array(entry["mean"]),
-            sd=np.array(entry["sd"]),
+            mean=np.array(entry["mean"]) / scale,
+            sd=np.array(entry["sd"]) / scale,
             n_samples=entry["n_samples"],
         )
         for entry in table["bins"]

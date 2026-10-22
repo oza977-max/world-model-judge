@@ -48,7 +48,7 @@ def test_the_real_table_has_sixteen_well_populated_open_ended_ranges_the_judge_a
     assert min(b["n_samples"] for b in bins) >= 50 and sum(b["n_samples"] for b in bins) == 200_000
     assert all(min(b["sd"]) > 0.0 for b in bins)
     names = ("training", *(o.region_name for o in world.regions().out_regions))
-    assert [t.region_name for t in judge_tables(table, names)] == list(names)
+    assert [t.region_name for t in judge_tables(table, names, world.scale)] == list(names)
 
 
 @pytest.mark.slow
@@ -96,14 +96,15 @@ def test_the_real_table_and_measured_bins_feed_the_judges_climatology_block(buil
     for step in range(steps):
         states = world.transition_batch(states, np.zeros((n, world.a)))
         history[:, step, :] = states
-    bins = measure_invariant_bins(world, history, table)
+    bins = measure_invariant_bins(world, history, table)  # raw states: the conserved quantity is a function of the world's own units
+    normalised = history / world.scale  # the judge is handed forecasts and outcomes divided by the world's scale vector (A30)
     kwargs = judge_input_kwargs()
     kwargs.update(
-        predictions=Forecasts(history, np.ones((n, steps, d))), outcomes=history,
-        persistence=Forecasts(history, np.ones((n, steps, d))), linear=Forecasts(history, np.ones((n, steps, d))),
+        predictions=Forecasts(normalised, np.ones((n, steps, d))), outcomes=normalised,
+        persistence=Forecasts(normalised, np.ones((n, steps, d))), linear=Forecasts(normalised, np.ones((n, steps, d))),
         region_labels=tuple(RegionLabel("training", None) for _ in range(n)),
         divergence_curves=(RegionCurve("training", np.linspace(0.0, 1.0, steps + 1)),),
-        climatology=judge_tables(table, ("training",)), invariant_bins=bins,
+        climatology=judge_tables(table, ("training",), world.scale), invariant_bins=bins,
         tasks=(TaskSpec("t", "control", 0.1, steps),),
     )
     kwargs["thresholds"] = type(kwargs["thresholds"])(
@@ -138,12 +139,13 @@ def test_the_truth_score_over_the_judges_window_equals_the_judges_own_agreement_
     bins = measure_invariant_bins(world, history, table)
     curve = np.zeros(steps + 1)
     curve[switch:] = 1.0  # the world's drift first exceeds the tolerance at step `switch`
+    normalised = history / world.scale  # the judge works in the world's normalised units (A30)
     kwargs = judge_input_kwargs()
     kwargs.update(
-        predictions=Forecasts(history, np.ones((n, steps, d))), outcomes=history,
-        persistence=Forecasts(history, np.ones((n, steps, d))), linear=Forecasts(history, np.ones((n, steps, d))),
+        predictions=Forecasts(normalised, np.ones((n, steps, d))), outcomes=normalised,
+        persistence=Forecasts(normalised, np.ones((n, steps, d))), linear=Forecasts(normalised, np.ones((n, steps, d))),
         region_labels=tuple(RegionLabel("training", None) for _ in range(n)),
-        divergence_curves=(RegionCurve("training", curve),), climatology=judge_tables(table, ("training",)),
+        divergence_curves=(RegionCurve("training", curve),), climatology=judge_tables(table, ("training",), world.scale),
         invariant_bins=bins, tasks=(TaskSpec("t", "control", 0.5, steps),),
         thresholds=Thresholds(Bands(n=n, p=0.1, green=(1, 1), amber_outer=(0, 2)), np.ones(d), 1.0),
     )
