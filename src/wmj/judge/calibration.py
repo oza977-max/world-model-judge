@@ -4,24 +4,27 @@ In plain words: a model states, for every number it predicts, a typical size of 
 mistake. If it is honest, then about half the time the true value should land inside the
 range "prediction ± 0.67 of that size", about 80% of the time inside ± 1.28, 90% inside
 ± 1.64, and 95% inside ± 1.96. This module counts how often that actually happens, at those
-four levels, for each task and region, at the task's own judging step. A trial counts as
-"covered" only if *all* its quantities are inside (that is what a user of the prediction
-experiences); the per-quantity rates are kept too, for diagnosis. It never combines this with
-the CRPS skill score — they answer different questions and stay separate (TC-JU4-01).
+four levels, for each task and region, at the task's own judging step. The claim is about the
+*whole answer*, all the quantities together, so a trial counts as "covered" when its misses,
+measured in the model's own stated sizes and combined over all the quantities, fall inside the
+joint region of that level (the chi-square region, `_chi2.py`: an honest model is covered 50%,
+80%, 90%, 95% of the time whatever the number of quantities — checking each quantity separately
+would call a perfectly honest 4-quantity model overconfident, code-review-003). The per-quantity
+rates are kept too, for diagnosis. It never combines this with the CRPS skill score — they
+answer different questions and stay separate (TC-JU4-01).
 """
 
 from __future__ import annotations
 
 import numpy as np
 
-from wmj.judge._normal import Z_50, Z_80, Z_90, Z_95
+from wmj.judge._chi2 import joint_limit
+from wmj.judge._normal import LEVELS, Z_VALUES
 from wmj.judge.climatology import evaluation_step, switch_step
+from wmj.judge.distance import scaled_radius
 from wmj.judge.errors import JudgeInputError
 from wmj.judge.regions import region_curve, region_rows, require_finite
 from wmj.judge.types import JudgeInput
-
-LEVELS = (0.5, 0.8, 0.9, 0.95)
-Z_VALUES = (Z_50, Z_80, Z_90, Z_95)
 
 
 def task_region_step(inp: JudgeInput, task, region: str) -> int:
@@ -44,11 +47,11 @@ def compute_calibration(inp: JudgeInput) -> dict:
             with np.errstate(over="ignore", invalid="ignore"):
                 miss = require_finite(np.abs(inp.outcomes[rows, index, :] - mean), "outcome minus predicted mean")
                 reach = [require_finite(z * spread, "a stated interval half-width") for z in Z_VALUES]
+            radius = scaled_radius(miss, spread)  # all the quantities together, in the model's own stated sizes
             joint, per_dimension = [], []
-            for reach_z in reach:
-                inside = miss <= reach_z  # closed: exactly z sigma away is still inside
-                joint.append(float(np.mean(np.all(inside, axis=1))))
-                per_dimension.append([float(v) for v in np.mean(inside, axis=0)])
+            for level, reach_z in zip(LEVELS, reach, strict=True):
+                joint.append(float(np.mean(radius <= joint_limit(miss.shape[1], level))))  # the joint region; the edge is inside
+                per_dimension.append([float(v) for v in np.mean(miss <= reach_z, axis=0)])  # each quantity on its own, for diagnosis
             entries.append(
                 {
                     "task": task.name,

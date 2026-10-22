@@ -16,7 +16,14 @@ import math
 import numpy as np
 import pytest
 
-from tests.unit.judge._builders import D, H, judge_input_kwargs, make_input
+from tests.unit.judge._builders import (
+    D,
+    H,
+    judge_input_kwargs,
+    make_input,
+    reduce_to_quantities,
+)
+from wmj.judge._chi2 import joint_limit
 from wmj.judge._normal import Z_90
 from wmj.judge.calibration import compute_calibration
 from wmj.judge.errors import JudgeInputError
@@ -41,6 +48,8 @@ from wmj.judge.verdict import (
 )
 
 # the builder's input: 3 + 3 trials, bands for n = 3: green [1, 1], amber-low [0, 0], amber-high [2, 2], red = 3
+LIMIT2 = joint_limit(2, 0.9)  # the joint 90% region of the builder's two quantities
+HALF2 = LIMIT2 / math.sqrt(2.0)  # the chart's per-quantity half-width factor at d = 2
 REGION_ROWS = {"training": [0, 1, 2], "out-of-range": [3, 4, 5]}
 
 
@@ -63,20 +72,33 @@ def _get(block, task, region, step):
     return next(e for e in block["per_task"] if (e["task"], e["region"], e["horizon_step"]) == (task, region, step))
 
 
+def _one_quantity_input(offsets, spread=1.0):
+    kwargs = reduce_to_quantities(judge_input_kwargs(), 1)
+    n = len(kwargs["region_labels"])
+    outcomes = np.zeros((n, H, 1))
+    for row, off in zip(REGION_ROWS["training"], offsets, strict=True):
+        outcomes[row] = off * spread
+    kwargs["outcomes"] = outcomes
+    kwargs["predictions"] = Forecasts(np.zeros((n, H, 1)), np.full((n, H, 1), spread))
+    return JudgeInput(**kwargs)
+
+
 def test_misses_are_counted_per_trial_with_the_edge_inside_and_just_past_it_outside():
-    just_out = float(np.nextafter(Z_90, 10.0))
-    inp = _input({"training": [(0.0, 0.0), (0.0, Z_90), (0.0, just_out)], "out-of-range": [(0.0, 0.0)] * 3})
-    exceptions, trials = compute_exceptions_and_trials(inp)
+    edge = joint_limit(1, 0.9)  # one quantity: the joint 90% region is the familiar +/- 1.6449
+    just_out = float(np.nextafter(edge, 10.0))
+    exceptions, trials = compute_exceptions_and_trials(_one_quantity_input([0.0, edge, just_out]))
     e = _get(exceptions, "lv-control", "training", 1)
     t = _get(trials, "lv-control", "training", 1)
-    assert t["is_exception"] == [False, False, True]  # exactly 1.6449 sigma is a hit; one ulp further is a miss
+    assert t["is_exception"] == [False, False, True]  # exactly on the edge is a hit; one ulp further is a miss
     assert e["observed"] == 1 and e["n_trials"] == 3
 
 
-def test_any_one_quantity_outside_makes_the_trial_a_miss_and_it_is_one_miss_not_two():
-    inp = _input({"training": [(2.0, 2.0), (2.0, 0.0), (0.0, 0.0)], "out-of-range": [(0.0, 0.0)] * 3})
+def test_the_miss_is_decided_on_all_the_quantities_together_not_one_by_one():
+    # two quantities: the joint 90% region reaches 2.146 stated sizes. One quantity at 2.0 (the other on target) is INSIDE it —
+    # checked alone it would sit outside the single-quantity 1.6449 — while both at 2.0 (radius 2.83) is a miss.
+    inp = _input({"training": [(2.0, 2.0), (2.0, 0.0), (3.0, 0.0)], "out-of-range": [(0.0, 0.0)] * 3})
     exceptions, trials = compute_exceptions_and_trials(inp)
-    assert _get(trials, "lv-control", "training", 1)["is_exception"] == [True, True, False]
+    assert _get(trials, "lv-control", "training", 1)["is_exception"] == [True, False, True]
     assert _get(exceptions, "lv-control", "training", 1)["observed"] == 2
 
 
@@ -125,17 +147,19 @@ def test_regions_are_counted_on_their_own_trials_only():
     assert _get(exceptions, "lv-control", "out-of-range", 1)["observed"] == 3
 
 
-def test_the_chart_arrays_are_distances_from_the_mean_and_the_intervals_radius_in_the_same_unit():
+def test_the_chart_arrays_are_distances_from_the_mean_and_the_regions_equivalent_radius_in_the_same_unit():
     inp = _input({"training": [(3.0, 4.0), (0.0, 0.0), (6.0, 8.0)], "out-of-range": [(0.0, 0.0)] * 3}, spread=2.0)
     t = _get(compute_exceptions_and_trials(inp)[1], "lv-control", "training", 1)
     assert t["outcome_distance"] == [pytest.approx(2.0 * math.sqrt((9 + 16) / 2)), 0.0, pytest.approx(2.0 * math.sqrt((36 + 64) / 2))]
-    assert t["band_hi"] == [pytest.approx(Z_90 * 2.0)] * 3  # RMS over quantities of z90 * sigma
+    assert t["band_hi"] == [pytest.approx(HALF2 * 2.0)] * 3  # sqrt(chi2 point / d) x RMS spread: where the rms distance of a trial on the region's edge sits
     assert t["band_lo"] == [0.0] * 3
     assert t["distance_unit"].startswith("rms-normalised")
     assert all(type(x) is float for x in t["outcome_distance"] + t["band_hi"]) and all(type(f) is bool for f in t["is_exception"])
+    # for equal stated sizes the rms distance exceeds band_hi exactly when the trial is a miss
+    assert [d > b for d, b in zip(t["outcome_distance"], t["band_hi"], strict=True)] == t["is_exception"]
 
 
-def test_the_interval_radius_is_the_rms_over_quantities_of_each_trials_own_spread():
+def test_the_chart_half_width_is_the_rms_over_quantities_of_each_trials_own_spread_times_the_region_factor():
     kwargs = judge_input_kwargs()
     n = len(kwargs["region_labels"])
     spread = np.ones((n, H, D))
@@ -143,8 +167,8 @@ def test_the_interval_radius_is_the_rms_over_quantities_of_each_trials_own_sprea
     kwargs["predictions"] = Forecasts(np.zeros((n, H, D)), spread)
     kwargs["outcomes"] = np.zeros((n, H, D))
     t = _get(compute_exceptions_and_trials(JudgeInput(**kwargs))[1], "lv-control", "training", 1)
-    assert t["band_hi"][0] == pytest.approx(Z_90 * math.sqrt((1 + 49) / 2))
-    assert t["band_hi"][1] == pytest.approx(Z_90)
+    assert t["band_hi"][0] == pytest.approx(HALF2 * math.sqrt((1 + 49) / 2))
+    assert t["band_hi"][1] == pytest.approx(HALF2)
 
 
 def test_tc_ju9_03_observed_is_the_sum_of_the_flags_for_every_entry_over_many_random_inputs():
@@ -307,17 +331,17 @@ def _stepwise_spread_input(spread_at_step):
     return JudgeInput(**kwargs)
 
 
-def test_each_task_and_region_is_flagged_from_its_own_judged_width_and_both_rows_of_a_task_agree():
-    # training: control is judged at step 1 (tight), planning at step 2 (wide); out-of-range: planning is judged at step 1 (tight)
-    inp = _stepwise_spread_input([0.5, 2.0, 0.5, 0.5, 0.5])  # widths 1.64 and 6.58 against a threshold of 3.25
+def test_each_row_is_flagged_from_the_width_at_its_own_step():
+    # spread 0.5 at every step except step 2, where it is 2.0: mean widths 1.64 (steps 1, 3...) and 6.58 (step 2), threshold 3.25
+    inp = _stepwise_spread_input([0.5, 2.0, 0.5, 0.5, 0.5])
     flags = {k: e["low_side_sharpness_flag"] for e in compute_exceptions_and_trials(inp)[0]["per_task"]
              for k in [(e["task"], e["region"], e["horizon_step"])]}
     assert flags == {
         ("lv-control", "out-of-range", 1): False,
         ("lv-control", "training", 1): False,
         ("lv-planning", "out-of-range", 1): False,
-        ("lv-planning", "training", 1): True,  # the step-1 row of a task carries that task's judged-step width (A32)
-        ("lv-planning", "training", 2): True,
+        ("lv-planning", "training", 1): False,  # an honest model whose uncertainty grows with the step is not 'padded' at step 1 (code-review-003)
+        ("lv-planning", "training", 2): True,  # ... but is at the later step where the ranges really are wide
     }
 
 
@@ -378,7 +402,7 @@ def test_huge_and_tiny_gaps_are_drawn_at_their_true_size_not_overflowed_or_squar
         t = _get(compute_exceptions_and_trials(JudgeInput(**kwargs))[1], "lv-control", "training", 1)
         assert t["is_exception"] == [True, True, True]
         assert t["outcome_distance"] == [pytest.approx(size, rel=1e-12)] * 3
-        assert t["band_hi"] == [pytest.approx(Z_90 * size / 3.0, rel=1e-12)] * 3
+        assert t["band_hi"] == [pytest.approx(HALF2 * size / 3.0, rel=1e-12)] * 3
 
 
 def test_a_band_range_with_no_amber_above_green_is_also_refused():
@@ -423,11 +447,11 @@ def test_the_mean_and_spread_are_read_at_the_entrys_own_step_not_another():
     kw = judge_input_kwargs(); n = len(kw["region_labels"])
     mean = np.zeros((n, H, D)); spread = np.ones((n, H, D))
     mean[:, 1, :] = 100.0; spread[:, 1, :] = 50.0          # step 2 only
-    out = np.zeros((n, H, D)); out[:, 1, :] = 100.0 + 60.0  # 60 from the step-2 mean: inside 1.645*50=82, outside 1.645*1
+    out = np.zeros((n, H, D)); out[:, 1, :] = 100.0 + 60.0  # 60 from the step-2 mean in both quantities: radius 1.7 stated sizes, inside 2.146
     kw.update(predictions=Forecasts(mean, spread), outcomes=out)
     inp = JudgeInput(**kw)
     t = _get(compute_exceptions_and_trials(inp)[1], "lv-planning", "training", 2)
-    assert t["is_exception"] == [False] * 3 and t["band_hi"] == [pytest.approx(Z_90 * 50.0)] * 3 and t["outcome_distance"] == [pytest.approx(60.0)] * 3
+    assert t["is_exception"] == [False] * 3 and t["band_hi"] == [pytest.approx(HALF2 * 50.0)] * 3 and t["outcome_distance"] == [pytest.approx(60.0)] * 3
 
 
 def test_a_row_with_one_huge_and_one_tiny_gap_is_drawn_at_its_true_size():
@@ -446,3 +470,43 @@ def test_a_row_with_gaps_near_the_largest_float_is_drawn_at_its_true_size_scaled
     kwargs.update(predictions=Forecasts(np.zeros((n, H, D)), np.full((n, H, D), 8e306)), outcomes=outcome)
     t = _get(compute_exceptions_and_trials(JudgeInput(**kwargs))[1], "lv-control", "training", 1)
     assert t["outcome_distance"] == [pytest.approx(1e308, rel=1e-12)] * 3
+
+
+# --- code-review-003 (Critical): an honest model must miss 10% whatever the number of quantities -------------------
+
+
+def _honest(n, d, rng, stated, true=1.0):
+    from wmj.judge.types import ClimatologyBin
+
+    mean = np.zeros((n, 1, d))
+    bins = (ClimatologyBin(-np.inf, np.inf, np.zeros(d), np.ones(d), 5),)
+    return JudgeInput(
+        world="w", dt=0.1, natural_cycle_length=None,
+        predictions=Forecasts(mean, np.full((n, 1, d), stated)), outcomes=rng.normal(size=(n, 1, d)) * true,
+        persistence=Forecasts(mean, np.ones((n, 1, d))), linear=Forecasts(mean, np.ones((n, 1, d))),
+        region_labels=tuple(RegionLabel("r", None) for _ in range(n)),
+        divergence_curves=(RegionCurve("r", np.array([0.0, 1.0])),),
+        climatology=(RegionClimatology("r", bins),), invariant_bins=np.zeros((n, 1), dtype=int),
+        tasks=(TaskSpec("t", "control", 0.1, 1),),
+        thresholds=Thresholds(Bands(n=n, p=0.1, green=(12, 29), amber_outer=(8, 35)), np.array([1.0] * d), 1.0),
+    )
+
+
+@pytest.mark.parametrize("d", [1, 2, 3, 4])
+def test_an_honest_model_misses_ten_percent_and_lands_green_at_its_false_alarm_rate_whatever_the_number_of_quantities(d):
+    rng = np.random.default_rng(20260825 + d)
+    results = [compute_exceptions_and_trials(_honest(200, d, rng, 1.0))[0]["per_task"][0] for _ in range(400)]
+    observed = np.array([r["observed"] for r in results])
+    assert abs(observed.mean() - 20.0) < 1.0, (d, observed.mean())  # was 38 at d = 2 and 69 at d = 4 under the per-quantity rule
+    green = sum(r["band"] == "green" for r in results) / len(results)
+    assert 0.94 <= green <= 0.99, (d, green)
+    assert sum(r["band"] == "red" for r in results) / len(results) < 0.01
+
+
+@pytest.mark.parametrize("d", [2, 4])
+def test_padded_and_overconfident_models_are_still_separated_at_every_d(d):
+    rng = np.random.default_rng(d)
+    over = compute_exceptions_and_trials(_honest(200, d, rng, 0.5))[0]["per_task"][0]
+    padded = compute_exceptions_and_trials(_honest(200, d, rng, 3.0))[0]["per_task"][0]
+    assert over["band"] == "red" and over["observed"] > 100 and over["low_side_sharpness_flag"] is False
+    assert padded["band"] == "red" and padded["observed"] < 8 and padded["low_side_sharpness_flag"] is True

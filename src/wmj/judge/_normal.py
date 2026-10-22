@@ -1,6 +1,6 @@
 """wmj.judge._normal — the standard normal CDF/PDF, vectorised.
 
-In plain words: CRPS and the calibration bands both need the normal
+In plain words: CRPS and the single-quantity intervals both need the normal
 distribution's cumulative curve (Phi) and its bell curve (phi). Python
 only gives us `math.erf` as a scalar function, so this module wraps it
 once to work on whole NumPy arrays at once (judge spec ADR-J1) — no
@@ -25,6 +25,10 @@ Z_50 = 0.6745
 Z_80 = 1.2816
 Z_90 = 1.6449
 Z_95 = 1.9600
+
+# The four central-interval levels and their multipliers, declared once (ADR-J2); calibration and the verdict door both read these.
+LEVELS = (0.5, 0.8, 0.9, 0.95)
+Z_VALUES = (Z_50, Z_80, Z_90, Z_95)
 
 
 def Phi(z: np.ndarray) -> np.ndarray:

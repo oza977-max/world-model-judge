@@ -11,6 +11,8 @@ power of two near the row's largest gap (an exact division), so gaps of 1e-170 o
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 
 from wmj.judge.regions import require_finite
@@ -42,3 +44,11 @@ def rms_distance(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     with np.errstate(over="ignore", invalid="ignore"):
         gap = require_finite(np.abs(a - b), "a gap between prediction and outcome")
     return rms_of_sizes(gap)
+
+
+def scaled_radius(miss: np.ndarray, spread: np.ndarray) -> np.ndarray:
+    """For each row, sqrt(sum over the quantities of (miss / stated spread)^2): the miss measured in the model's own stated sizes, all
+    quantities together. `miss` is non-negative. Computed through `rms_of_sizes`, so it neither vanishes nor overflows on extreme rows."""
+    with np.errstate(over="ignore", invalid="ignore"):
+        ratio = require_finite(miss / spread, "a miss measured in the model's own stated sizes")
+        return require_finite(math.sqrt(ratio.shape[-1]) * rms_of_sizes(ratio), "the joint miss radius")

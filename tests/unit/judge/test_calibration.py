@@ -11,7 +11,14 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tests.unit.judge._builders import D, H, judge_input_kwargs, make_input
+from tests.unit.judge._builders import (
+    D,
+    H,
+    judge_input_kwargs,
+    make_input,
+    reduce_to_quantities,
+)
+from wmj.judge._chi2 import joint_limit
 from wmj.judge._normal import Z_50, Z_80, Z_90, Z_95
 from wmj.judge.calibration import (
     LEVELS,
@@ -54,19 +61,30 @@ def _entry(block, task, region):
     return next(e for e in block["per_task"] if e["task"] == task and e["region"] == region)
 
 
+def _one_quantity(offsets, spread=1.0):
+    """One quantity per trial (the joint region is then just the familiar interval); trials 0-2 in 'training', 3-5 in 'out-of-range'."""
+    kwargs = reduce_to_quantities(judge_input_kwargs(), 1)
+    n = len(kwargs["region_labels"])
+    outcomes = np.zeros((n, H, 1))
+    for row, off in zip(REGION_ROWS["training"], offsets, strict=True):
+        outcomes[row] = off * spread
+    kwargs["outcomes"] = outcomes
+    kwargs["predictions"] = Forecasts(np.zeros((n, H, 1)), np.full((n, H, 1), spread))
+    return JudgeInput(**kwargs)
+
+
 def test_coverage_is_counted_exactly_at_each_level_with_the_edge_inside():
-    # one quantity is 0 (always inside); the other sits at 0, then 0.7 sigma, then exactly at 1.6449 sigma
-    inp = _input_with_offsets({"training": [(0.0, 0.0), (0.0, 0.7), (0.0, Z_90)], "out-of-range": [(0.0, 0.0)] * 3})
-    e = _entry(compute_calibration(inp), "lv-control", "training")
-    # levels 50/80/90/95: trial0 always in; trial1 (0.7) in at 80+ but not 50 (0.6745); trial2 (1.6449) in at 90 (closed edge) and 95
+    edge = joint_limit(1, 0.9)  # with one quantity the 90% region is the familiar +/- 1.6449 (to four decimals)
+    assert round(edge, 4) == Z_90
+    e = _entry(compute_calibration(_one_quantity([0.0, 0.7, edge])), "lv-control", "training")
+    # levels 50/80/90/95: trial0 always in; trial1 (0.7) in at 80+ but not 50 (0.6745); trial2 (exactly the 90% edge) in at 90 (closed) and 95
     assert e["coverage"] == [pytest.approx(1 / 3), pytest.approx(2 / 3), pytest.approx(1.0), pytest.approx(1.0)]
     assert e["levels"] == [0.5, 0.8, 0.9, 0.95] and e["n_trials"] == 3
 
 
 def test_a_point_just_outside_the_edge_is_not_covered():
-    just_out = np.nextafter(Z_90, 10.0)
-    inp = _input_with_offsets({"training": [(0.0, 0.0), (0.0, 0.0), (0.0, just_out)], "out-of-range": [(0.0, 0.0)] * 3})
-    e = _entry(compute_calibration(inp), "lv-control", "training")
+    just_out = float(np.nextafter(joint_limit(1, 0.9), 10.0))
+    e = _entry(compute_calibration(_one_quantity([0.0, 0.0, just_out])), "lv-control", "training")
     assert e["coverage"][2] == pytest.approx(2 / 3)  # at 90% the just-outside point is out
     assert e["coverage"][3] == pytest.approx(1.0)  # at 95% (1.96) it is in
 
@@ -329,3 +347,45 @@ def test_a_single_overflowing_half_width_among_finite_ones_is_still_refused():
     kwargs.update(predictions=Forecasts(np.zeros((n, H, D)), spread), outcomes=np.full((n, H, D), 1e300))
     with pytest.raises(JudgeInputError, match="overflow"):
         compute_calibration(JudgeInput(**kwargs))
+
+
+def _honest_input(n, d, rng, stated=1.0, true=1.0):
+    """n trials in one region, d independent quantities, outcomes drawn from exactly the distribution the model states (scaled by true/stated)."""
+    from wmj.judge.types import (
+        Bands,
+        ClimatologyBin,
+        RegionClimatology,
+        RegionCurve,
+        RegionLabel,
+        TaskSpec,
+        Thresholds,
+    )
+
+    mean = np.zeros((n, 1, d))
+    bins = (ClimatologyBin(-np.inf, np.inf, np.zeros(d), np.ones(d), 5),)
+    return JudgeInput(
+        world="w", dt=0.1, natural_cycle_length=None,
+        predictions=Forecasts(mean, np.full((n, 1, d), stated)), outcomes=rng.normal(size=(n, 1, d)) * true,
+        persistence=Forecasts(mean, np.ones((n, 1, d))), linear=Forecasts(mean, np.ones((n, 1, d))),
+        region_labels=tuple(RegionLabel("r", None) for _ in range(n)),
+        divergence_curves=(RegionCurve("r", np.array([0.0, 1.0])),), climatology=(RegionClimatology("r", bins),),
+        invariant_bins=np.zeros((n, 1), dtype=int), tasks=(TaskSpec("t", "control", 0.1, 1),),
+        thresholds=Thresholds(Bands(n=n, p=0.1, green=(n // 10 - n // 20, n // 10 + n // 20), amber_outer=(n // 20, n // 5)), np.ones(d), 1.0),
+    )
+
+
+@pytest.mark.parametrize("d", [1, 2, 3, 4])
+def test_an_honest_model_is_covered_at_the_nominal_rate_at_every_level_whatever_the_number_of_quantities(d):
+    # review code-review-003 (Critical): checking each quantity separately gave a perfectly honest 4-quantity model 63% coverage at '90%'
+    rng = np.random.default_rng(10 + d)
+    e = _entry(compute_calibration(_honest_input(20_000, d, rng)), "t", "r")
+    assert e["coverage"] == [pytest.approx(level, abs=0.012) for level in (0.5, 0.8, 0.9, 0.95)], d
+
+
+def test_a_model_whose_stated_sizes_are_too_small_is_undercovered_and_one_whose_are_too_large_is_overcovered_at_any_d():
+    for d in (2, 4):
+        rng = np.random.default_rng(d)
+        over = _entry(compute_calibration(_honest_input(5_000, d, rng, stated=0.5)), "t", "r")["coverage"]
+        under = _entry(compute_calibration(_honest_input(5_000, d, rng, stated=2.0)), "t", "r")["coverage"]
+        assert all(o < level - 0.1 for o, level in zip(over, (0.5, 0.8, 0.9, 0.95), strict=True))
+        assert all(u > level for u, level in zip(under, (0.5, 0.8, 0.9, 0.95), strict=True))

@@ -143,3 +143,15 @@ def test_rms_of_sizes_itself_refuses_infinity_and_nan():
     for bad in (np.inf, np.nan):
         with pytest.raises(JudgeInputError, match="overflow"):
             rms_of_sizes(np.array([[bad, 1.0]]))
+
+
+def test_the_scaled_radius_is_the_miss_in_the_models_own_stated_sizes_over_all_quantities_together():
+    from wmj.judge.distance import scaled_radius
+
+    miss = np.array([[3.0, 4.0], [0.0, 0.0], [2.0, 0.0]])
+    spread = np.array([[1.0, 1.0], [1.0, 1.0], [0.5, 9.0]])
+    assert scaled_radius(miss, spread).tolist() == [pytest.approx(5.0), 0.0, pytest.approx(4.0)]  # sqrt(3^2+4^2), 0, sqrt((2/0.5)^2+0)
+    assert scaled_radius(np.array([[1e200, 1e200]]), np.array([[1.0, 1.0]])).tolist() == [pytest.approx(math.sqrt(2) * 1e200, rel=1e-12)]
+    assert scaled_radius(np.array([[1e-170, 1e-170]]), np.array([[1e-170, 1e-170]])).tolist() == [pytest.approx(math.sqrt(2), rel=1e-12)]
+    with pytest.raises(JudgeInputError, match="overflow"):
+        scaled_radius(np.array([[1e300]]), np.array([[1e-300]]))

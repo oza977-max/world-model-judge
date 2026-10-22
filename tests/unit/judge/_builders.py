@@ -131,3 +131,22 @@ def good_blocks() -> dict:
 
 def blocks_copy() -> dict:
     return copy.deepcopy(good_blocks())
+
+
+def reduce_to_quantities(kwargs: dict, d: int) -> dict:
+    """The same input keeping only the first `d` quantities (arrays, climatology bins and hedge threshold all cut to match)."""
+    out = dict(kwargs)
+    for key in ("predictions", "persistence", "linear"):
+        f = kwargs[key]
+        out[key] = Forecasts(f.mean[..., :d], f.spread[..., :d])
+    out["outcomes"] = kwargs["outcomes"][..., :d]
+    out["climatology"] = tuple(
+        RegionClimatology(
+            t.region_name,
+            tuple(ClimatologyBin(b.invariant_lo, b.invariant_hi, b.mean[:d], b.sd[:d], b.n_samples) for b in t.bins),
+        )
+        for t in kwargs["climatology"]
+    )
+    th = kwargs["thresholds"]
+    out["thresholds"] = Thresholds(th.bands, th.sharpness_hedge_threshold[:d], th.agreement_threshold)
+    return out

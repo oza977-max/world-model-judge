@@ -18,6 +18,13 @@ from wmj.judge.regions import region_rows, require_finite
 from wmj.judge.types import JudgeInput
 
 
+def mean_width_90(inp: JudgeInput, rows: np.ndarray, step: int) -> float:
+    """Mean 90% interval width over the given trials and all quantities at one step (1-based): 2 x 1.6449 x the stated spread."""
+    with np.errstate(over="ignore", invalid="ignore"):
+        width = require_finite(2.0 * Z_90 * inp.predictions.spread[rows, step - 1, :], "a stated 90% interval width")
+        return float(require_finite(np.mean(width), "the mean 90% interval width"))
+
+
 def compute_sharpness(inp: JudgeInput) -> dict:
     """The verdict's `sharpness` block: mean 90% interval width, per task and region."""
     if type(inp) is not JudgeInput:
@@ -27,8 +34,5 @@ def compute_sharpness(inp: JudgeInput) -> dict:
     for task in inp.tasks:
         for region, rows in rows_by_region.items():
             index = task_region_step(inp, task, region) - 1
-            with np.errstate(over="ignore", invalid="ignore"):
-                width = require_finite(2.0 * Z_90 * inp.predictions.spread[rows, index, :], "a stated 90% interval width")
-                mean_width = require_finite(np.mean(width), "the mean 90% interval width")
-            entries.append({"task": task.name, "region": region, "mean_width_90": float(mean_width)})
+            entries.append({"task": task.name, "region": region, "mean_width_90": mean_width_90(inp, rows, index + 1)})
     return {"per_task": entries}

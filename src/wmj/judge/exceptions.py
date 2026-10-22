@@ -1,8 +1,11 @@
 """wmj.judge.exceptions — the backtest: count the misses and band them (ADR-J4, JU-8).
 
 In plain words: every independent test start is a bet that "the truth lands inside my stated 90%
-range". A miss (an "exception") is any trial where even one of its quantities lands outside that
-range; landing exactly on the edge is inside. The misses are counted for each task and region at
+region". The bet is about the whole answer, all the quantities together: a miss (an "exception") is
+a trial whose misses, measured in the model's own stated sizes and combined over all the quantities,
+fall outside the joint 90% region (`_chi2.py`). Landing exactly on the edge is inside. Checking each
+quantity separately would make a perfectly honest 4-quantity model miss 34% of the time instead of
+10% (code-review-003), so an honest model now misses 10% whatever the number of quantities. The misses are counted for each task and region at
 two pre-declared steps — step 1 and the step where that task is judged — and the count is placed
 in the colour band fixed before judging (green is what honest luck looks like, amber is a
 warning, red is out). A count that is *too low* is not rewarded: if it is at or below the top of green and the
@@ -13,14 +16,16 @@ count cannot disagree.
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 
-from wmj.judge._normal import Z_90
+from wmj.judge._chi2 import joint_limit
 from wmj.judge.calibration import task_region_step
-from wmj.judge.distance import rms_of_sizes
+from wmj.judge.distance import rms_of_sizes, scaled_radius
 from wmj.judge.errors import JudgeInputError
 from wmj.judge.regions import region_rows, require_finite
-from wmj.judge.sharpness import compute_sharpness
+from wmj.judge.sharpness import mean_width_90
 from wmj.judge.types import JudgeInput
 
 DISTANCE_UNIT = "rms-normalised: root-mean-square over the quantities, in the harness's normalised units"
@@ -50,17 +55,19 @@ def compute_exceptions_and_trials(inp: JudgeInput) -> tuple[dict, dict]:
     expected_count = float(bands.n) * float(bands.p)
     with np.errstate(over="ignore", invalid="ignore"):
         hedge_threshold = float(require_finite(np.mean(inp.thresholds.sharpness_hedge_threshold), "the hedging threshold"))
-    widths = {(e["task"], e["region"]): e["mean_width_90"] for e in compute_sharpness(inp)["per_task"]}
     exception_entries, trial_entries = [], []
     for task in inp.tasks:
         for region, rows in region_rows(inp).items():
             judged = task_region_step(inp, task, region)
             for step in sorted({1, judged}):
                 mean = inp.predictions.mean[rows, step - 1, :]
+                spread = inp.predictions.spread[rows, step - 1, :]
                 with np.errstate(over="ignore", invalid="ignore"):
-                    radius = require_finite(Z_90 * inp.predictions.spread[rows, step - 1, :], "a stated interval half-width")
                     miss = require_finite(np.abs(inp.outcomes[rows, step - 1, :] - mean), "outcome minus predicted mean")
-                is_exception = np.any(miss > radius, axis=1)  # the edge itself is inside
+                limit = joint_limit(miss.shape[1], 0.9)  # the joint 90% region of all the quantities together
+                is_exception = scaled_radius(miss, spread) > limit  # the edge itself is inside
+                with np.errstate(over="ignore", invalid="ignore"):
+                    half_width = require_finite(limit / math.sqrt(miss.shape[1]) * rms_of_sizes(spread), "the stated interval's chart half-width")
                 observed = int(np.sum(is_exception))
                 band = _band_for(observed, bands.green, bands.amber_outer)
                 key = {"task": task.name, "region": region, "horizon_step": step}
@@ -72,7 +79,7 @@ def compute_exceptions_and_trials(inp: JudgeInput) -> tuple[dict, dict]:
                         "observed": observed,
                         "band": band,
                         "low_side_sharpness_flag": bool(
-                            observed <= g_hi and widths[(task.name, region)] > hedge_threshold
+                            observed <= g_hi and mean_width_90(inp, rows, step) > hedge_threshold
                         ),
                         "bands": {"green": [g_lo, g_hi], "amber": [[a_lo, g_lo - 1], [g_hi + 1, a_hi]], "red": "outside"},  # a fresh record per entry
                     }
@@ -83,7 +90,7 @@ def compute_exceptions_and_trials(inp: JudgeInput) -> tuple[dict, dict]:
                         "distance_unit": DISTANCE_UNIT,
                         "outcome_distance": [float(v) for v in rms_of_sizes(miss)],
                         "band_lo": [0.0] * int(rows.size),
-                        "band_hi": [float(v) for v in rms_of_sizes(radius)],
+                        "band_hi": [float(v) for v in half_width],
                         "is_exception": [bool(v) for v in is_exception],
                     }
                 )
