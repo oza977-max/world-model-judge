@@ -1,5 +1,9 @@
 """Tests for wmj.judge._normal — Phi/phi and the CRPS building blocks.
 
+In plain words: these tests check the bell-curve helpers every score depends on against known
+values (half of the curve lies below zero, the curve is symmetric, the peak height is right), so a
+wrong constant here cannot quietly bend every verdict.
+
 Covers judge spec ADR-J1's exact formulas: Phi(z) = 0.5*(1+erf(z/sqrt2)),
 phi(z) = (1/sqrt(2*pi))*exp(-z^2/2), vectorised over NumPy arrays.
 """

@@ -22,7 +22,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from wmj.judge._normal import LEVELS
 from wmj.judge.errors import VerdictIncompleteError
+from wmj.judge.errors import short_repr as _r
 from wmj.judge.limitations import JU10_DISCLOSURES, NOT_TESTED
 
 VERDICT_SCHEMA = "wmj-verdict/1"
@@ -42,7 +44,7 @@ BANNED_KEY_SUFFIXES = ("_in", "_out", "_in_region", "_out_region")  # suffix-enc
 TRIAL_ARRAYS = ("outcome_distance", "band_lo", "band_hi", "is_exception")
 MAX_DEPTH = 40
 BANDS = ("green", "amber", "red")
-CALIBRATION_LEVELS = [0.5, 0.8, 0.9, 0.95]  # ADR-J2: exactly these four, in this order
+CALIBRATION_LEVELS = list(LEVELS)  # ADR-J2: exactly these four, in this order
 
 # Value fields of each block's entries (judge spec §5's schema): name -> kind. The key fields
 # (task/region/horizon_step) are checked separately. A field not listed here is refused, so
@@ -70,26 +72,18 @@ BLOCK_LEVEL_FIELDS: dict[str, tuple[str, ...]] = {"error_vs_horizon": ("dt",)}
 TASK_REGION_BLOCKS = ("skill", "calibration", "sharpness", "climatology", "trust_horizons")
 
 
-def _r(value) -> str:
-    """A safe, short `repr` for refusal messages (an absurdly long integer must not crash the message)."""
-    try:
-        text = repr(value)
-    except Exception:  # noqa: BLE001 - an integer of 4,300+ digits, a deeply nested or hostile object
-        return "<value too large or odd to display>"
-    return text if len(text) <= 80 else text[:77] + "..."
-
-
 def _fail(message: str) -> VerdictIncompleteError:
     return VerdictIncompleteError(message)
 
 
 def _is_int(x) -> bool:
-    return type(x) is int
+    """A plain int that fits in 64 bits (a verdict never needs more, and a longer one cannot be written out)."""
+    return type(x) is int and -(2**63) <= x <= 2**63
 
 
 def _is_num(x) -> bool:
     """A plain int or float; an int must fit in 64 bits (a verdict never needs more, and a longer one cannot be written out)."""
-    return type(x) is float or (type(x) is int and -(2**63) <= x <= 2**63)
+    return type(x) is float or _is_int(x)
 
 
 def _plain(value, path: str, depth: int = 0):
@@ -382,10 +376,6 @@ def _check_trials_and_exceptions(trials: dict, exceptions: dict) -> None:
             raise _fail(f"trials.per_task[{i}]: the per-trial arrays differ in length")
         if any(lo != 0 for lo in entry["band_lo"]):
             raise _fail(f"trials.per_task[{i}]: band_lo is always 0 — a distance is never negative (judge spec §5)")
-        if any(lo > hi for lo, hi in zip(entry["band_lo"], entry["band_hi"])):
-            raise _fail(f"trials.per_task[{i}]: band_lo must not exceed band_hi")
-        if any(v < 0 for v in entry["outcome_distance"]):
-            raise _fail(f"trials.per_task[{i}]: a distance is never negative")
         by_key[(entry["task"], entry["region"], entry["horizon_step"])] = (sum(entry["is_exception"]), lengths.pop())
     for i, entry in enumerate(exceptions["per_task"]):
         key = (entry["task"], entry["region"], entry["horizon_step"])

@@ -22,18 +22,13 @@ import math
 import numpy as np
 
 from wmj.judge._normal import Phi, phi
-from wmj.judge.errors import JudgeInputError
+from wmj.judge.errors import (
+    JudgeInputError,
+    NonFiniteScoreError,
+    NonPositiveBaselineError,
+    NonPositiveSpreadError,
+)
 from wmj.judge.types import JudgeInput
-
-
-class NonPositiveSpreadError(JudgeInputError):
-    """Raised when a stated spread is zero or negative.
-
-    CRPS is undefined for a non-positive spread; the judge refuses
-    rather than clamping it to something plausible-looking (judge spec
-    §7: "the judge additionally guards CRPS/coverage against sigma<=0
-    with a hard error, never a clamp").
-    """
 
 
 def crps_gaussian(
@@ -61,21 +56,6 @@ def crps_gaussian(
             "represented, or a gap outcome − mean too large to represent); the judge refuses rather than report a skill built on it"
         )
     return score
-
-
-class NonFiniteScoreError(JudgeInputError):
-    """Raised when a CRPS comes out infinite or not-a-number (an overflow), never reported as a number."""
-
-
-class NonPositiveBaselineError(JudgeInputError):
-    """Raised when the baseline CRPS a skill score divides by is not > 0.
-
-    A Gaussian CRPS is strictly positive for any finite spread > 0, so
-    anything routed through `crps_gaussian` cannot reach this; the guard
-    exists so a caller that computes its baseline some other way gets
-    the refusal here, at the division, not later as a NaN the canonical
-    serializer rejects (code-review-001, Panel B).
-    """
 
 
 def skill_score(crps_model: float, crps_baseline: float) -> float:

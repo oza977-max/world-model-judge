@@ -2,7 +2,7 @@
 
 In plain words: the judge may be told what a model *predicted*, what *happened*, what the
 two simple baselines predicted, which region of the world each trial started in, how fast
-the world drifts from itself, what the world usually looks like, which tasks are being
+the world drifts from itself, what the world usually looks like, the world's time step, its natural cycle length (when it has one), which tasks are being
 graded, and the thresholds fixed in advance. That is all. There is no field for a model's
 name, whether it is a deliberately broken test model, its architecture or its training
 history — and the classes are frozen, slotted and exact-typed (no subclass can be made), so a field cannot be attached afterwards by accident. This is
@@ -25,18 +25,11 @@ from dataclasses import dataclass
 import numpy as np
 
 from wmj.judge.errors import JudgeInputError, MissingBaselineError
+from wmj.judge.errors import short_repr as _r
 
 AXES = ("state", "action", "both")
 TASK_KINDS = ("control", "planning")
 
-
-def _r(value) -> str:
-    """A safe, short `repr` for refusal messages (an absurdly long integer must not crash the message)."""
-    try:
-        text = repr(value)
-    except Exception:  # noqa: BLE001 - an integer of 4,300+ digits, a deeply nested or hostile object
-        return "<value too large or odd to display>"
-    return text if len(text) <= 80 else text[:77] + "..."
 
 
 def _bad(message: str) -> JudgeInputError:
@@ -205,6 +198,8 @@ class Bands:
             raise _bad(f"bands p must be a plain number, got {type(self.p).__name__}")
         if not (0.0 < self.p < 1.0):
             raise _bad(f"bands p must be strictly between 0 and 1, got {_r(self.p)}")
+        if self.p != 0.1:
+            raise _bad(f"bands p must be 0.1: the judge's exception test is the 90% region, so a miss has probability 0.1 (ADR-J4), got {_r(self.p)}")
         for label, pair in (("green", self.green), ("amber_outer", self.amber_outer)):
             if not isinstance(pair, (tuple, list)) or len(pair) != 2:
                 raise _bad(f"{label} must be a (low, high) pair, got {_r(pair)}")

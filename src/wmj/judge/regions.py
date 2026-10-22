@@ -1,7 +1,7 @@
 """wmj.judge.regions — small shared helpers: which trials belong to which region, and the overflow refusal.
 
 In plain words: every block of the verdict works region by region, so the question "which trials
-are in this region, and which drift curve is theirs?" is answered in exactly one place. The
+are in this region, and which divergence curve is theirs?" is answered in exactly one place. The
 same place holds the refusal used whenever arithmetic overflows: a number that has become
 infinity must never be compared as if it were a real size (at absurd magnitudes `inf <= inf`
 would call a miss "covered").
@@ -31,5 +31,5 @@ def region_rows(inp: JudgeInput) -> dict[str, np.ndarray]:
 
 
 def region_curve(inp: JudgeInput, region: str) -> np.ndarray:
-    """The world's drift curve (indexed from step 0) for one region."""
+    """The world's divergence curve (indexed from step 0) for one region."""
     return next(c.curve for c in inp.divergence_curves if c.region_name == region)

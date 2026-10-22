@@ -4,13 +4,13 @@ In plain words: the judge asks, past the point where nobody can promise the exac
 model's guess still look like the world?". That needs a reference. This module builds it: it
 starts the true world from 200 seeded points spread across the training region, lets each run 1,000
 steps with no actions (200,000 samples in all), sorts every sample by the world's conserved
-quantity (energy, or the predator-prey "orbit number") and cuts them into sixteen ranges holding
+quantity (energy, or the predator-prey "orbit number") and cuts them into sixteen bins holding
 equally many samples. For each range it records the typical state and how widely the states
-vary. The outermost ranges are open-ended, so every possible value has a range.
+vary. The outermost bins are open-ended, so every possible value has a bin.
 
 (The spec's recipe was one long trajectory from the training region's centre. In both worlds that
 centre is a resting point, so the "trajectory" is a single point with a single conserved value and
-no ranges at all — owner ruling 2026-10-14, backlog A36: use many starts instead.)
+no bins at all — owner ruling 2026-10-14, backlog A36: use many starts instead.)
 
 It also works out, for each test trial at each step, which range the *true* state is in — measured
 afresh at every step, because a kick changes the conserved quantity and so moves the trial into a
@@ -84,7 +84,7 @@ def build_climatology_table(
     if np.unique(pooled_values).size < n_bins:
         raise ClimatologyError(
             f"{world_name}: the reference run has fewer than {n_bins} distinct conserved-quantity values "
-            f"({np.unique(pooled_values).size}) — it cannot be cut into {n_bins} ranges"
+            f"({np.unique(pooled_values).size}) — it cannot be cut into {n_bins} bins"
         )
     inner = np.quantile(pooled_values, [k / n_bins for k in range(1, n_bins)])
     if not np.all(np.diff(inner) > 0.0):
@@ -180,8 +180,8 @@ def truth_mean_abs_z(table: dict[str, Any], states: np.ndarray, bins: np.ndarray
 
     With true states and their own measured bins this is what a perfect model would score on the judge's
     climatology-agreement test *if scored over the same window* — the judge averages only from the task's
-    switch step to its horizon, so pass the switch step as `first_step` to reproduce that. Step `s` is array
-    index `s − 1`."""
+    switch step to its horizon, so pass the switch step as `first_step` to reproduce that, and cut `states` to the task's horizon first (the judge
+    never looks past it). Step `s` is array index `s − 1`."""
     if not 1 <= first_step <= states.shape[1]:
         raise ClimatologyError(f"first_step must be in 1..{states.shape[1]}, got {first_step}")
     if np.any(bins < 0) or np.any(bins >= len(table["bins"])):

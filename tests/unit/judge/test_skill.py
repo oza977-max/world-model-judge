@@ -1,5 +1,9 @@
 """Tests for wmj.judge.skill — CRPS closed form and skill (judge ADR-J1).
 
+In plain words: CRPS is the score for a forecast that states both a guess and how unsure it is; skill
+compares it with the two simple baselines. These tests check the formula against hand-worked values
+and check that nonsense (a zero spread, a baseline that scores zero) is refused rather than patched.
+
 CRPS(mu, sigma; y) = sigma * [z*(2*Phi(z)-1) + 2*phi(z) - 1/sqrt(pi)],
 z = (y-mu)/sigma. skill = 1 - CRPS_model / CRPS_baseline.
 """

@@ -463,7 +463,7 @@ def test_tc_nf6_10_allows_the_sanctioned_reporting_imports():
         "from pathlib import Path\n",
         "import re\n",
         "from wmj.errors import WmjError\n",
-        "from wmj.judge.types import Verdict\n",
+        "from wmj.judge.verdict import Verdict\n",
         "from wmj.reporting import style\n",
         "import importlib.metadata\n",
     ):

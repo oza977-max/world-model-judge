@@ -32,7 +32,7 @@ from wmj.judge.types import JudgeInput
 def switch_step(curve: np.ndarray, tolerance: float, horizon: int) -> int | None:
     """First step `s` in `1..horizon` where `curve[s] > tolerance`, else `None`.
 
-    `curve` is the world's drift curve for one region, indexed from step 0 (length `H + 1`).
+    `curve` is the world's divergence curve for one region, indexed from step 0 (length `H + 1`).
     A distance exactly equal to the tolerance does not exceed it (the band edge is closed,
     worlds spec §4.1). Step 0 is never a switch step: no forecast is made at step 0.
     """

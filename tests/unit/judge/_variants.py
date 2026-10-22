@@ -12,6 +12,7 @@ from __future__ import annotations
 import numpy as np
 
 from tests.unit.judge._builders import judge_input_kwargs
+from wmj.judge.climatology import evaluation_step
 from wmj.judge.types import (
     ClimatologyBin,
     Forecasts,
@@ -96,7 +97,7 @@ def mid_horizon_entries(kwargs: dict, record: dict) -> list[dict]:
     found = []
     for e in record["trust_horizons"]["per_task"]:
         switch = switches[(e["task"], e["region"])]
-        cap = horizons[e["task"]] if switch is None else switch
+        cap = evaluation_step(switch, horizons[e["task"]])
         if 0 < e["steps"] < cap:
             found.append(e)
     return found

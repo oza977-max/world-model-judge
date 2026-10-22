@@ -375,7 +375,7 @@ def test_every_guard_inside_the_small_types_can_fail():
 
 def test_boundary_values_are_accepted_exactly_at_the_edge():
     TaskSpec("a", "planning", 1e-12, 1)
-    Bands(n=1, p=0.5, green=(0, 1), amber_outer=(0, 1))
+    Bands(n=1, p=0.1, green=(0, 1), amber_outer=(0, 1))
     Bands(n=200, p=0.1, green=(12, 12), amber_outer=(12, 12))  # every edge may coincide
     Bands(n=200, p=0.1, green=(12, 29), amber_outer=(12, 29))
     Bands(n=200, p=0.1, green=(0, 29), amber_outer=(0, 200))
@@ -460,7 +460,7 @@ def test_the_smallest_possible_input_one_trial_one_step_one_quantity_is_accepted
         climatology=(RegionClimatology("r", (bin_,)),),
         invariant_bins=np.zeros((1, 1), dtype=int),
         tasks=(TaskSpec("t", "control", 0.1, 1),),
-        thresholds=Thresholds(Bands(n=1, p=0.5, green=(0, 1), amber_outer=(0, 1)), np.ones(1), 1.0),
+        thresholds=Thresholds(Bands(n=1, p=0.1, green=(0, 1), amber_outer=(0, 1)), np.ones(1), 1.0),
     )
     assert inp.outcomes.shape == (1, 1, 1)
 
@@ -516,6 +516,12 @@ def test_bands_p_must_be_a_plain_number_and_the_message_says_which_problem():
             Bands(n=200, p=p, green=(12, 29), amber_outer=(8, 35))
     with pytest.raises(JudgeInputError, match="strictly between"):
         Bands(n=200, p=1.5, green=(12, 29), amber_outer=(8, 35))
+
+
+def test_bands_p_must_be_exactly_one_tenth_because_the_exception_test_is_the_90_percent_region():
+    for p in (0.05, 0.1000001, 0.5, 0.9):
+        with pytest.raises(JudgeInputError, match="must be 0.1"):
+            Bands(n=200, p=p, green=(12, 29), amber_outer=(8, 35))
 
 
 def test_bad_containers_and_huge_numbers_raise_the_judges_own_error():

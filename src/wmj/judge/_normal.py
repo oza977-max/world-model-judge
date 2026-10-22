@@ -4,7 +4,9 @@ In plain words: CRPS and the single-quantity intervals both need the normal
 distribution's cumulative curve (Phi) and its bell curve (phi). Python
 only gives us `math.erf` as a scalar function, so this module wraps it
 once to work on whole NumPy arrays at once (judge spec ADR-J1) — no
-SciPy dependency needed for something this small (NF-3).
+SciPy dependency needed for something this small (NF-3). It also fixes, once, the four coverage
+levels (50, 80, 90, 95%) and their normal multipliers, which calibration, sharpness and the verdict
+schema all share.
 """
 
 from __future__ import annotations

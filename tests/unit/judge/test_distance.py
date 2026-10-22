@@ -19,6 +19,16 @@ from wmj.judge.errors import JudgeInputError
 from wmj.judge.regions import region_curve, region_rows, require_finite
 
 
+def test_the_judges_distance_agrees_with_the_worlds_shared_metric_once_divided_by_the_scale():
+    from wmj.worlds.base import distance
+
+    rng = np.random.default_rng(7)
+    scale = np.array([40.0, 25.0, 0.5, 3.0])
+    a, b = rng.normal(size=(5, 4)) * scale, rng.normal(size=(5, 4)) * scale
+    for x, y in zip(a, b, strict=True):
+        assert float(rms_distance(x / scale, y / scale)) == pytest.approx(distance(x, y, scale), rel=1e-12)
+
+
 def test_one_quantity_is_its_absolute_gap_and_several_are_root_mean_square_not_sum_or_max():
     assert rms_of_sizes(np.array([[3.0]])).tolist() == [3.0]
     assert rms_of_sizes(np.array([[3.0, 4.0]])).tolist() == [pytest.approx(math.sqrt(12.5), rel=1e-15)]

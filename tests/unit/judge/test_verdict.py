@@ -609,14 +609,14 @@ def test_an_extra_task_in_one_group_is_refused_and_so_is_a_region_only_one_group
 
 def test_a_second_region_must_appear_in_every_group_or_none():
     blocks = blocks_copy()
-    for group in TASK_REGION_GROUPS:
+    for group in GROUPS_KEYED_BY_TASK_AND_REGION:
         entries = blocks[group][BLOCK_KEYS[group][0]]
         blocks[group][BLOCK_KEYS[group][0]] = entries + [dict(e, region="out-of-range") for e in entries]
     blocks["error_vs_horizon"]["per_region"].append(dict(blocks["error_vs_horizon"]["per_region"][0], region="out-of-range"))
     assert len(build(blocks).to_dict()["skill"]["per_task_region"]) == 4
 
 
-TASK_REGION_GROUPS = ["skill", "calibration", "sharpness", "climatology", "trust_horizons", "exceptions", "trials"]
+GROUPS_KEYED_BY_TASK_AND_REGION = ["skill", "calibration", "sharpness", "climatology", "trust_horizons", "exceptions", "trials"]
 
 
 # --- review pass 1: typed key fields, no coercion, no raw crashes (M1, M2) ---------------------
@@ -1146,6 +1146,15 @@ def test_integers_too_large_to_write_out_are_refused_in_any_number_field():
     blocks = blocks_copy()
     blocks["skill"]["per_task_region"][0]["crps"] = 2**63
     build(blocks)
+
+
+def test_a_whole_number_must_fit_in_64_bits_and_be_a_plain_int():
+    from wmj.judge.verdict import _is_int
+
+    for ok in (0, 1, -1, 2**63, -(2**63)):
+        assert _is_int(ok)
+    for bad in (2**63 + 1, -(2**63) - 1, 10**5000, True, 1.0, np.int64(3), "3", None):
+        assert not _is_int(bad)
 
 
 def test_a_verdict_is_deliberately_unhashable_compare_with_to_dict():
