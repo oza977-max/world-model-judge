@@ -414,7 +414,13 @@ def test_the_scale_is_required_and_must_be_one_positive_finite_number_per_quanti
 def test_the_agreement_score_is_unchanged_by_the_choice_of_units_when_table_and_forecasts_are_scaled_together():
     from tests.unit.judge._builders import judge_input_kwargs
     from wmj.judge.climatology import compute_climatology
-    from wmj.judge.types import Forecasts, JudgeInput, RegionCurve, RegionLabel, TaskSpec
+    from wmj.judge.types import (
+        Forecasts,
+        JudgeInput,
+        RegionCurve,
+        RegionLabel,
+        TaskSpec,
+    )
 
     t = _table()
     n, steps = 3, 6
