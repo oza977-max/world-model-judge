@@ -1,13 +1,15 @@
 """wmj.judge.limitations — what this judge says about itself, word for word (JU-10, ADR-J7).
 
 In plain words: a verdict that only reports good news is a sales pitch. Every verdict
-this judge issues carries the same seven plain sentences about what it cannot do —
+this judge issues carries the same nine plain sentences about what it cannot do —
 that it validates the middle of the distribution and not the extremes, that a toy
 world validates the harness and not a real model, that the judge's author also wrote the
 models (blind is not independent), that it borrows banking's backtesting but not its
 power to force a stop, that its thresholds are modelling decisions, that the worlds hold
-no genuine surprises, and that "control" and "planning" grade passive prediction, not
-decisions. They are fixed text: no formatting, no parameters, no softening per run.
+no genuine surprises, that "control" and "planning" grade passive prediction, not
+decisions, that the 90% region reads each model's stated spreads as independent, and that the author
+looked at both practice models' held-out calibration before the judged run (owner decision D19).
+The last two were added after code-review-003 and its fix-check (backlog A39). They are fixed text: no formatting, no parameters, no softening per run.
 A verdict may add detail elsewhere, never fewer or reworded versions of these.
 """
 
@@ -21,11 +23,13 @@ JU10_DISCLOSURES: tuple[str, ...] = (
     "The judge's own thresholds and metric choices are modelling decisions. They were fixed in advance and are not arbitrary, but they are not beyond challenge either.",
     "The toy worlds contain no genuine off-model surprises by construction (no randomness, no hidden state, no high-dimensional input) — this judge's behaviour when a model meets a real surprise is untested.",
     "'Control' and 'planning' name the tolerance regime used to grade a passive prediction, not a closed-loop decision. This judge does not test whether a model can choose its own actions to reach a goal — the actions it is graded against were chosen by someone else.",
+    "The 90% region takes each model at its word: its stated spreads are read as independent of one another, because the uncertainty format has no way to say how errors move together. A model whose errors are correlated misses that region more often than one time in ten even when each quantity's spread is honest, and so reads as somewhat overconfident; the per-quantity coverage is reported alongside so a reader can see it.",
+    "Before the judged run, the author looked at both practice models' calibration on held-out training pairs (one step, inside the training region): the self-predicted error bar was close to honest and the ensemble's too narrow, the opposite of the pre-registered prediction. The prediction was deliberately left unchanged, and the look is recorded in prereg/prediction.md.",
 )
 
 NOT_TESTED: tuple[str, ...] = (
     "genuine off-model surprises (WD-8)",
     "closed-loop action selection",
     "ongoing monitoring",
-    "the seven JU-10 disclosures cover the rest of this list",
+    "the JU-10 disclosures cover the rest of this list",
 )

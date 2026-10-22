@@ -10,25 +10,28 @@ two pre-declared steps — step 1 and the step where that task is judged — and
 in the colour band fixed before judging (green is what honest luck looks like, amber is a
 warning, red is out). A count that is *too low* is not rewarded: if it is at or below the top of green and the
 ranges were very wide, the entry is flagged as possible padding. The same per-trial list of
-hit/miss flags that the count is made from is returned for the main chart, so the chart and the
-count cannot disagree.
+hit/miss flags that the count is made from is returned for the main chart, and the chart plots the
+very numbers the decision compares: each trial's whole-answer miss in the model's own stated sizes (the
+root-mean-square over the quantities of miss / stated spread) against the fixed line of the 90% region
+on that scale. A dot above the line is a miss and a dot on or below it is not, always (fix-check of
+code-review-003: a chart in plain distance against an averaged spread disagreed with the flag about one
+trial in ten when the stated spreads differ between quantities). How wide the ranges were is shown by
+sharpness, not by this chart.
 """
 
 from __future__ import annotations
 
-import math
-
 import numpy as np
 
-from wmj.judge._chi2 import joint_limit
+from wmj.judge._chi2 import rms_limit
 from wmj.judge.calibration import task_region_step
-from wmj.judge.distance import rms_of_sizes, scaled_radius
+from wmj.judge.distance import miss_in_stated_sizes
 from wmj.judge.errors import JudgeInputError
 from wmj.judge.regions import region_rows, require_finite
 from wmj.judge.sharpness import mean_width_90
 from wmj.judge.types import JudgeInput
 
-DISTANCE_UNIT = "rms-normalised: root-mean-square over the quantities, in the harness's normalised units"
+DISTANCE_UNIT = "stated-size: root-mean-square over the quantities of each miss divided by the model's own stated spread"
 
 
 def _band_for(observed: int, green: tuple[int, int], amber_outer: tuple[int, int]) -> str:
@@ -64,10 +67,9 @@ def compute_exceptions_and_trials(inp: JudgeInput) -> tuple[dict, dict]:
                 spread = inp.predictions.spread[rows, step - 1, :]
                 with np.errstate(over="ignore", invalid="ignore"):
                     miss = require_finite(np.abs(inp.outcomes[rows, step - 1, :] - mean), "outcome minus predicted mean")
-                limit = joint_limit(miss.shape[1], 0.9)  # the joint 90% region of all the quantities together
-                is_exception = scaled_radius(miss, spread) > limit  # the edge itself is inside
-                with np.errstate(over="ignore", invalid="ignore"):
-                    half_width = require_finite(limit / math.sqrt(miss.shape[1]) * rms_of_sizes(spread), "the stated interval's chart half-width")
+                line = rms_limit(miss.shape[1], 0.9)  # the joint 90% region of all the quantities together, on the chart's scale
+                whole = miss_in_stated_sizes(miss, spread)
+                is_exception = whole > line  # the edge itself is inside; the chart plots exactly `whole` against `line`
                 observed = int(np.sum(is_exception))
                 band = _band_for(observed, bands.green, bands.amber_outer)
                 key = {"task": task.name, "region": region, "horizon_step": step}
@@ -88,9 +90,9 @@ def compute_exceptions_and_trials(inp: JudgeInput) -> tuple[dict, dict]:
                     {
                         **key,
                         "distance_unit": DISTANCE_UNIT,
-                        "outcome_distance": [float(v) for v in rms_of_sizes(miss)],
+                        "outcome_distance": [float(v) for v in whole],
                         "band_lo": [0.0] * int(rows.size),
-                        "band_hi": [float(v) for v in half_width],
+                        "band_hi": [float(line)] * int(rows.size),
                         "is_exception": [bool(v) for v in is_exception],
                     }
                 )

@@ -18,10 +18,10 @@ from __future__ import annotations
 
 import numpy as np
 
-from wmj.judge._chi2 import joint_limit
+from wmj.judge._chi2 import rms_limit
 from wmj.judge._normal import LEVELS, Z_VALUES
 from wmj.judge.climatology import evaluation_step, switch_step
-from wmj.judge.distance import scaled_radius
+from wmj.judge.distance import miss_in_stated_sizes
 from wmj.judge.errors import JudgeInputError
 from wmj.judge.regions import region_curve, region_rows, require_finite
 from wmj.judge.types import JudgeInput
@@ -47,10 +47,10 @@ def compute_calibration(inp: JudgeInput) -> dict:
             with np.errstate(over="ignore", invalid="ignore"):
                 miss = require_finite(np.abs(inp.outcomes[rows, index, :] - mean), "outcome minus predicted mean")
                 reach = [require_finite(z * spread, "a stated interval half-width") for z in Z_VALUES]
-            radius = scaled_radius(miss, spread)  # all the quantities together, in the model's own stated sizes
+            whole = miss_in_stated_sizes(miss, spread)  # all the quantities together, in the model's own stated sizes
             joint, per_dimension = [], []
             for level, reach_z in zip(LEVELS, reach, strict=True):
-                joint.append(float(np.mean(radius <= joint_limit(miss.shape[1], level))))  # the joint region; the edge is inside
+                joint.append(float(np.mean(whole <= rms_limit(miss.shape[1], level))))  # the joint region; the edge is inside
                 per_dimension.append([float(v) for v in np.mean(miss <= reach_z, axis=0)])  # each quantity on its own, for diagnosis
             entries.append(
                 {

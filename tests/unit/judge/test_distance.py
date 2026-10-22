@@ -155,13 +155,13 @@ def test_rms_of_sizes_itself_refuses_infinity_and_nan():
             rms_of_sizes(np.array([[bad, 1.0]]))
 
 
-def test_the_scaled_radius_is_the_miss_in_the_models_own_stated_sizes_over_all_quantities_together():
-    from wmj.judge.distance import scaled_radius
+def test_the_whole_answers_miss_is_the_rms_of_each_miss_in_its_own_stated_size():
+    from wmj.judge.distance import miss_in_stated_sizes
 
     miss = np.array([[3.0, 4.0], [0.0, 0.0], [2.0, 0.0]])
     spread = np.array([[1.0, 1.0], [1.0, 1.0], [0.5, 9.0]])
-    assert scaled_radius(miss, spread).tolist() == [pytest.approx(5.0), 0.0, pytest.approx(4.0)]  # sqrt(3^2+4^2), 0, sqrt((2/0.5)^2+0)
-    assert scaled_radius(np.array([[1e200, 1e200]]), np.array([[1.0, 1.0]])).tolist() == [pytest.approx(math.sqrt(2) * 1e200, rel=1e-12)]
-    assert scaled_radius(np.array([[1e-170, 1e-170]]), np.array([[1e-170, 1e-170]])).tolist() == [pytest.approx(math.sqrt(2), rel=1e-12)]
-    with pytest.raises(JudgeInputError, match="overflow"):
-        scaled_radius(np.array([[1e300]]), np.array([[1e-300]]))
+    assert miss_in_stated_sizes(miss, spread).tolist() == [pytest.approx(5.0 / math.sqrt(2)), 0.0, pytest.approx(4.0 / math.sqrt(2))]
+    assert miss_in_stated_sizes(np.array([[1e200, 1e200]]), np.array([[1.0, 1.0]])).tolist() == [pytest.approx(1e200, rel=1e-12)]
+    assert miss_in_stated_sizes(np.array([[1e-170, 1e-170]]), np.array([[1e-170, 1e-170]])).tolist() == [pytest.approx(1.0, rel=1e-12)]
+    held = miss_in_stated_sizes(np.array([[1e300]]), np.array([[1e-300]]))  # overflows: held at the largest number, not refused
+    assert held.tolist() == [np.finfo(np.float64).max]

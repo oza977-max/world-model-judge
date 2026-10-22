@@ -79,3 +79,12 @@ def chi2_quantile(d: int, p: float) -> float:
 def joint_limit(d: int, level: float) -> float:
     """How far (in the model's own stated sizes, all `d` numbers together) a miss may reach and still be inside the `level` joint region."""
     return math.sqrt(chi2_quantile(d, level))
+
+
+def rms_limit(d: int, level: float) -> float:
+    """The same region on the root-mean-square scale the chart plots: `joint_limit(d, level) / sqrt(d)`.
+
+    A trial is inside exactly when the root-mean-square of its misses, each divided by its stated size, is
+    at or below this line, which is the same as its joint radius being at or below `joint_limit`. The judge
+    decides on this scale so that the chart's dots and line are the very numbers the decision compares."""
+    return joint_limit(d, level) / math.sqrt(d)

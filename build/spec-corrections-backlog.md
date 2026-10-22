@@ -1297,6 +1297,14 @@ the region instead, same total size (200 starts × 1,000 steps = 200,000 samples
 7. **Trust-horizon cap** now uses the one shared `evaluation_step(switch, horizon)` (no behaviour change).
 8. **Citation:** the "same metric as the worlds" claim is worlds spec §4 (TC-WD6-02); `judge.distance.rms_distance` of scaled arrays now has a cross-module test against `worlds.base.distance`.
 
+**Independent fix-check (2026-10-22, a fresh reviewer; owner-triaged the same day):**
+
+9. **The chart plots the test itself (supersedes item 2).** In the old chart (plain RMS distance against limit/√d × RMS(σ)), the plotted dot disagreed with the miss flag about one trial in ten when the stated spreads differed between quantities. A miss of (3, 0) with spreads (1, 10) is a miss, yet its dot sat far inside the band. Now `outcome_distance` is each trial's whole-answer miss in its own stated sizes, RMS over the quantities of |y−μ|/σ (`distance.miss_in_stated_sizes`). `band_hi` is one fixed line per entry, `rms_limit(d, 0.9)` = sqrt(χ²ᵈ(0.9)/d), and `distance_unit` reads "stated-size: …". The decision itself is made on this scale (exception iff miss > line; covered iff miss ≤ `rms_limit(d, level)`), so the chart and the flag compare the very same numbers. `scaled_radius` is removed. Judge §5's trials fields and Chart 1's caption must say so. Widths in world units are shown by sharpness (Chart 3), not by this chart.
+10. **Correlated errors (JU-10 sentence 8).** The region reads a model's stated spreads as independent, because MU-1's format cannot state correlation. A model with honest per-quantity spreads but correlated errors misses more often: with 4 quantities, 12% at correlation 0.5 and 15% at 0.9. This is disclosed, not corrected.
+11. **D19 (JU-10 sentence 9).** The build-time held-out calibration look is disclosed in every verdict. ADR-J7 and TC-JU10-01 pin *seven* sentences word for word; there are now nine. The spec and test-case text must be amended.
+12. **Overflow counts as a miss.** A miss too large to represent in its stated sizes (ratio above about 1e308) is held at the largest float and counted as a miss. Before, the judge refused the whole input.
+13. **Not fixed, by owner choice:** `_is_int`/`_is_num` accept 2**63 (int64 tops out at 2**63−1). The per-quantity diagnostic and the sharpness width use the spec's rounded 1.6449, while the d = 1 joint line is the exact 1.644854; about 1 trial in 100,000 can differ.
+
 **Deferred door-tightening (REMEMBER §3, P5–P6):** require the horizon-step-1 entry in each exception/trials pair, require `steps` to equal `range(1, H+1)`, check tolerance consistency across blocks, handle a zero-error chart; one shared pipeline helper across four test files; rename `task_region_step`; a shape variant with 3 regions and d=4; mixed-element list tests; the `io.open` guard case.
 
 *Where recorded:* `code-review/code-review-003.html`, commits 8d5689f, f0f9927, ff692db.

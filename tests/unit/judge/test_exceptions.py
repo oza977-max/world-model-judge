@@ -147,28 +147,34 @@ def test_regions_are_counted_on_their_own_trials_only():
     assert _get(exceptions, "lv-control", "out-of-range", 1)["observed"] == 3
 
 
-def test_the_chart_arrays_are_distances_from_the_mean_and_the_regions_equivalent_radius_in_the_same_unit():
+def test_the_chart_arrays_are_each_trials_whole_answer_miss_in_its_stated_sizes_and_the_regions_line():
     inp = _input({"training": [(3.0, 4.0), (0.0, 0.0), (6.0, 8.0)], "out-of-range": [(0.0, 0.0)] * 3}, spread=2.0)
     t = _get(compute_exceptions_and_trials(inp)[1], "lv-control", "training", 1)
-    assert t["outcome_distance"] == [pytest.approx(2.0 * math.sqrt((9 + 16) / 2)), 0.0, pytest.approx(2.0 * math.sqrt((36 + 64) / 2))]
-    assert t["band_hi"] == [pytest.approx(HALF2 * 2.0)] * 3  # sqrt(chi2 point / d) x RMS spread: where the rms distance of a trial on the region's edge sits
+    # offsets are in stated sizes, so the whole-answer miss is the rms of the offsets, whatever the spread is
+    assert t["outcome_distance"] == [pytest.approx(math.sqrt((9 + 16) / 2)), 0.0, pytest.approx(math.sqrt((36 + 64) / 2))]
+    assert t["band_hi"] == [pytest.approx(HALF2)] * 3  # sqrt(chi-square 90% point / d): one fixed line per entry
     assert t["band_lo"] == [0.0] * 3
-    assert t["distance_unit"].startswith("rms-normalised")
+    assert t["distance_unit"].startswith("stated-size")
     assert all(type(x) is float for x in t["outcome_distance"] + t["band_hi"]) and all(type(f) is bool for f in t["is_exception"])
-    # for equal stated sizes the rms distance exceeds band_hi exactly when the trial is a miss
-    assert [d > b for d, b in zip(t["outcome_distance"], t["band_hi"], strict=True)] == t["is_exception"]
+    assert [d > b for d, b in zip(t["outcome_distance"], t["band_hi"], strict=True)] == t["is_exception"] == [True, False, True]
 
 
-def test_the_chart_half_width_is_the_rms_over_quantities_of_each_trials_own_spread_times_the_region_factor():
+def test_above_the_line_is_exactly_a_miss_for_every_trial_even_when_the_stated_sizes_differ_between_quantities():
+    # fix-check of code-review-003: the old chart (plain distance against an averaged spread) disagreed with the flag
+    # about one trial in ten with unequal stated sizes; e.g. miss (3, 0), sizes (1, 10) is a miss but sat far inside
+    rng = np.random.default_rng(11)
     kwargs = judge_input_kwargs()
     n = len(kwargs["region_labels"])
-    spread = np.ones((n, H, D))
-    spread[0, 0, :] = [1.0, 7.0]
-    kwargs["predictions"] = Forecasts(np.zeros((n, H, D)), spread)
-    kwargs["outcomes"] = np.zeros((n, H, D))
-    t = _get(compute_exceptions_and_trials(JudgeInput(**kwargs))[1], "lv-control", "training", 1)
-    assert t["band_hi"][0] == pytest.approx(HALF2 * math.sqrt((1 + 49) / 2))
-    assert t["band_hi"][1] == pytest.approx(HALF2)
+    spread = np.exp(rng.normal(0.0, 2.0, size=(n, H, D)))
+    spread[0, 0, :] = [1.0, 10.0]
+    out = rng.normal(size=(n, H, D)) * spread * 1.5
+    out[0, 0, :] = [3.0, 0.0]
+    kwargs.update(predictions=Forecasts(np.zeros((n, H, D)), spread), outcomes=out)
+    _, trials = compute_exceptions_and_trials(JudgeInput(**kwargs))
+    for t in trials["per_task"]:
+        assert [d > b for d, b in zip(t["outcome_distance"], t["band_hi"], strict=True)] == t["is_exception"]
+    t = _get(trials, "lv-control", "training", 1)
+    assert t["is_exception"][0] and t["outcome_distance"][0] == pytest.approx(3.0 / math.sqrt(2))
 
 
 def test_tc_ju9_03_observed_is_the_sum_of_the_flags_for_every_entry_over_many_random_inputs():
@@ -393,7 +399,7 @@ def test_a_gap_or_width_too_large_to_represent_is_refused_even_when_warnings_are
             compute_exceptions_and_trials(JudgeInput(**huge))
 
 
-def test_huge_and_tiny_gaps_are_drawn_at_their_true_size_not_overflowed_or_squared_to_zero():
+def test_huge_and_tiny_gaps_are_measured_in_their_stated_sizes_not_overflowed_or_squared_to_zero():
     for size in (1e200, 1e-170):
         kwargs = judge_input_kwargs()
         n = len(kwargs["region_labels"])
@@ -401,8 +407,8 @@ def test_huge_and_tiny_gaps_are_drawn_at_their_true_size_not_overflowed_or_squar
                       outcomes=np.full((n, H, D), size))
         t = _get(compute_exceptions_and_trials(JudgeInput(**kwargs))[1], "lv-control", "training", 1)
         assert t["is_exception"] == [True, True, True]
-        assert t["outcome_distance"] == [pytest.approx(size, rel=1e-12)] * 3
-        assert t["band_hi"] == [pytest.approx(HALF2 * size / 3.0, rel=1e-12)] * 3
+        assert t["outcome_distance"] == [pytest.approx(3.0, rel=1e-12)] * 3
+        assert t["band_hi"] == [pytest.approx(HALF2, rel=1e-12)] * 3
 
 
 def test_a_band_range_with_no_amber_above_green_is_also_refused():
@@ -451,7 +457,7 @@ def test_the_mean_and_spread_are_read_at_the_entrys_own_step_not_another():
     kw.update(predictions=Forecasts(mean, spread), outcomes=out)
     inp = JudgeInput(**kw)
     t = _get(compute_exceptions_and_trials(inp)[1], "lv-planning", "training", 2)
-    assert t["is_exception"] == [False] * 3 and t["band_hi"] == [pytest.approx(HALF2 * 50.0)] * 3 and t["outcome_distance"] == [pytest.approx(60.0)] * 3
+    assert t["is_exception"] == [False] * 3 and t["band_hi"] == [pytest.approx(HALF2)] * 3 and t["outcome_distance"] == [pytest.approx(60.0 / 50.0)] * 3
 
 
 def test_a_row_with_one_huge_and_one_tiny_gap_is_drawn_at_its_true_size():
@@ -459,17 +465,29 @@ def test_a_row_with_one_huge_and_one_tiny_gap_is_drawn_at_its_true_size():
     out = np.zeros((n, H, D)); out[:, :, 0] = 1e200; out[:, :, 1] = 1e-170
     kw.update(predictions=Forecasts(np.zeros((n, H, D)), np.full((n, H, D), 1.0)), outcomes=out)
     t = _get(compute_exceptions_and_trials(JudgeInput(**kw))[1], "lv-control", "training", 1)
-    assert t["outcome_distance"] == [pytest.approx(1e200 / math.sqrt(2), rel=1e-12)] * 3
+    assert t["outcome_distance"] == [pytest.approx(1e200 / math.sqrt(2), rel=1e-12)] * 3  # stated size 1: the miss itself
 
 
-def test_a_row_with_gaps_near_the_largest_float_is_drawn_at_its_true_size_scaled_by_the_maximum():
+def test_a_row_with_misses_near_the_largest_float_is_measured_without_overflow():
     kwargs = judge_input_kwargs()
     n = len(kwargs["region_labels"])
-    outcome = np.zeros((n, H, D))
-    outcome[:, :, :] = 1e308  # two quantities: a plain sum of the two would overflow, the maximum-scaled RMS does not
-    kwargs.update(predictions=Forecasts(np.zeros((n, H, D)), np.full((n, H, D), 8e306)), outcomes=outcome)
+    outcome = np.full((n, H, D), 1e308)  # two quantities: a plain sum of the two squares would overflow
+    kwargs.update(predictions=Forecasts(np.zeros((n, H, D)), np.full((n, H, D), 1.0)), outcomes=outcome)
     t = _get(compute_exceptions_and_trials(JudgeInput(**kwargs))[1], "lv-control", "training", 1)
-    assert t["outcome_distance"] == [pytest.approx(1e308, rel=1e-12)] * 3
+    assert t["outcome_distance"] == [pytest.approx(1e308, rel=1e-12)] * 3 and t["is_exception"] == [True] * 3
+
+
+def test_a_miss_too_large_to_measure_in_its_stated_sizes_counts_as_a_miss_not_a_refusal():
+    # fix-check of code-review-003 (Minor): miss 1e200 against a stated size 1e-200 overflowed and the judge refused the input
+    kwargs = judge_input_kwargs()
+    n = len(kwargs["region_labels"])
+    spread = np.ones((n, H, D)); spread[:, :, 0] = 1e-200
+    outcome = np.zeros((n, H, D)); outcome[:, :, 0] = 1e200
+    kwargs.update(predictions=Forecasts(np.zeros((n, H, D)), spread), outcomes=outcome)
+    exceptions, trials = compute_exceptions_and_trials(JudgeInput(**kwargs))
+    t = _get(trials, "lv-control", "training", 1)
+    assert t["is_exception"] == [True] * 3 and all(math.isfinite(v) and v > 1e307 for v in t["outcome_distance"])
+    assert _get(exceptions, "lv-control", "training", 1)["observed"] == 3
 
 
 # --- code-review-003 (Critical): an honest model must miss 10% whatever the number of quantities -------------------

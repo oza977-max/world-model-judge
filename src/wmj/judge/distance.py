@@ -11,8 +11,6 @@ power of two near the row's largest gap (an exact division), so gaps of 1e-170 o
 
 from __future__ import annotations
 
-import math
-
 import numpy as np
 
 from wmj.judge.regions import require_finite
@@ -46,9 +44,14 @@ def rms_distance(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return rms_of_sizes(gap)
 
 
-def scaled_radius(miss: np.ndarray, spread: np.ndarray) -> np.ndarray:
-    """For each row, sqrt(sum over the quantities of (miss / stated spread)^2): the miss measured in the model's own stated sizes, all
-    quantities together. `miss` is non-negative. Computed through `rms_of_sizes`, so it neither vanishes nor overflows on extreme rows."""
+def miss_in_stated_sizes(miss: np.ndarray, spread: np.ndarray) -> np.ndarray:
+    """For each row, the root-mean-square over the quantities of miss / stated spread: the whole answer's miss
+    measured in the model's own stated sizes. `miss` is non-negative and `spread` positive (the door checks).
+
+    A ratio too large to represent (a miss more than about 1e308 of its stated sizes) is held at the largest
+    representable number rather than refused: such a trial is far outside any region, and counting it as a
+    miss is the honest reading (fix-check of code-review-003). Computed through `rms_of_sizes`, so a row
+    neither vanishes nor overflows."""
     with np.errstate(over="ignore", invalid="ignore"):
-        ratio = require_finite(miss / spread, "a miss measured in the model's own stated sizes")
-        return require_finite(math.sqrt(ratio.shape[-1]) * rms_of_sizes(ratio), "the joint miss radius")
+        ratio = np.minimum(miss / spread, np.finfo(np.float64).max)
+    return require_finite(rms_of_sizes(require_finite(ratio, "a miss measured in the model's own stated sizes")), "the whole answer's miss")
