@@ -129,6 +129,11 @@ def build_calibration_figure(panels: dict[str, list[tuple[dict, float]]], model_
     axes = fig.subplots(1, len(panels), sharey=True, squeeze=False)[0]
     fig.subplots_adjust(left=0.09, right=0.84, top=0.68, bottom=0.13, wspace=0.42)
     region_lines, diagonals, headers, error_bars = [], [], [], []
+    # every point and its whole bar inside the panel, however few the runs; headroom above for the fixture label
+    reach = [(c - honest_luck(level, e["n_trials"]), c + honest_luck(level, e["n_trials"]))
+             for pairs in panels.values() for e, _w in pairs for level, c in zip(LEVELS, e["coverage"])]
+    y_low = min(-0.06, min(lo for lo, _hi in reach) - 0.03)
+    y_high = max(1.3, max(hi for _lo, hi in reach) + 0.3)
     for index, (ax, (task, pairs)) in enumerate(zip(axes, panels.items())):
         (diagonal,) = ax.plot([0.45, 1.0], [0.45, 1.0], color=style.DIVERGENCE_COLOUR, linestyle="-", linewidth=0.8)
         ax.annotate(DIAGONAL_LABEL, xy=(0.47, 0.47), xytext=(6, -2), textcoords="offset points", rotation=0,
@@ -145,7 +150,7 @@ def build_calibration_figure(panels: dict[str, list[tuple[dict, float]]], model_
             region_lines.append((index, entry["region"], line))
             error_bars.append((index, entry["region"], bars))
         ax.set_xlim(0.45, 1.0)
-        ax.set_ylim(0.0, 1.3)  # headroom above 100%, so the fixture label (top-left) never hides a line
+        ax.set_ylim(y_low, y_high)
         ax.set_yticks([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
         style.direct_labels(ax, [(LEVELS[-1], e["coverage"][-1], e["region"], colour) for e, _w in pairs], fontsize=7.5)
         ax.set_xticks(LEVELS, [str(round(v * 100)) for v in LEVELS])

@@ -226,20 +226,31 @@ def fixture_traces(fig: Figure) -> list[str]:
 def direct_labels(ax: Axes, items: list[tuple[float, float, str, str]], *, fontsize: float = 8.0) -> list[Text]:
     """Label line ends directly (Tufte: no legend), nudging labels apart vertically so none overprints.
 
-    `items` are `(x, y, text, colour)` in data coordinates. Each label sits just right of its point; where two
-    would be closer than one line of text (1.3 x the font size), the lower one moves down. A label of two lines
-    takes two. Call after the axes' limits are final."""
+    `items` are `(x, y, text, colour)` in data coordinates. Each label sits just right of its point, centred on
+    it. Two neighbours' centres must be at least half of each label's height apart, plus air: 0.65 x the font
+    size per line of each (review of P5-C03: a two-line label over a one-line one needs more than one line's
+    gap). Labels are pushed down from the top, then back up from the bottom of the axes, so none falls below
+    the panel. Call after the axes' limits are final."""
     ax.autoscale_view()
     px_per_point = ax.figure.dpi / 72.0
-    placed = sorted(((ax.transData.transform((x, y))[1], x, y, text, colour) for x, y, text, colour in items), reverse=True)
-    texts, previous = [], None
-    for display_y, x, y, text, colour in placed:
-        gap_points = 1.3 * fontsize * (text.count("\n") + 1)
-        target = display_y if previous is None else min(display_y, previous - gap_points * px_per_point)
+    placed = sorted(((ax.transData.transform((x, y))[1], x, y, text, colour) for x, y, text, colour in items),
+                    key=lambda item: item[0], reverse=True)
+
+    def half(text: str) -> float:  # half a label's height plus air, in pixels
+        return 0.65 * fontsize * (text.count("\n") + 1) * px_per_point
+
+    targets = [item[0] for item in placed]
+    for i in range(1, len(placed)):  # top-down: each label at most at its own height, and clear of the one above
+        targets[i] = min(targets[i], targets[i - 1] - half(placed[i - 1][3]) - half(placed[i][3]))
+    if placed:  # bottom-up: nothing below the panel's lower edge
+        targets[-1] = max(targets[-1], ax.get_window_extent().y0 + half(placed[-1][3]))
+        for i in range(len(placed) - 2, -1, -1):
+            targets[i] = max(targets[i], targets[i + 1] + half(placed[i + 1][3]) + half(placed[i][3]))
+    texts = []
+    for (display_y, x, y, text, colour), target in zip(placed, targets):
         offset = (target - display_y) / px_per_point
         texts.append(ax.annotate(text, xy=(x, y), xytext=(4, offset), textcoords="offset points",
                                  ha="left", va="center", fontsize=fontsize, color=colour))
-        previous = target
     return texts
 
 

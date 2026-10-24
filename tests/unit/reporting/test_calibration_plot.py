@@ -104,6 +104,7 @@ def _spoiled(change):
         (lambda c, s, C, S: S["per_task"].pop(0), "no sharpness"),
         (lambda c, s, C, S: C["per_task"].pop(0), "no calibration"),
         (lambda c, s, C, S: C["per_task"].append(copy.deepcopy(c)), "two calibration"),
+        (lambda c, s, C, S: S["per_task"].append(copy.deepcopy(s)), "two sharpness"),
         (lambda c, s, C, S: c.pop("per_dimension"), "calibration entry"),
         (lambda c, s, C, S: c.update(task=""), "non-empty"),
         (lambda c, s, C, S: C.update(per_task=[]) or S.update(per_task=[]), "no calibration entries"),
@@ -144,3 +145,25 @@ def test_realistic_extremes_render_coverage_of_none_and_all_three_regions_and_a_
         top = ax.transAxes.inverted().transform(ax.transData.transform((0.95, max(line.get_ydata()))))[1]
         assert top <= 0.8  # 100% coverage sits below the fixture label
     assert np.all(np.isfinite([b for _, _, bars in chart.error_bars for b in bars]))
+
+
+def test_a_name_too_long_for_the_chart_is_refused_before_anything_is_written(tmp_path):
+    env = envelope()
+    for block in ("calibration", "sharpness"):
+        for k, entry in enumerate(env["verdict"][block]["per_task"]):
+            entry["region"] = f"{k}" + "r" * 40
+    with pytest.raises(cp.CalibrationBlockError, match="longer than 40"):
+        cp.render_calibration_chart(env, tmp_path / "c", tmp_path / "t")
+    assert not (tmp_path / "c").exists()
+
+
+@pytest.mark.parametrize("n_trials", [1, 10, 200])
+def test_every_point_and_its_whole_error_bar_lie_inside_the_panel(n_trials):
+    # review of P5-C03: a fixed 0..1.3 range clipped a zero-coverage point and the lower half of its bar
+    env = envelope()
+    for entry in env["verdict"]["calibration"]["per_task"]:
+        entry.update(coverage=[1.0, 0.0, 0.0, 1.0], n_trials=n_trials)
+    _, chart = _figure(env)
+    for (index, _region, bars), (_i, _r, line) in zip(chart.error_bars, chart.region_lines, strict=True):
+        low, high = chart.panels[index].get_ylim()
+        assert all(low < c - b and c + b < high for c, b in zip(line.get_ydata(), bars, strict=True))

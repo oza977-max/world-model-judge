@@ -155,7 +155,7 @@ def test_tc_rp2_01_full_the_saved_chart_marks_each_switch_and_the_caption_states
     switching = [e for e in env["verdict"]["climatology"]["per_task"] if e["switch_step"] is not None]
     assert switching  # the judge builder's tasks do switch
     for entry in switching:
-        assert f"{entry['task']} switches to climate here" in svg
+        assert f"{entry['task']} switches to climate here (step {entry['switch_step']})" in svg
     assert "persistence" in svg and "linear" in svg and "world divergence" in svg and "(reference)" in svg
     caption = paths.caption.read_text(encoding="utf-8")
     assert caption == CHART2_FULL and "only the gap above that line is the model's fault" in caption
@@ -317,3 +317,96 @@ def test_line_labels_that_would_overprint_are_moved_apart():
     renderer = FigureCanvasAgg(fig).get_renderer()
     boxes = [t.get_window_extent(renderer) for t in texts]
     assert not any(a.overlaps(b) for i, a in enumerate(boxes) for b in boxes[i + 1:])
+
+
+# --- review of P5-C03, pass 1 ------------------------------------------------------------------------------
+
+
+def _switch_texts(ax):
+    return [t for t in ax.texts if "switches to climate here" in t.get_text()]
+
+
+def _pendulum_block(regions=("training", "out-near-inverted", "out-large-action"), horizon=5000):
+    s = np.arange(horizon + 1)
+    return {"dt": 0.01, "per_region": [
+        {"region": r, "steps": list(range(horizon + 1)),
+         "median_error": [0.0, *(1e-4 * np.exp(s[1:] / (400 + 50 * i))).tolist()],
+         "divergence_reference": [0.0, *(1e-6 * np.exp(s[1:] / (300 + 50 * i))).tolist()]}
+        for i, r in enumerate(regions)]}
+
+
+@pytest.mark.parametrize("is_fixture", [False, True])
+@pytest.mark.parametrize("steps", [(1, 1), (1, 2), (4750, 4900), (4999, 5000), (5000, 5000), (2500, 2501)])
+def test_switch_labels_never_overprint_each_other_the_fixture_sentence_or_the_axis(steps, is_fixture):
+    # review of P5-C03, I1: two tasks switching at one step, or a step apart, printed one label on top of the other
+    block = _pendulum_block()
+    switches = {r["region"]: [("dp-control", steps[0]), ("dp-planning", steps[1])] for r in block["per_region"]}
+    chart = build_horizon_figure(block, "fx-x" if is_fixture else "ensemble", is_fixture, switches=switches)
+    for ax in chart.panels:
+        labels = _switch_texts(ax)
+        assert sorted(t.get_text().split()[0] for t in labels) == ["dp-control", "dp-planning"]
+        boxes = [t.get_window_extent() for t in labels]
+        inside = ax.get_window_extent()
+        assert all(inside.x0 <= b.x0 and b.x1 <= inside.x1 for b in boxes)  # never over the tick labels or the next panel
+        assert not boxes[0].overlaps(boxes[1])
+        others = [t.get_bbox_patch().get_window_extent() for t in ax.texts if t.get_bbox_patch() is not None]
+        assert len(others) == is_fixture and not any(b.overlaps(o) for b in boxes for o in others)
+
+
+def test_switch_labels_that_cannot_all_be_placed_readably_are_refused():
+    block = _pendulum_block(regions=("training",), horizon=20)
+    crowd = [(f"task-{k}", 1) for k in range(8)]  # far more labels at one step than the panel has room for
+    with pytest.raises(HorizonBlockError, match="cannot be placed"):
+        build_horizon_figure(block, "ensemble", switches={"training": crowd})
+
+
+def test_a_two_line_label_and_its_neighbour_never_overprint_and_none_falls_below_the_panel():
+    # review of P5-C03, I2: the gap was one line's height, so "(reference)" sat on the model's name
+    fig = style.new_figure()
+    ax = fig.subplots()
+    ax.plot([0, 1], [0.0, 1.0])
+    ax.set_ylim(0.0, 1.0)
+    items = [(1, 0.01, "world divergence\n(reference)", "black"), (1, 0.0, "direct", "blue"), (1, 0.0, "persistence", "grey"),
+             (1, 0.005, "two\nlines", "grey")]
+    texts = style.direct_labels(ax, items, fontsize=7.5)
+    boxes = [t.get_window_extent() for t in texts]
+    assert not any(a.overlaps(b) for i, a in enumerate(boxes) for b in boxes[i + 1:])
+    assert min(b.y0 for b in boxes) >= ax.get_window_extent().y0 - 1.0
+
+
+def test_climatology_and_baseline_names_that_are_not_text_are_refused():
+    from tests.unit.reporting._verdict_blocks import envelope
+    from wmj.reporting.horizon_plot import horizon_switches
+
+    climatology = envelope()["verdict"]["climatology"]
+    climatology["per_task"][0]["task"] = 5
+    with pytest.raises(HorizonBlockError, match="must be text"):
+        horizon_switches(climatology)
+    for name in (None, "", "  "):
+        with pytest.raises(HorizonBlockError, match="needs a name"):
+            build_horizon_figure(_block(), "ensemble", baselines=((name, _block()),))
+
+
+def test_a_baseline_models_own_chart_draws_it_once_not_again_in_grey(tmp_path):
+    from tests.unit.reporting._verdict_blocks import baseline_envelopes
+    from wmj.reporting.horizon_plot import render_horizon_charts
+
+    baselines = baseline_envelopes()
+    with_self = render_horizon_charts(baselines[0], baselines, tmp_path / "a", tmp_path / "at")
+    without = render_horizon_charts(baselines[0], baselines[1:], tmp_path / "b", tmp_path / "bt")
+    assert with_self.svg.read_bytes() == without.svg.read_bytes()
+
+
+@pytest.mark.parametrize("length", [12, 30, 40])
+def test_a_long_task_name_on_a_fixtures_chart_is_placed_clear_of_the_fixture_sentence(length):
+    block = _pendulum_block()
+    tasks = ("c" * length, "p" * length)
+    switches = {r["region"]: [(tasks[0], 4750), (tasks[1], 4900)] for r in block["per_region"]}
+    chart = build_horizon_figure(block, "fx-x", True, switches=switches)
+    for ax in chart.panels:
+        labels = _switch_texts(ax)
+        assert sorted(t.get_text().split()[0] for t in labels) == sorted(tasks)
+        assert sorted(t.get_text().split()[-1] for t in labels) == ["4750)", "4900)"]  # each label names its own step
+        fixture = next(t for t in ax.texts if t.get_bbox_patch() is not None).get_bbox_patch().get_window_extent()
+        boxes = [t.get_window_extent() for t in labels]
+        assert not boxes[0].overlaps(boxes[1]) and not any(b.overlaps(fixture) for b in boxes)

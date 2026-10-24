@@ -37,6 +37,8 @@ from typing import Callable  # noqa: UP035 - the reporting import gate (TC-NF6-1
 import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
+from matplotlib.text import Text
+from matplotlib.transforms import Bbox, offset_copy
 
 from wmj.errors import WmjError
 from wmj.reporting import captions, style
@@ -145,6 +147,53 @@ def _check_baseline(dt: float, entries: list[dict], label: object, block: dict) 
     return b_entries
 
 
+SWITCH_FONT_SIZE = 7.0
+
+
+def _extent(text: Text) -> Bbox:
+    """Where a text sits on the figure, in pixels, including its box if it has one."""
+    box = text.get_window_extent()
+    patch = text.get_bbox_patch()
+    return Bbox.union([box, patch.get_window_extent()]) if patch is not None else box
+
+
+def _label_switches(ax: Axes, marks: list[tuple[str, float]], taken: list[Text]) -> list[Text]:
+    """Write each switch line's label beside it, upright along the line, where it overprints nothing.
+
+    Two tasks often switch at the same step, or a few steps apart (review of P5-C03: the labels printed on top
+    of each other). Each label names its step, so it still reads as its own line's when it cannot sit right
+    beside it. Each label tries, in turn: just right of its line, just left of it, then half a line of text
+    further out on either side, and so on; then the same places again with the label broken over two
+    lines, which is shorter (a long task name on a fixture's chart would otherwise reach the fixture sentence). A spot must lie inside the panel (not over the tick labels
+    or the next panel) and must not touch a label already placed or the fixture sentence. If no spot is free the
+    chart is refused rather than drawn unreadable (reporting §7)."""
+    occupied = [_extent(t) for t in taken]
+    inside = ax.get_window_extent()
+    nudge = 0.5 * SWITCH_FONT_SIZE  # points: half a rotated line of text, so labels pack close to their lines
+    placed = []
+    for task, step in marks:
+        where_said = f"switches to climate here (step {step:g})"
+        spots = [(words, shift, side) for words in (f" {task} {where_said}", f" {task}\n {where_said}")
+                 for shift in range(16) for side in ("left", "right")]  # ha="left" puts the upright text right of the line
+        for words, shift, side in spots:
+            dx = (1.5 + shift * nudge) * (1 if side == "left" else -1)
+            where = offset_copy(ax.get_xaxis_transform(), fig=ax.figure, x=dx, y=0.0, units="points")
+            text = ax.text(step, 0.03, words, transform=where, rotation=90,
+                           ha=side, va="bottom", fontsize=SWITCH_FONT_SIZE, color=SWITCH_COLOUR)
+            box = _extent(text)
+            if box.x0 >= inside.x0 and box.x1 <= inside.x1 and not any(box.overlaps(o) for o in occupied):
+                break
+            text.remove()
+        else:
+            raise HorizonBlockError(
+                f"ADR-R2 Chart 2: the switch label for {task!r} at step {step:g} cannot be placed without "
+                "overprinting another label; refusing to draw an unreadable chart (reporting §7)"
+            )
+        occupied.append(box)
+        placed.append(text)
+    return placed
+
+
 def build_horizon_figure(
     error_vs_horizon: dict,
     model_label: str,
@@ -201,8 +250,6 @@ def build_horizon_figure(
             pending_labels = (ax, ends)
         for task, step in switches.get(entry["region"], []):
             line = ax.axvline(step, color=SWITCH_COLOUR, linestyle=":", linewidth=1.0)
-            ax.text(step, 0.03, f" {task} switches to climate here", transform=ax.get_xaxis_transform(),
-                    rotation=90, ha="right", va="bottom", fontsize=7, color=SWITCH_COLOUR)
             switch_lines.append((index, task, line))
         ax.set_title(str(entry["region"]))
         ax.set_xlabel("rollout step")
@@ -213,15 +260,18 @@ def build_horizon_figure(
 
     axes[0].set_ylabel("median normalised error (log scale)")
     fig.suptitle(f"Error against horizon — {label}", fontsize=10)
-    fig.subplots_adjust(left=0.08, right=0.80, top=0.80, bottom=0.12, wspace=0.12)
+    fig.subplots_adjust(left=0.10, right=0.80, top=0.80, bottom=0.12, wspace=0.12)
     # headroom: the top fifth of each panel stays empty, so the fixture label never hides a line
     axes[0].autoscale_view()
     low, high = axes[0].get_ylim()
     axes[0].set_ylim(low, high * (high / low) ** 0.3)
     style.direct_labels(*pending_labels, fontsize=7.5)  # after the shared y-limits are final
-    if is_fixture:
-        for ax in axes:
-            style.mark_fixture(ax)  # after the layout is final, so it wraps to the panel's width
+    fixture_marks = [style.mark_fixture(ax) for ax in axes] if is_fixture else []  # after the layout: it wraps to the panel
+    if switch_lines:
+        fig.draw_without_rendering()  # places the fixture sentence's box, so its true extent can be read
+    for index, ax in enumerate(axes):
+        taken = [fixture_marks[index]] if fixture_marks else []
+        _label_switches(ax, [(task, line.get_xdata()[0]) for i, task, line in switch_lines if i == index], taken)
     return HorizonFigure(
         figure=fig,
         panels=tuple(axes),
@@ -259,6 +309,8 @@ def render_horizon_charts(
         baselines = [read_envelope(b) for b in baseline_envelopes]
     except (ValueError, TypeError) as error:
         raise HorizonBlockError(f"ADR-R2 Chart 2: {error}") from error
+    # the chart of a baseline model itself: it is drawn once, as the model, not again in grey (review of P5-C03)
+    baselines = [b for b in baselines if b.model_name != env.model_name]
     for b in baselines:
         if b.world != env.world:
             raise HorizonBlockError(f"ADR-R2 Chart 2: baseline {b.model_name!r} is for world {b.world!r}, not {env.world!r}")
