@@ -23,10 +23,10 @@ from __future__ import annotations
 
 import math
 import re
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.collections import PathCollection
 from matplotlib.figure import Figure
@@ -41,7 +41,8 @@ EXCEPTION_KEYS = frozenset(
 )
 TRIAL_KEYS = frozenset({"task", "region", "horizon_step", "distance_unit", "outcome_distance", "band_lo", "band_hi", "is_exception"})
 LOG_ABOVE = 8.0  # a miss more than this many line-heights out switches the y-axis to log above the line
-_LOG10_MAX = math.log10(sys.float_info.max)
+_FLOAT_MAX = float(np.finfo(np.float64).max)
+_LOG10_MAX = math.log10(_FLOAT_MAX)
 HEADROOM = 1.3  # a linear axis reaches 1.3 x the largest value ...
 LOG_HEADROOM = 1.45  # ... a log axis 1.45 x the decades above the line (its linear part below the line takes room)
 _FILE_SAFE = re.compile(r"[A-Za-z0-9._-]+")
@@ -251,10 +252,10 @@ def build_exception_figure(entry: dict, trial: dict, model_name: str, is_fixture
         ylabel += " (log scale above the line)"
     # headroom: the top fifth of the panel stays empty, so the fixture label (top-left) never hides a dot
     if ax.get_yscale() == "linear":
-        ax.set_ylim(0.0, min(max(largest, edge, 1e-12) * HEADROOM, sys.float_info.max))
+        ax.set_ylim(0.0, min(max(largest, edge, 1e-12) * HEADROOM, _FLOAT_MAX))
     else:  # in log space, capped at the largest float: a miss of 1e300 stated sizes is drawn, not crashed on
         exponent = math.log10(edge) + LOG_HEADROOM * (math.log10(largest) - math.log10(edge))
-        ax.set_ylim(0.0, 10.0**exponent if exponent < _LOG10_MAX else sys.float_info.max)
+        ax.set_ylim(0.0, 10.0**exponent if exponent < _LOG10_MAX else _FLOAT_MAX)
     ax.set_xlim(-0.5, n - 0.5)
     ax.set_xlabel("test run (in the order the runs were drawn)")
     ax.set_ylabel(ylabel)
