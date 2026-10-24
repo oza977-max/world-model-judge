@@ -12,7 +12,7 @@ image (ADR-R4, TC-RP8-01).
 This module draws what the verdict's `exceptions` and `trials` blocks say (judge §5) and decides
 nothing (reporting §4): the misses are circled exactly where `is_exception` is true, never
 re-derived from the dot and the line. The only arithmetic is for display: the y-axis switches to
-a logarithmic scale above the line when a miss lies more than twenty line-heights out (so a
+a logarithmic scale above the line when a miss lies more than eight line-heights out (so a
 million-sized miss does not flatten every other dot onto the axis), and the inset scale's extent. A
 block that does not add up (counts that disagree, arrays of different lengths, a distance that is
 negative or not a number) is refused before anything is drawn or written (reporting §7: a partial
@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import math
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -39,7 +40,8 @@ EXCEPTION_KEYS = frozenset(
     {"task", "region", "horizon_step", "n_trials", "expected", "observed", "band", "low_side_sharpness_flag", "bands"}
 )
 TRIAL_KEYS = frozenset({"task", "region", "horizon_step", "distance_unit", "outcome_distance", "band_lo", "band_hi", "is_exception"})
-LOG_ABOVE = 20.0  # a miss more than this many line-heights out switches the y-axis to log above the line
+LOG_ABOVE = 8.0  # a miss more than this many line-heights out switches the y-axis to log above the line
+_LOG10_MAX = math.log10(sys.float_info.max)
 HEADROOM = 1.3  # a linear axis reaches 1.3 x the largest value ...
 LOG_HEADROOM = 1.45  # ... a log axis 1.45 x the decades above the line (its linear part below the line takes room)
 _FILE_SAFE = re.compile(r"[A-Za-z0-9._-]+")
@@ -86,20 +88,47 @@ def _distances(entry: dict, field: str, n: int, where: str) -> list[float]:
 
 
 def _check_bands(bands: object, where: str) -> None:
-    ok = isinstance(bands, dict) and set(bands) == {"green", "amber", "red"} and bands["red"] == "outside"
+    """The judge's record: green [g_lo, g_hi]; amber [a_lo, g_lo - 1] and [g_hi + 1, a_hi], touching green; red the rest."""
+    ok = isinstance(bands, dict) and set(bands) == {"green", "amber", "red"}
+    ok = ok and type(bands["red"]) is str and bool(bands["red"].strip())
     if ok:
         green, amber = bands["green"], bands["amber"]
         pairs = [green, *amber] if isinstance(amber, list) and len(amber) == 2 else []
         ok = isinstance(green, list) and len(pairs) == 3 and all(
             isinstance(p, list) and len(p) == 2 and all(_is_whole(v, 0) for v in p) for p in pairs
         )
-        ok = ok and amber[0][0] <= green[0] <= green[1] <= amber[1][1]
+        ok = ok and amber[0][0] <= amber[0][1] + 1 == green[0] <= green[1] == amber[1][0] - 1 <= amber[1][1]
     if not ok:
-        raise ExceptionBlockError(f"{where}: bands must be {{green: [lo, hi], amber: [[lo, hi], [lo, hi]], red: 'outside'}}, got {bands!r}")
+        raise ExceptionBlockError(
+            f"{where}: bands must be green [lo, hi] with amber ranges touching it on both sides, as the judge records "
+            f"them (judge §5), got {bands!r}"
+        )
+
+
+def _band_of(observed: int, bands: dict) -> str:
+    green, (amber_low, amber_high) = bands["green"], bands["amber"]
+    if green[0] <= observed <= green[1]:
+        return "green"
+    return "amber" if amber_low[0] <= observed <= amber_high[1] else "red"
+
+
+def _check_keys(entry: object, keys: frozenset, name: str) -> None:
+    if not isinstance(entry, dict) or set(entry) != keys:
+        got = sorted(map(str, entry)) if isinstance(entry, dict) else type(entry).__name__
+        raise ExceptionBlockError(f"each {name} entry needs exactly the keys {sorted(keys)}, got {got}")
+    if type(entry["task"]) is not str or type(entry["region"]) is not str or not _is_whole(entry["horizon_step"], 1):
+        raise ExceptionBlockError(
+            f"{name} entry: task and region must be text and horizon_step a whole number >= 1, "
+            f"got {entry['task']!r}, {entry['region']!r}, {entry['horizon_step']!r}"
+        )
 
 
 def _check_pair(entry: dict, trial: dict) -> None:
-    where = f"exceptions/trials {entry.get('task')!r}/{entry.get('region')!r}/step {entry.get('horizon_step')!r}"
+    _check_keys(entry, EXCEPTION_KEYS, "exceptions")
+    _check_keys(trial, TRIAL_KEYS, "trials")
+    where = f"exceptions/trials {entry['task']!r}/{entry['region']!r}/step {entry['horizon_step']!r}"
+    if (trial["task"], trial["region"], trial["horizon_step"]) != (entry["task"], entry["region"], entry["horizon_step"]):
+        raise ExceptionBlockError(f"{where}: the trials entry belongs to another task, region or step")
     if not _is_whole(entry["horizon_step"], 1):
         raise ExceptionBlockError(f"{where}: horizon_step must be a whole number >= 1")
     n = entry["n_trials"]
@@ -121,7 +150,15 @@ def _check_pair(entry: dict, trial: dict) -> None:
         raise ExceptionBlockError(f"{where}: is_exception must hold only True or False")
     if not _is_whole(entry["observed"], 0) or entry["observed"] != sum(flags):
         raise ExceptionBlockError(f"{where}: observed = {entry['observed']!r} but is_exception flags {sum(flags)} misses")
-    captions.chart1_caption(expected=entry["expected"], n=n, observed=entry["observed"], band=entry["band"])  # slot checks
+    if _band_of(entry["observed"], entry["bands"]) != entry["band"]:
+        raise ExceptionBlockError(
+            f"{where}: band {entry['band']!r} disagrees with the bands for {entry['observed']} misses "
+            f"({_band_of(entry['observed'], entry['bands'])!r}); the chart would contradict itself"
+        )
+    try:
+        captions.chart1_caption(expected=entry["expected"], n=n, observed=entry["observed"], band=entry["band"])
+    except captions.CaptionSlotError as error:
+        raise ExceptionBlockError(f"{where}: {error}") from error
 
 
 def chart1_panels(exceptions: dict, trials: dict) -> list[tuple[dict, dict]]:
@@ -131,13 +168,11 @@ def chart1_panels(exceptions: dict, trials: dict) -> list[tuple[dict, dict]]:
             raise ExceptionBlockError(f"{name} must be {{'per_task': [...]}} (judge §5), got {block!r:.80}")
     by_key: dict[tuple, list[dict]] = {}
     for trial in trials["per_task"]:
-        if not isinstance(trial, dict) or set(trial) != TRIAL_KEYS:
-            raise ExceptionBlockError(f"each trials entry needs exactly the keys {sorted(TRIAL_KEYS)}, got {sorted(trial) if isinstance(trial, dict) else trial!r}")
+        _check_keys(trial, TRIAL_KEYS, "trials")
         by_key.setdefault((trial["task"], trial["region"], trial["horizon_step"]), []).append(trial)
     pairs = []
     for entry in exceptions["per_task"]:
-        if not isinstance(entry, dict) or set(entry) != EXCEPTION_KEYS:
-            raise ExceptionBlockError(f"each exceptions entry needs exactly the keys {sorted(EXCEPTION_KEYS)}, got {sorted(entry) if isinstance(entry, dict) else entry!r}")
+        _check_keys(entry, EXCEPTION_KEYS, "exceptions")
         key = (entry["task"], entry["region"], entry["horizon_step"])
         found = by_key.pop(key, [])
         if len(found) != 1:
@@ -152,12 +187,13 @@ def chart1_panels(exceptions: dict, trials: dict) -> list[tuple[dict, dict]]:
 
 
 def _header(entry: dict) -> str:
+    """The strip above the panel; the §7 hedging note, when flagged, takes a second line so it is never cut off."""
     text = (
         f"region: {entry['region']} · observed exceptions: {entry['observed']} · "
         f"expected: {captions.format_expected(entry['expected'])} of {entry['n_trials']} · band: {entry['band'].upper()}"
     )
     if entry["low_side_sharpness_flag"]:
-        text += f" · {entry['observed']} misses — but see sharpness: possible hedging"
+        text += f"\n{entry['observed']} misses — but see sharpness: possible hedging"
     return text
 
 
@@ -177,10 +213,10 @@ def _inset(ax: Axes, entry: dict) -> tuple[Axes, Line2D]:
         if high > max(low, 0.0):
             inset.axhspan(max(low, 0.0), high, color=style.BAND_COLOURS[band], linewidth=0)
     inset.axhline(entry["expected"], color="black", linewidth=0.8, linestyle=":")
-    (marker,) = inset.plot([0.5], [observed], marker="<", markersize=7, color="black", linestyle="none")
+    (marker,) = inset.plot([0.5], [observed], marker="<", markersize=7, color="black", linestyle="none", clip_on=False)
     inset.annotate(str(observed), xy=(0.5, observed), xytext=(-12, 0), textcoords="offset points", ha="right", va="center", fontsize=7.5)
     inset.set_xlim(0.0, 1.0)
-    inset.set_ylim(0.0, top)
+    inset.set_ylim(-0.02 * top, top)  # a small margin below 0, so a zero count's marker is drawn whole
     inset.set_xticks([])
     inset.yaxis.tick_right()
     inset.tick_params(labelsize=7)
@@ -201,9 +237,13 @@ def build_exception_figure(entry: dict, trial: dict, model_name: str, is_fixture
     fig.subplots_adjust(left=0.09, right=0.85, top=0.80, bottom=0.12)
     ax.fill_between(x, trial["band_lo"], line_y, color=style.REGION_FILL_COLOUR, linewidth=0, zorder=1)
     (line,) = ax.plot(x, line_y, color=style.REGION_EDGE_COLOUR, linewidth=1.0, zorder=2)
-    dots = ax.scatter(x, y, s=9, color=style.line_colour(is_fixture), zorder=3, linewidths=0)
+    dots = ax.scatter(x, y, s=9, color=style.line_colour(is_fixture), zorder=3, linewidths=0, clip_on=False)  # a 0 is drawn whole
     flagged = [i for i, f in enumerate(trial["is_exception"]) if f]
-    misses = ax.scatter(flagged, [y[i] for i in flagged], s=55, facecolors="none", edgecolors=style.EXCEPTION_COLOUR, linewidths=1.1, zorder=4)
+    misses = ax.scatter(
+        flagged, [y[i] for i in flagged], s=55, facecolors="none", edgecolors=style.EXCEPTION_COLOUR, linewidths=1.1, zorder=4,
+        clip_on=False,  # a miss at the first or last run is circled whole
+    )
+    misses.set_visible(bool(flagged))  # an empty unclipped scatter would still stamp one circle at the figure's corner
     largest, edge = max(y), max(line_y)
     ylabel = "miss, in the model's own stated error sizes"
     if edge > 0 and largest > LOG_ABOVE * edge:
@@ -211,13 +251,14 @@ def build_exception_figure(entry: dict, trial: dict, model_name: str, is_fixture
         ylabel += " (log scale above the line)"
     # headroom: the top fifth of the panel stays empty, so the fixture label (top-left) never hides a dot
     if ax.get_yscale() == "linear":
-        ax.set_ylim(0.0, max(largest, edge, 1e-12) * HEADROOM)
-    else:
-        ax.set_ylim(0.0, edge * (largest / edge) ** LOG_HEADROOM)
+        ax.set_ylim(0.0, min(max(largest, edge, 1e-12) * HEADROOM, sys.float_info.max))
+    else:  # in log space, capped at the largest float: a miss of 1e300 stated sizes is drawn, not crashed on
+        exponent = math.log10(edge) + LOG_HEADROOM * (math.log10(largest) - math.log10(edge))
+        ax.set_ylim(0.0, 10.0**exponent if exponent < _LOG10_MAX else sys.float_info.max)
     ax.set_xlim(-0.5, n - 0.5)
     ax.set_xlabel("test run (in the order the runs were drawn)")
     ax.set_ylabel(ylabel)
-    header = ax.set_title(_header(entry), loc="left", fontsize=8.5)
+    header = ax.set_title(_header(entry), loc="left", fontsize=8)
     inset, marker = _inset(ax, entry)
     fig.suptitle(f"Backtesting exceptions — {name} · task {entry['task']} · step {entry['horizon_step']}", fontsize=10)
     if is_fixture:

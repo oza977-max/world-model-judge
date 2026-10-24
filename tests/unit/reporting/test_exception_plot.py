@@ -94,7 +94,7 @@ def test_misses_are_circled_exactly_where_the_verdict_flags_them_never_re_derive
     # a flag that disagrees with "dot above the line" is still drawn as the verdict says (judge §5 warning)
     trial["is_exception"] = [not f for f in trial["is_exception"]]
     entry["observed"] = sum(trial["is_exception"])
-    entry["band"] = "red"
+    entry["band"] = ep._band_of(entry["observed"], entry["bands"])
     chart = ep.build_exception_figure(entry, trial, "direct", False)
     circled = [round(v) for v in chart.misses.get_offsets()[:, 0]]
     assert circled == [i for i, f in enumerate(trial["is_exception"]) if f]
@@ -109,14 +109,14 @@ def test_the_header_strip_reads_like_the_spec_and_adds_the_hedging_note_when_fla
     )
     entry = dict(entry, low_side_sharpness_flag=True)
     chart = ep.build_exception_figure(entry, trial, "direct", False)
-    assert chart.header.get_text().endswith(f" · {entry['observed']} misses — but see sharpness: possible hedging")
+    assert chart.header.get_text().endswith(f"\n{entry['observed']} misses — but see sharpness: possible hedging")
 
 
 def test_the_inset_scale_marks_the_observed_count_inside_its_band():
     entry, _, chart = _one()
     assert chart.marker.get_ydata()[0] == entry["observed"]
     lo, hi = chart.inset.get_ylim()
-    assert lo <= entry["observed"] <= hi and lo == 0
+    assert lo <= entry["observed"] <= hi and lo <= 0
     assert chart.inset.get_position().x0 > chart.panel.get_position().x1  # on the right, as the caption says
 
 
@@ -157,6 +157,10 @@ def _mutated(change):
         (lambda e, t, E, T: T["per_task"].append(copy.deepcopy(t)), "trials entries"),
         (lambda e, t, E, T: E.update(extra=1), "per_task"),
         (lambda e, t, E, T: E["per_task"].pop(0), "no exceptions entry"),
+        (lambda e, t, E, T: e.update(band={"green": "amber", "amber": "red", "red": "green"}[e["band"]]), "disagrees"),
+        (lambda e, t, E, T: e["bands"].update(amber=[[0, 0], [5, 9]]), "touching"),
+        (lambda e, t, E, T: (e.update(task=["x"]), t.update(task=["x"])), "text"),
+        (lambda e, t, E, T: e.update(expected=e["n_trials"] + 1.0), "expected"),
         (lambda e, t, E, T: e.update(bands={"green": [1, 1]}), "bands"),
         (lambda e, t, E, T: (e.update(horizon_step=0), t.update(horizon_step=0)), "horizon_step"),
         (lambda e, t, E, T: (e.update(horizon_step=True), t.update(horizon_step=True)), "horizon_step"),
@@ -270,3 +274,55 @@ def test_the_axis_turns_logarithmic_above_the_line_only_when_a_miss_is_far_out()
     assert chart.panel.get_yscale() == "symlog" and "log scale above the line" in chart.panel.get_ylabel()
     chart = ep.build_exception_figure(near[0]["per_task"][0], near[1]["per_task"][0], "direct", False)
     assert chart.panel.get_yscale() == "linear" and "log" not in chart.panel.get_ylabel()
+
+
+@pytest.mark.parametrize("region", ["training", "out-near-inverted", "out-high-amplitude"])
+def test_the_header_with_the_hedging_note_fits_inside_the_panel_and_clear_of_the_scale(region):
+    # review pass 1: on one line the §7 note ran off the figure and into the scale's title
+    exceptions, trials = _n200_blocks(np.zeros(200))
+    entry = dict(exceptions["per_task"][0], region=region, low_side_sharpness_flag=True, band="red", observed=0)
+    trial = dict(trials["per_task"][0], region=region)
+    chart = ep.build_exception_figure(entry, trial, "direct", False)
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+
+    renderer = FigureCanvasAgg(chart.figure).get_renderer()
+    header = chart.header.get_window_extent(renderer)
+    panel = chart.panel.get_window_extent(renderer)
+    scale_title = chart.inset.title.get_window_extent(renderer)
+    assert header.x0 >= panel.x0 - 1 and header.x1 <= panel.x1 and header.x1 < scale_title.x0
+    assert "possible hedging" in chart.header.get_text().splitlines()[-1]
+
+
+@pytest.mark.parametrize("far", [1e215, 1.7e308])
+def test_a_miss_near_the_largest_float_is_drawn_not_crashed_on(tmp_path, far):
+    # review pass 1: the log-axis headroom overflowed for misses beyond about 1e212 stated sizes
+    exceptions, trials = _n200_blocks(np.r_[np.full(199, 0.5), [far]])
+    env = {"model_ref": "o", "model_name": "direct", "is_fixture": False,
+           "verdict": {"world": "lv", "exceptions": exceptions, "trials": trials}, "meta": {}}
+    (paths,) = ep.render_exception_charts(env, tmp_path / "c", tmp_path / "t")
+    chart = ep.build_exception_figure(exceptions["per_task"][0], trials["per_task"][0], "direct", False)
+    assert chart.panel.get_ylim()[1] >= far and paths.svg.exists()
+
+
+def test_misses_and_the_scale_marker_are_drawn_whole_at_the_edges():
+    exceptions, trials = _n200_blocks(np.r_[[5.0], np.full(198, 0.5), [5.0]])
+    chart = ep.build_exception_figure(exceptions["per_task"][0], trials["per_task"][0], "direct", False)
+    assert chart.misses.get_clip_on() is False and chart.marker.get_clip_on() is False
+
+
+def test_build_refuses_a_malformed_pair_with_its_own_error_not_a_key_error():
+    with pytest.raises(ep.ExceptionBlockError, match="keys"):
+        ep.build_exception_figure({}, {}, "direct", False)
+
+
+def test_with_no_misses_no_red_is_drawn_anywhere_on_the_image(tmp_path):
+    # seen on a render: an empty, unclipped circle layer stamped a red half-circle in the figure's corner
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+
+    exceptions, trials = _n200_blocks(np.zeros(200))
+    chart = ep.build_exception_figure(exceptions["per_task"][0], trials["per_task"][0], "direct", False)
+    canvas = FigureCanvasAgg(chart.figure)
+    canvas.draw()
+    pixels = np.asarray(canvas.buffer_rgba())[..., :3].astype(int)
+    red = np.array([int(style.EXCEPTION_COLOUR[i:i + 2], 16) for i in (1, 3, 5)])
+    assert not np.any(np.all(np.abs(pixels - red) <= 40, axis=-1))
