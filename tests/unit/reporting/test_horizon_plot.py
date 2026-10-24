@@ -410,3 +410,58 @@ def test_a_long_task_name_on_a_fixtures_chart_is_placed_clear_of_the_fixture_sen
         fixture = next(t for t in ax.texts if t.get_bbox_patch() is not None).get_bbox_patch().get_window_extent()
         boxes = [t.get_window_extent() for t in labels]
         assert not boxes[0].overlaps(boxes[1]) and not any(b.overlaps(fixture) for b in boxes)
+
+
+# --- review of P5-C03, pass 2 ------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("steps", [(1500, 1700), (1500, 1600), (1500, 1550), (4700, 4750), (1, 40)])
+def test_no_switch_line_runs_through_another_tasks_label(steps):
+    block = _pendulum_block()
+    switches = {r["region"]: [("dp-control", steps[0]), ("dp-planning", steps[1])] for r in block["per_region"]}
+    chart = build_horizon_figure(block, "ensemble", switches=switches)
+    for index, ax in enumerate(chart.panels):
+        for label in _switch_texts(ax):
+            box = label.get_window_extent()
+            own = int(label.get_text().split("(step ")[1].rstrip(")"))
+            for i, _task, line in chart.switch_lines:
+                x = ax.transData.transform((line.get_xdata()[0], 1.0))[0]
+                if i == index and line.get_xdata()[0] != own:
+                    assert not box.x0 - 1.0 < x < box.x1 + 1.0
+
+
+def test_a_switch_label_never_runs_past_the_top_of_its_panel():
+    block = _pendulum_block()
+    switches = {r["region"]: [("c" * 40, 4750), ("p" * 40, 4900)] for r in block["per_region"]}
+    chart = build_horizon_figure(block, "ensemble", switches=switches)
+    for ax in chart.panels:
+        assert all(t.get_window_extent().y1 <= ax.get_window_extent().y1 for t in _switch_texts(ax))
+
+
+def test_axis_labels_of_three_panels_neither_meet_nor_leave_the_figure():
+    # review of P5-C03, pass 2: the three world-time labels ran into each other on every pendulum chart
+    block = _pendulum_block()
+    block["dt"] = 0.002
+    chart = build_horizon_figure(block, "ensemble")
+    chart.figure.draw_without_rendering()  # axis labels are positioned at draw time
+    figure_box = chart.figure.bbox
+    tops = [secondary.xaxis.label.get_window_extent() for secondary in chart.secondary_axes]
+    assert not any(a.overlaps(b) for i, a in enumerate(tops) for b in tops[i + 1:])
+    y_label = chart.panels[0].yaxis.label.get_window_extent()
+    assert all(figure_box.x0 <= b.x0 and b.x1 <= figure_box.x1 for b in [*tops, y_label])
+    titles = [chart.figure._suptitle.get_window_extent(), *(ax.title.get_window_extent() for ax in chart.panels), *tops]
+    assert not any(a.overlaps(b) for i, a in enumerate(titles) for b in titles[i + 1:])  # nor any title another
+    _, lv = _full()  # minor ticks print as "4 × 10⁰" here, the widest tick labels, which pushed the y-label out
+    lv.figure.draw_without_rendering()
+    assert lv.panels[0].yaxis.label.get_window_extent().x0 >= lv.figure.bbox.x0 + 2.0
+
+
+def test_values_that_are_not_numbers_are_refused_as_a_bad_block():
+    block = _block()
+    block["per_region"][0]["median_error"] = ["x"] * 21
+    with pytest.raises(HorizonBlockError, match="not numbers"):
+        build_horizon_figure(block, "ensemble")
+    block = _block()
+    block["per_region"][0]["steps"] = 5
+    with pytest.raises(HorizonBlockError, match="not numbers"):
+        build_horizon_figure(block, "ensemble")

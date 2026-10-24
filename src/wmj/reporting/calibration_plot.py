@@ -133,7 +133,8 @@ def build_calibration_figure(panels: dict[str, list[tuple[dict, float]]], model_
     reach = [(c - honest_luck(level, e["n_trials"]), c + honest_luck(level, e["n_trials"]))
              for pairs in panels.values() for e, _w in pairs for level, c in zip(LEVELS, e["coverage"])]
     y_low = min(-0.06, min(lo for lo, _hi in reach) - 0.03)
-    y_high = max(1.3, max(hi for _lo, hi in reach) + 0.3)
+    top = max(hi for _lo, hi in reach)
+    y_high = max(1.3, top + 0.35 * (top - y_low))  # the top quarter stays clear, however tall the bars
     for index, (ax, (task, pairs)) in enumerate(zip(axes, panels.items())):
         (diagonal,) = ax.plot([0.45, 1.0], [0.45, 1.0], color=style.DIVERGENCE_COLOUR, linestyle="-", linewidth=0.8)
         ax.annotate(DIAGONAL_LABEL, xy=(0.47, 0.47), xytext=(6, -2), textcoords="offset points", rotation=0,

@@ -90,7 +90,11 @@ def _validate(block: dict) -> tuple[float, list[dict]]:
                 f"ADR-R2 Chart 2: each per_region entry needs exactly {sorted(REQUIRED_ENTRY_KEYS)}, "
                 f"got {sorted(entry) if isinstance(entry, dict) else type(entry)}"
             )
-        steps = list(entry["steps"])
+        try:
+            steps = list(entry["steps"])
+            arrays = {key: np.asarray(entry[key], dtype=float) for key in ("median_error", "divergence_reference")}
+        except (TypeError, ValueError) as error:
+            raise HorizonBlockError(f"ADR-R2 Chart 2: region {entry['region']!r} has steps or values that are not numbers: {error}") from error
         n = len(steps)
         if n < 2 or steps != list(range(n)):
             raise HorizonBlockError(
@@ -98,7 +102,7 @@ def _validate(block: dict) -> tuple[float, list[dict]]:
                 f"(judge §5 shares the divergence artefact's step-zero origin), got {steps[:5]}..."
             )
         for key in ("median_error", "divergence_reference"):
-            values = np.asarray(entry[key], dtype=float)
+            values = arrays[key]
             if values.shape != (n,):
                 raise HorizonBlockError(
                     f"ADR-R2 Chart 2: region {entry['region']!r} {key} has {values.shape} "
@@ -164,24 +168,30 @@ def _label_switches(ax: Axes, marks: list[tuple[str, float]], taken: list[Text])
     of each other). Each label names its step, so it still reads as its own line's when it cannot sit right
     beside it. Each label tries, in turn: just right of its line, just left of it, then half a line of text
     further out on either side, and so on; then the same places again with the label broken over two
-    lines, which is shorter (a long task name on a fixture's chart would otherwise reach the fixture sentence). A spot must lie inside the panel (not over the tick labels
-    or the next panel) and must not touch a label already placed or the fixture sentence. If no spot is free the
-    chart is refused rather than drawn unreadable (reporting §7)."""
+    lines, which is shorter (a long task name on a fixture's chart would otherwise reach the fixture sentence).
+    A spot must lie inside the panel (not over the tick labels, the next panel or the panel's top), and must not
+    touch a label already placed, the fixture sentence, or another task's switch line (review of P5-C03, pass 2:
+    on the pendulum two tasks switch a few hundred steps apart, and one line ran through the other's label).
+    If no spot is free the chart is refused rather than drawn unreadable (reporting §7)."""
     occupied = [_extent(t) for t in taken]
     inside = ax.get_window_extent()
+    line_xs = {float(ax.transData.transform((step, 1.0))[0]) for _task, step in marks}
     nudge = 0.5 * SWITCH_FONT_SIZE  # points: half a rotated line of text, so labels pack close to their lines
     placed = []
     for task, step in marks:
         where_said = f"switches to climate here (step {step:g})"
         spots = [(words, shift, side) for words in (f" {task} {where_said}", f" {task}\n {where_said}")
                  for shift in range(16) for side in ("left", "right")]  # ha="left" puts the upright text right of the line
+        own_x = float(ax.transData.transform((step, 1.0))[0])
+        lines = [Bbox([[x - 1.0, inside.y0], [x + 1.0, inside.y1]]) for x in line_xs if x != own_x]
         for words, shift, side in spots:
             dx = (1.5 + shift * nudge) * (1 if side == "left" else -1)
             where = offset_copy(ax.get_xaxis_transform(), fig=ax.figure, x=dx, y=0.0, units="points")
             text = ax.text(step, 0.03, words, transform=where, rotation=90,
                            ha=side, va="bottom", fontsize=SWITCH_FONT_SIZE, color=SWITCH_COLOUR)
             box = _extent(text)
-            if box.x0 >= inside.x0 and box.x1 <= inside.x1 and not any(box.overlaps(o) for o in occupied):
+            within = inside.x0 <= box.x0 and box.x1 <= inside.x1 and box.y1 <= inside.y1
+            if within and not any(box.overlaps(o) for o in occupied + lines):
                 break
             text.remove()
         else:
@@ -255,12 +265,12 @@ def build_horizon_figure(
         ax.set_xlabel("rollout step")
         ax.set_xlim(1, int(steps[-1]))
         secondary = ax.secondary_xaxis("top", functions=(to_world_time, to_steps))
-        secondary.set_xlabel(f"world time (step × dt, dt = {dt:g})")
+        secondary.set_xlabel(f"world time = step × dt\n(dt = {dt:g})")  # two lines: three panels' labels must not meet
         secondaries.append(secondary)
 
     axes[0].set_ylabel("median normalised error (log scale)")
     fig.suptitle(f"Error against horizon — {label}", fontsize=10)
-    fig.subplots_adjust(left=0.10, right=0.80, top=0.80, bottom=0.12, wspace=0.12)
+    fig.subplots_adjust(left=0.10, right=0.80, top=0.76, bottom=0.12, wspace=0.12)
     # headroom: the top fifth of each panel stays empty, so the fixture label never hides a line
     axes[0].autoscale_view()
     low, high = axes[0].get_ylim()

@@ -1325,7 +1325,8 @@ the region instead, same total size (200 starts × 1,000 steps = 200,000 samples
     - Chart 3's y-axis runs from just below 0 to 1.3, or further when a bar needs it, so a zero-coverage point and every whole bar show, and the fixture sentence never hides a line;
     - the fixture sentence wraps to its panel's width;
     - each switch-line label reads "{task} switches to climate here (step N)" (ADR-R2's wording plus the step, so a label pushed aside by a neighbour still names its line); labels are placed where they overprint nothing (beside the line, further out, or over two lines), and the chart is refused if no free place exists;
-    - line-end labels are spaced by half of each label's height, and none falls below the panel.
+    - line-end labels are spaced by half of each label's height, and none falls below the panel;
+    - Chart 2's top axis reads "world time = step × dt" over "(dt = …)" on two lines, so three panels' labels never meet; a switch label never crosses another task's switch line.
 
 **Deferred door-tightening (REMEMBER §3, P5–P6):** require the horizon-step-1 entry in each exception/trials pair, require `steps` to equal `range(1, H+1)`, check tolerance consistency across blocks, handle a zero-error chart; one shared pipeline helper across four test files; rename `task_region_step`; a shape variant with 3 regions and d=4; mixed-element list tests; the `io.open` guard case.
 

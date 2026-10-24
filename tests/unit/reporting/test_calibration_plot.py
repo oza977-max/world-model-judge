@@ -167,3 +167,17 @@ def test_every_point_and_its_whole_error_bar_lie_inside_the_panel(n_trials):
     for (index, _region, bars), (_i, _r, line) in zip(chart.error_bars, chart.region_lines, strict=True):
         low, high = chart.panels[index].get_ylim()
         assert all(low < c - b and c + b < high for c, b in zip(line.get_ydata(), bars, strict=True))
+
+
+@pytest.mark.parametrize("n_trials", [1, 10, 200])
+def test_the_fixture_sentence_hides_no_point_or_bar_however_few_the_runs(n_trials):
+    env = envelope(name="fx-x", is_fixture=True)
+    for entry in env["verdict"]["calibration"]["per_task"]:
+        entry.update(coverage=[1.0, 1.0, 1.0, 1.0], n_trials=n_trials)
+    _, chart = _figure(env)
+    chart.figure.draw_without_rendering()
+    for (index, _region, bars), (_i, _r, line) in zip(chart.error_bars, chart.region_lines, strict=True):
+        ax = chart.panels[index]
+        sentence = next(t for t in ax.texts if t.get_bbox_patch() is not None).get_bbox_patch().get_window_extent()
+        tallest = max(c + b for c, b in zip(line.get_ydata(), bars, strict=True))
+        assert ax.transData.transform((0.5, tallest))[1] < sentence.y0
