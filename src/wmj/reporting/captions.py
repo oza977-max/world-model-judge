@@ -99,6 +99,14 @@ def _checked(text: str) -> str:
     return text
 
 
+def format_expected(expected: float) -> str:
+    """How an expected count is printed, on the chart and in its caption alike (display arithmetic).
+
+    A whole number reads as one ("20"); otherwise three significant figures, never a rounded-away "0"."""
+    shown = round(expected)
+    return str(shown) if abs(expected - shown) < 1e-9 * max(1.0, abs(expected)) else f"{expected:.3g}"
+
+
 def chart1_caption(*, expected: float, n: int, observed: int, band: str) -> str:
     """Chart 1's caption. `expected` is the verdict's n x p, shown rounded ("about"): display arithmetic."""
     n = _whole("n (the number of runs)", n, 1)
@@ -107,10 +115,7 @@ def chart1_caption(*, expected: float, n: int, observed: int, band: str) -> str:
         raise CaptionSlotError(f"expected must be a plain finite number of misses between 0 and n = {n}, got {type(expected).__name__} {expected!r}")
     if band not in BANDS:
         raise CaptionSlotError(f"band must be one of {BANDS}, got {band!r}")
-    shown = round(expected)
-    # a whole number reads as one ("about 20"); otherwise three significant figures, never a rounded-away "about 0"
-    text = str(shown) if abs(expected - shown) < 1e-9 * max(1.0, abs(expected)) else f"{expected:.3g}"
-    return _checked(CHART1_TEMPLATE.format(expected=text, n=n, observed=observed, band=band))
+    return _checked(CHART1_TEMPLATE.format(expected=format_expected(expected), n=n, observed=observed, band=band))
 
 
 def chart3_caption(*, level: int) -> str:
