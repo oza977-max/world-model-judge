@@ -180,9 +180,10 @@ def test_render_refuses_before_writing_anything(tmp_path):
     assert not (tmp_path / "charts").exists() and not (tmp_path / "captions").exists()
 
 
-@pytest.mark.parametrize("bad", [{"model_name": "x"}, None, {"model_name": "", "is_fixture": False, "verdict": {}}])
+@pytest.mark.parametrize("bad", [{"model_name": "x"}, None, {"model_name": "", "is_fixture": False, "verdict": {}},
+                                 {"model_name": "direct", "is_fixture": 1, "verdict": {}}])
 def test_render_refuses_an_envelope_without_the_fields_it_draws(tmp_path, bad):
-    with pytest.raises((ep.ExceptionBlockError, ValueError)):
+    with pytest.raises(ep.ExceptionBlockError):
         ep.render_exception_charts(bad, tmp_path / "c", tmp_path / "t")
 
 
@@ -326,3 +327,26 @@ def test_with_no_misses_no_red_is_drawn_anywhere_on_the_image(tmp_path):
     pixels = np.asarray(canvas.buffer_rgba())[..., :3].astype(int)
     red = np.array([int(style.EXCEPTION_COLOUR[i:i + 2], 16) for i in (1, 3, 5)])
     assert not np.any(np.all(np.abs(pixels - red) <= 40, axis=-1))
+
+
+def test_on_a_log_axis_the_zero_and_the_line_never_overprint():
+    # review pass 2: with misses 1e150 stated sizes out, "0" and "10^0" overprinted into a false "100"
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+
+    exceptions, trials = _n200_blocks(np.r_[np.full(175, 0.5), np.full(25, 1e150)])
+    chart = ep.build_exception_figure(exceptions["per_task"][0], trials["per_task"][0], "direct", False)
+    renderer = FigureCanvasAgg(chart.figure).get_renderer()
+    labels = [t for t in chart.panel.get_yticklabels() if t.get_text()]
+    boxes = [t.get_window_extent(renderer) for t in labels]
+    for i, a in enumerate(boxes):
+        for b in boxes[i + 1:]:
+            assert not a.overlaps(b), [t.get_text() for t in labels]
+
+
+def test_a_region_name_too_long_for_the_header_is_refused(tmp_path):
+    env = _envelope()
+    for block in ("exceptions", "trials"):
+        for entry in env["verdict"][block]["per_task"]:
+            entry["region"] = "r" * 41
+    with pytest.raises(ep.ExceptionBlockError, match="40"):
+        ep.render_exception_charts(env, tmp_path / "c", tmp_path / "t")

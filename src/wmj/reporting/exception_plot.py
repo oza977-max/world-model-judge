@@ -45,7 +45,7 @@ _FLOAT_MAX = float(np.finfo(np.float64).max)
 _LOG10_MAX = math.log10(_FLOAT_MAX)
 HEADROOM = 1.3  # a linear axis reaches 1.3 x the largest value ...
 LOG_HEADROOM = 1.45  # ... a log axis 1.45 x the decades above the line (its linear part below the line takes room)
-_FILE_SAFE = re.compile(r"[A-Za-z0-9._-]+")
+_FILE_SAFE = re.compile(r"[A-Za-z0-9._-]{1,40}")  # also keeps the header strip clear of the scale
 
 
 class ExceptionBlockError(WmjError):
@@ -83,7 +83,7 @@ def _distances(entry: dict, field: str, n: int, where: str) -> list[float]:
     if not isinstance(values, list) or len(values) != n:
         raise ExceptionBlockError(f"{where}: {field} has length {len(values) if isinstance(values, list) else '?'}, n_trials is {n}")
     for v in values:
-        if type(v) not in (int, float) or not math.isfinite(v) or v < 0:
+        if type(v) not in (int, float) or (type(v) is int and abs(v) >= 2**63) or not math.isfinite(v) or v < 0:
             raise ExceptionBlockError(f"{where}: {field} holds {v!r}; a distance is a finite number >= 0")
     return values
 
@@ -248,7 +248,10 @@ def build_exception_figure(entry: dict, trial: dict, model_name: str, is_fixture
     largest, edge = max(y), max(line_y)
     ylabel = "miss, in the model's own stated error sizes"
     if edge > 0 and largest > LOG_ABOVE * edge:
-        ax.set_yscale("symlog", linthresh=edge, linscale=1.0)
+        decades = math.log10(largest) - math.log10(edge)
+        # the linear part (0 to the line) keeps about a tenth of the axis whatever the decades above it,
+        # so the "0" and the line's own tick never overprint into a false "100" (review pass 2)
+        ax.set_yscale("symlog", linthresh=edge, linscale=max(1.0, 0.12 * decades))
         ylabel += " (log scale above the line)"
     # headroom: the top fifth of the panel stays empty, so the fixture label (top-left) never hides a dot
     if ax.get_yscale() == "linear":
@@ -270,7 +273,7 @@ def build_exception_figure(entry: dict, trial: dict, model_name: str, is_fixture
 
 def _file_part(label: str, value: object) -> str:
     if type(value) is not str or not _FILE_SAFE.fullmatch(value):
-        raise ExceptionBlockError(f"{label} {value!r} cannot be part of a file name (letters, digits, '.', '_', '-')")
+        raise ExceptionBlockError(f"{label} {value!r} cannot be part of a file name (1 to 40 letters, digits, '.', '_', '-')")
     return value
 
 
@@ -282,9 +285,15 @@ def render_exception_charts(envelope: dict, charts_dir: Path, captions_dir: Path
         raise ExceptionBlockError(f"an envelope needs a 'verdict' (judge §5), got {envelope!r:.80}")
     verdict = envelope["verdict"]
     model, is_fixture = envelope.get("model_name"), envelope.get("is_fixture")
-    style.display_name(model, is_fixture)  # a real name and a real flag, or refuse
+    try:
+        style.display_name(model, is_fixture)  # a real name and a real flag, or refuse
+    except (ValueError, style.FixtureLabelError) as error:
+        raise ExceptionBlockError(f"envelope: {error}") from error
     world = _file_part("world", verdict.get("world"))
     _file_part("model name", model)
+    for entry in verdict.get("exceptions", {}).get("per_task", []) if isinstance(verdict.get("exceptions"), dict) else []:
+        if isinstance(entry, dict):
+            _file_part("region", entry.get("region"))  # long names are refused before anything is drawn
     pairs = chart1_panels(verdict.get("exceptions"), verdict.get("trials"))
     built = []
     for entry, trial in pairs:
