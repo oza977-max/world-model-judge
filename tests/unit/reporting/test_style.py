@@ -152,7 +152,7 @@ def test_a_figure_declared_fixture_free_is_refused_if_it_shows_fixture_output(tm
     fig = style.new_figure(); ax = fig.subplots(); ax.annotate("FIXTURE: fx", xy=(0.5, 0.5)); cases.append(fig)
     fig = style.new_figure(); ax = fig.subplots(); ax.bar([1], [1.0], color=style.FIXTURE_COLOUR); cases.append(fig)
     for fig in cases:
-        with pytest.raises(style.FixtureLabelError, match="shows fixture output"):
+        with pytest.raises(style.FixtureLabelError, match=r"shows \d+ sign\(s\) of it .*mark_fixture\(ax\)"):
             style.save_figure(fig, png, svg, contains_fixture=False)
     assert not svg.exists()
     clean = style.new_figure(); ax = clean.subplots()

@@ -148,7 +148,7 @@ def test_chart4_takes_display_names_as_given_including_fixture_prefixes_and_hyph
 @pytest.mark.parametrize(
     "pair",
     [("direct",), ("direct", "direct"), ("", "ensemble"), ("direct", None), "de", ("a. B", "c"), ("a", "b", "c"),
-     ("A.", "b"), ("a!", "b"), (" a", "b"), ("a", "b\n"), ("a", "b ")],
+     ("A.", "b"), ("a!", "b"), (" a", "b"), ("a", "b\n"), ("a", "b "), ("A\nB", "c")],
 )
 def test_chart4_refuses_a_pair_that_is_not_two_different_plain_names(pair):
     with pytest.raises(c.CaptionSlotError, match="pair|name"):
@@ -168,6 +168,16 @@ def test_every_filled_caption_is_within_three_sentences_and_has_no_unfilled_slot
 def test_an_expected_count_that_is_not_whole_is_shown_to_one_decimal_never_rounded_away():
     assert "about 0.4 of 20 times — it missed 7" in c.chart1_caption(expected=0.4, n=20, observed=7, band="red")
     assert "about 2.5 of 25" in c.chart1_caption(expected=2.5, n=25, observed=2, band="green")  # not a half-to-even 2
+    assert "about 0.04 of 100" in c.chart1_caption(expected=0.04, n=100, observed=0, band="green")  # never "about 0.0"
+
+
+def test_a_numpy_number_is_refused_with_a_message_that_names_its_type():
+    import numpy as np
+
+    with pytest.raises(c.CaptionSlotError, match="float64"):
+        c.chart1_caption(expected=np.float64(10.0), n=100, observed=3, band="green")
+    with pytest.raises(c.CaptionSlotError, match="int64"):
+        c.chart1_caption(expected=10.0, n=np.int64(100), observed=3, band="green")
 
 
 def test_the_sentence_limit_guard_refuses_an_over_long_filled_caption(monkeypatch):

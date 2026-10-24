@@ -89,7 +89,7 @@ def _drop_last_sentence(text: str) -> str:
 def _whole(name: str, value: object, low: int, high: int | None = None) -> int:
     if type(value) is not int or value < low or (high is not None and value > high):
         top = "" if high is None else f" and <= {high}"
-        raise CaptionSlotError(f"{name} must be a whole number >= {low}{top}, got {value!r}")
+        raise CaptionSlotError(f"{name} must be a plain whole number >= {low}{top}, got {type(value).__name__} {value!r}")
     return value
 
 
@@ -104,12 +104,12 @@ def chart1_caption(*, expected: float, n: int, observed: int, band: str) -> str:
     n = _whole("n (the number of runs)", n, 1)
     observed = _whole("observed (the misses counted)", observed, 0, n)
     if type(expected) not in (int, float) or not math.isfinite(expected) or not 0.0 <= expected <= n:
-        raise CaptionSlotError(f"expected must be a finite number of misses between 0 and n = {n}, got {expected!r}")
+        raise CaptionSlotError(f"expected must be a plain finite number of misses between 0 and n = {n}, got {type(expected).__name__} {expected!r}")
     if band not in BANDS:
         raise CaptionSlotError(f"band must be one of {BANDS}, got {band!r}")
     shown = round(expected)
-    # a whole number reads as one ("about 20"); otherwise one decimal, never a rounded-away "about 0" or a half-to-even 2
-    text = str(shown) if abs(expected - shown) < 1e-9 * max(1.0, abs(expected)) else f"{expected:.1f}"
+    # a whole number reads as one ("about 20"); otherwise three significant figures, never a rounded-away "about 0"
+    text = str(shown) if abs(expected - shown) < 1e-9 * max(1.0, abs(expected)) else f"{expected:.3g}"
     return _checked(CHART1_TEMPLATE.format(expected=text, n=n, observed=observed, band=band))
 
 
@@ -128,7 +128,7 @@ def chart4_caption(disagreeing: tuple[str, str] | None) -> str:
         raise CaptionSlotError(f"the disagreeing models must be a pair of two names, got {disagreeing!r}")
     a, b = disagreeing
     for name in (a, b):
-        if type(name) is not str or not name.strip() or name != name.strip() or len(sentences(name)) != 1 or name[-1] in ".!?":
+        if type(name) is not str or not name.strip() or name != name.strip() or "\n" in name or len(sentences(name)) != 1 or name[-1] in ".!?":
             raise CaptionSlotError(f"a model name in the caption must be one plain name, got {name!r}")
     if a == b:
         raise CaptionSlotError(f"the pair must name two different models, got {disagreeing!r}")
