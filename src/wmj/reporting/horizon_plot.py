@@ -331,7 +331,9 @@ def render_horizon_charts(
         env.verdict.get("error_vs_horizon"), env.model_name, env.is_fixture,
         baselines=tuple((b.model_name, b.verdict.get("error_vs_horizon")) for b in baselines), switches=switches,
     )
-    caption = captions.CHART2_FULL if chart.switch_lines else captions.CHART2_SCOPED
+    # "past each task's marked step" must be true of every task on every panel (review of P5-C03, pass 3)
+    every_mark = all(entry["switch_step"] is not None for entry in env.verdict["climatology"]["per_task"])
+    caption = captions.CHART2_FULL if chart.switch_lines and every_mark else captions.CHART2_SCOPED
     paths = chart_paths(charts_dir, captions_dir, f"{env.world}-{env.model_name}-horizon")
     style.save_figure(chart.figure, paths.png, paths.svg, contains_fixture=env.is_fixture)
     captions.write_caption(paths.caption, caption)

@@ -137,8 +137,6 @@ def build_calibration_figure(panels: dict[str, list[tuple[dict, float]]], model_
     y_high = max(1.3, top + 0.35 * (top - y_low))  # the top quarter stays clear, however tall the bars
     for index, (ax, (task, pairs)) in enumerate(zip(axes, panels.items())):
         (diagonal,) = ax.plot([0.45, 1.0], [0.45, 1.0], color=style.DIVERGENCE_COLOUR, linestyle="-", linewidth=0.8)
-        ax.annotate(DIAGONAL_LABEL, xy=(0.47, 0.47), xytext=(6, -2), textcoords="offset points", rotation=0,
-                    ha="left", va="top", fontsize=7.5, color=style.DIVERGENCE_COLOUR)
         diagonals.append(diagonal)
         for entry, _width in pairs:
             n = entry["n_trials"]
@@ -153,7 +151,10 @@ def build_calibration_figure(panels: dict[str, list[tuple[dict, float]]], model_
         ax.set_xlim(0.45, 1.0)
         ax.set_ylim(y_low, y_high)
         ax.set_yticks([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
-        style.direct_labels(ax, [(LEVELS[-1], e["coverage"][-1], e["region"], colour) for e, _w in pairs], fontsize=7.5)
+        # the diagonal is labelled at its end, beside the regions' labels and spaced with them: a label inside the
+        # panel was overprinted by exactly the points the chart exists to show (review of P5-C03, pass 3)
+        ends = [(LEVELS[-1], e["coverage"][-1], e["region"], colour) for e, _w in pairs]
+        style.direct_labels(ax, [*ends, (1.0, 1.0, DIAGONAL_LABEL, style.DIVERGENCE_COLOUR)], fontsize=7.5)
         ax.set_xticks(LEVELS, [str(round(v * 100)) for v in LEVELS])
         ax.tick_params(axis="x", labelsize=8)
         ax.set_xlabel("stated confidence (%)")

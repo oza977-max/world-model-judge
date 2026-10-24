@@ -465,3 +465,17 @@ def test_values_that_are_not_numbers_are_refused_as_a_bad_block():
     block["per_region"][0]["steps"] = 5
     with pytest.raises(HorizonBlockError, match="not numbers"):
         build_horizon_figure(block, "ensemble")
+
+
+def test_the_full_caption_is_used_only_when_every_task_has_its_marked_step(tmp_path):
+    from tests.unit.reporting._verdict_blocks import envelope
+    from wmj.reporting.captions import CHART2_SCOPED
+    from wmj.reporting.horizon_plot import render_horizon_charts
+
+    env = envelope()
+    entries = env["verdict"]["climatology"]["per_task"]
+    unmarked = next(e for e in entries if e["switch_step"] is not None)
+    unmarked.update(switch_step=None, agreement_mean_abs_z=None, agrees=None)
+    assert any(e["switch_step"] is not None for e in entries)  # some lines are still drawn
+    paths = render_horizon_charts(env, [], tmp_path / "c", tmp_path / "t")
+    assert paths.caption.read_text(encoding="utf-8") == CHART2_SCOPED

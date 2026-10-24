@@ -181,3 +181,17 @@ def test_the_fixture_sentence_hides_no_point_or_bar_however_few_the_runs(n_trial
         sentence = next(t for t in ax.texts if t.get_bbox_patch() is not None).get_bbox_patch().get_window_extent()
         tallest = max(c + b for c, b in zip(line.get_ydata(), bars, strict=True))
         assert ax.transData.transform((0.5, tallest))[1] < sentence.y0
+
+
+def test_the_diagonals_label_sits_outside_the_plotted_area_clear_of_the_region_labels():
+    # review of P5-C03, pass 3: inside the panel, an overconfident region's 50% point and bar ran through it
+    env = envelope()
+    for entry in env["verdict"]["calibration"]["per_task"]:
+        entry["coverage"] = [0.45, 0.62, 0.74, 1.0]
+    _, chart = _figure(env)
+    chart.figure.draw_without_rendering()
+    for ax in chart.panels:
+        label = next(t for t in ax.texts if t.get_text() == cp.DIAGONAL_LABEL).get_window_extent()
+        assert label.x0 >= ax.get_window_extent().x1  # right of the plotted area: no point, bar or line reaches it
+        others = [t.get_window_extent() for t in ax.texts if t.get_text() != cp.DIAGONAL_LABEL]
+        assert others and not any(label.overlaps(o) for o in others)
