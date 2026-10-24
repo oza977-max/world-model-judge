@@ -48,7 +48,7 @@ def test_mark_fixture_places_the_adr_r4_sentence_inside_the_axes():
     ax = fig.subplots()
     text = style.mark_fixture(ax)
     assert text in ax.texts
-    assert text.get_text() == style.FIXTURE_LABEL
+    assert text.get_text().split() == style.FIXTURE_LABEL.split()
     assert text.get_text().startswith("TEST FIXTURE")
     assert text.get_color() == style.FIXTURE_COLOUR
 
@@ -93,7 +93,9 @@ def test_tc_rp8_01_a_fixture_figure_is_saved_only_when_the_label_is_on_it(tmp_pa
         style.save_figure(_figure_with(marked=False), png, svg, contains_fixture=True)
     assert not png.exists() and not svg.exists()  # refused before anything is written
     style.save_figure(_figure_with(marked=True), png, svg, contains_fixture=True)
-    assert style.FIXTURE_LABEL.encode() in svg.read_bytes()  # the words are on the image itself
+    from tests.unit.reporting._svg import says
+
+    assert says(svg.read_text(encoding="utf-8"), style.FIXTURE_LABEL)  # the words are on the image itself
 
 
 def test_a_figure_without_fixture_output_may_not_carry_the_fixture_label(tmp_path):
@@ -101,7 +103,9 @@ def test_a_figure_without_fixture_output_may_not_carry_the_fixture_label(tmp_pat
     with pytest.raises(style.FixtureLabelError, match="no fixture"):
         style.save_figure(_figure_with(marked=True), png, svg, contains_fixture=False)
     style.save_figure(_figure_with(marked=False), png, svg, contains_fixture=False)
-    assert style.FIXTURE_LABEL.encode() not in svg.read_bytes()
+    from tests.unit.reporting._svg import says
+
+    assert not says(svg.read_text(encoding="utf-8"), style.FIXTURE_LABEL)
 
 
 def test_the_fixture_flag_must_be_stated_and_must_be_a_real_boolean(tmp_path):
@@ -176,3 +180,21 @@ def test_a_hidden_label_does_not_count_as_the_label(tmp_path):
         assert not style.has_fixture_mark(fig), hide
         with pytest.raises(style.FixtureLabelError, match="not on it"):
             style.save_figure(fig, png, svg, contains_fixture=True)
+
+
+def test_the_fixture_sentence_wraps_to_a_narrow_panel_and_still_counts_as_the_label():
+    # seen on a three-panel render: one line ran under the next panel and was cut off
+    fig = style.new_figure()
+    axes = fig.subplots(1, 3)
+    for ax in axes:
+        label = style.mark_fixture(ax)
+        assert "\n" in label.get_text() and label.get_text().split() == style.FIXTURE_LABEL.split()
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+
+    renderer = FigureCanvasAgg(fig).get_renderer()
+    for ax in axes:
+        box, panel = ax.texts[0].get_window_extent(renderer), ax.get_window_extent(renderer)
+        assert box.x1 <= panel.x1  # inside its own panel
+    assert style.has_fixture_mark(fig)
+    wide = style.new_figure().subplots()
+    assert "\n" not in style.mark_fixture(wide).get_text()  # a wide panel keeps one line

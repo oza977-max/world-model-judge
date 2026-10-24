@@ -13,8 +13,18 @@ This module draws exactly what it is handed — the judge's
 schema guarantees `median_error[0] == 0.0` (no rollout has happened
 yet) and `log(0)` is undefined; the arrays themselves are untouched.
 
-P2-C05 scope: the per-task switch lines (from `climatology.per_task`)
-arrive at P5-C03 together with the full caption.
+Full scope (P5-C03): the two simple baselines are drawn as grey lines
+from their own verdicts' blocks, and each task's switch step (from
+`climatology.per_task`) is a labelled vertical line on its region's panel:
+past it, exact paths stop being graded and the judge checks the overall
+pattern. The envelope does not say which models are baselines, so the
+caller (`wmj run`, which reads the registry) passes their envelopes in; a
+baseline drawn on a different world, region set or step range is refused.
+The full three-sentence caption is used when at least one switch line is
+drawn; a world with no switch step anywhere (predator-prey) gets the
+two-sentence form, so the caption never points at marks that are not
+there. Lines are labelled once, at the right of the last panel: the
+panels repeat the same line styles (small multiples).
 """
 
 from __future__ import annotations
@@ -29,10 +39,13 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
 from wmj.errors import WmjError
-from wmj.reporting import style
+from wmj.reporting import captions, style
+from wmj.reporting.envelope import ChartPaths, chart_paths, read_envelope
 
 REQUIRED_ENTRY_KEYS = frozenset({"region", "steps", "median_error", "divergence_reference"})
-REFERENCE_LABEL = "world divergence (reference)"
+REFERENCE_LABEL = "world divergence\n(reference)"
+SWITCH_COLOUR = "#555555"  # the switch lines: dark neutral grey, dotted
+CLIMATOLOGY_KEYS = frozenset({"task", "region", "switch_step", "agreement_mean_abs_z", "agrees"})
 
 
 class HorizonBlockError(WmjError):
@@ -51,6 +64,10 @@ class HorizonFigure:
     panels: tuple[Axes, ...]
     secondary_axes: tuple[Axes, ...]
     world_time_functions: tuple[Callable[[float], float], Callable[[float], float]]
+    model_lines: tuple = ()  # one per panel
+    reference_lines: tuple = ()  # one per panel
+    baseline_lines: tuple = ()  # (panel index, label, line)
+    switch_lines: tuple = ()  # (panel index, task, line)
 
 
 def _validate(block: dict) -> tuple[float, list[dict]]:
@@ -95,11 +112,62 @@ def _validate(block: dict) -> tuple[float, list[dict]]:
     return float(dt), entries
 
 
+def horizon_switches(climatology: dict) -> dict[str, list[tuple[str, int]]]:
+    """The switch steps to mark, by region: `{region: [(task, step), ...]}` from `climatology.per_task`."""
+    if not isinstance(climatology, dict) or set(climatology) != {"per_task"} or not isinstance(climatology["per_task"], list):
+        raise HorizonBlockError(f"ADR-R2 Chart 2: climatology must be {{'per_task': [...]}} (judge §5), got {climatology!r:.80}")
+    found: dict[str, list[tuple[str, int]]] = {}
+    for entry in climatology["per_task"]:
+        if not isinstance(entry, dict) or set(entry) != CLIMATOLOGY_KEYS:
+            raise HorizonBlockError(f"ADR-R2 Chart 2: each climatology entry needs exactly {sorted(CLIMATOLOGY_KEYS)}")
+        task, region, step = entry["task"], entry["region"], entry["switch_step"]
+        if type(task) is not str or type(region) is not str:
+            raise HorizonBlockError(f"ADR-R2 Chart 2: a climatology entry's task and region must be text, got {task!r}, {region!r}")
+        if step is None:
+            continue
+        if type(step) is not int or step < 1:
+            raise HorizonBlockError(f"ADR-R2 Chart 2: switch_step must be a whole number >= 1 or null, got {step!r}")
+        found.setdefault(region, []).append((task, step))
+    return found
+
+
+def _check_baseline(dt: float, entries: list[dict], label: object, block: dict) -> list[dict]:
+    if type(label) is not str or not label.strip():
+        raise HorizonBlockError(f"ADR-R2 Chart 2: a baseline needs a name, got {label!r}")
+    b_dt, b_entries = _validate(block)
+    same = b_dt == dt and [e["region"] for e in b_entries] == [e["region"] for e in entries]
+    same = same and all(list(b["steps"]) == list(e["steps"]) for b, e in zip(b_entries, entries))
+    if not same:
+        raise HorizonBlockError(
+            f"ADR-R2 Chart 2: baseline {label!r} was not run on the same world, regions and steps as the model "
+            "(its dt, region list or steps differ); drawing it on these axes would mislead"
+        )
+    return b_entries
+
+
 def build_horizon_figure(
-    error_vs_horizon: dict, model_label: str, is_fixture: bool = False
+    error_vs_horizon: dict,
+    model_label: str,
+    is_fixture: bool = False,
+    *,
+    baselines: tuple = (),
+    switches: dict | None = None,
 ) -> HorizonFigure:
-    """Draw Chart 2 from a judge-shaped block; returns the figure unsaved."""
+    """Draw Chart 2 from a judge-shaped block; returns the figure unsaved.
+
+    `baselines` is a sequence of `(name, error_vs_horizon block)` drawn in grey; `switches` maps a region
+    to its `(task, switch step)` pairs (see `horizon_switches`), each drawn as a labelled vertical line."""
     dt, entries = _validate(error_vs_horizon)
+    baseline_entries = [(label, _check_baseline(dt, entries, label, block)) for label, block in baselines]
+    switches = switches or {}
+    regions = [e["region"] for e in entries]
+    for region, pairs in switches.items():
+        if region not in regions:
+            raise HorizonBlockError(f"ADR-R2 Chart 2: a switch step is given for region {region!r}, which has no panel")
+        horizon = len(entries[regions.index(region)]["steps"]) - 1
+        for task, step in pairs:
+            if not 1 <= step <= horizon:
+                raise HorizonBlockError(f"ADR-R2 Chart 2: {task!r} switches at step {step}, outside 1..{horizon}")
     fig = style.new_figure()
     axes = fig.subplots(1, len(entries), sharey=True, squeeze=False)[0]
 
@@ -111,41 +179,58 @@ def build_horizon_figure(
 
     model_colour = style.line_colour(is_fixture)
     label = style.display_name(model_label, is_fixture)
-    secondaries = []
-    for ax, entry in zip(axes, entries):
+    secondaries, model_lines, reference_lines, baseline_lines, switch_lines = [], [], [], [], []
+    for index, (ax, entry) in enumerate(zip(axes, entries)):
         steps = np.asarray(entry["steps"])[1:]
         error = np.asarray(entry["median_error"], dtype=float)[1:]
         reference = np.asarray(entry["divergence_reference"], dtype=float)[1:]
+        last = index == len(entries) - 1  # small multiples: the line styles are labelled once, on the last panel
 
         ax.set_yscale("log")
-        ax.plot(steps, error, color=model_colour, linestyle="-", linewidth=1.6)
-        ax.plot(steps, reference, color=style.DIVERGENCE_COLOUR, linestyle="--", linewidth=1.1)
-        ax.annotate(
-            label, xy=(steps[-1], error[-1]), xytext=(4, 0), textcoords="offset points",
-            va="center", ha="left", color=model_colour, fontsize=8,
-        )
-        ax.annotate(
-            REFERENCE_LABEL, xy=(steps[-1], reference[-1]), xytext=(4, 0),
-            textcoords="offset points", va="center", ha="left",
-            color=style.DIVERGENCE_COLOUR, fontsize=8,
-        )
+        for name, b_entries in baseline_entries:
+            b_error = np.asarray(b_entries[index]["median_error"], dtype=float)[1:]
+            (line,) = ax.plot(steps, b_error, color=style.BASELINE_COLOUR, linestyle="-", linewidth=1.0)
+            baseline_lines.append((index, name, line))
+        (model_line,) = ax.plot(steps, error, color=model_colour, linestyle="-", linewidth=1.6)
+        (reference_line,) = ax.plot(steps, reference, color=style.DIVERGENCE_COLOUR, linestyle="--", linewidth=1.1)
+        model_lines.append(model_line)
+        reference_lines.append(reference_line)
+        if last:
+            ends = [(steps[-1], error[-1], label, model_colour), (steps[-1], reference[-1], REFERENCE_LABEL, style.DIVERGENCE_COLOUR)]
+            ends += [(steps[-1], float(b_entries[index]["median_error"][-1]), name, style.BASELINE_COLOUR) for name, b_entries in baseline_entries]
+            pending_labels = (ax, ends)
+        for task, step in switches.get(entry["region"], []):
+            line = ax.axvline(step, color=SWITCH_COLOUR, linestyle=":", linewidth=1.0)
+            ax.text(step, 0.03, f" {task} switches to climate here", transform=ax.get_xaxis_transform(),
+                    rotation=90, ha="right", va="bottom", fontsize=7, color=SWITCH_COLOUR)
+            switch_lines.append((index, task, line))
         ax.set_title(str(entry["region"]))
         ax.set_xlabel("rollout step")
         ax.set_xlim(1, int(steps[-1]))
         secondary = ax.secondary_xaxis("top", functions=(to_world_time, to_steps))
         secondary.set_xlabel(f"world time (step × dt, dt = {dt:g})")
         secondaries.append(secondary)
-        if is_fixture:
-            style.mark_fixture(ax)
 
     axes[0].set_ylabel("median normalised error (log scale)")
     fig.suptitle(f"Error against horizon — {label}", fontsize=10)
-    fig.subplots_adjust(left=0.08, right=0.86, top=0.80, bottom=0.12, wspace=0.12)
+    fig.subplots_adjust(left=0.08, right=0.80, top=0.80, bottom=0.12, wspace=0.12)
+    # headroom: the top fifth of each panel stays empty, so the fixture label never hides a line
+    axes[0].autoscale_view()
+    low, high = axes[0].get_ylim()
+    axes[0].set_ylim(low, high * (high / low) ** 0.3)
+    style.direct_labels(*pending_labels, fontsize=7.5)  # after the shared y-limits are final
+    if is_fixture:
+        for ax in axes:
+            style.mark_fixture(ax)  # after the layout is final, so it wraps to the panel's width
     return HorizonFigure(
         figure=fig,
         panels=tuple(axes),
         secondary_axes=tuple(secondaries),
         world_time_functions=(to_world_time, to_steps),
+        model_lines=tuple(model_lines),
+        reference_lines=tuple(reference_lines),
+        baseline_lines=tuple(baseline_lines),
+        switch_lines=tuple(switch_lines),
     )
 
 
@@ -160,3 +245,33 @@ def render_horizon_chart(
     chart = build_horizon_figure(error_vs_horizon, model_label, is_fixture=is_fixture)
     style.save_figure(chart.figure, out_png, out_svg, contains_fixture=is_fixture)
     return chart
+
+
+def render_horizon_charts(
+    envelope: dict, baseline_envelopes: list[dict], charts_dir: Path, captions_dir: Path
+) -> ChartPaths:
+    """Chart 2 for one model at full scope: `{world}-{model}-horizon` PNG + SVG + caption.
+
+    `baseline_envelopes` are the two baselines' envelopes for the same world. Everything is validated and
+    drawn before anything is written."""
+    try:
+        env = read_envelope(envelope)
+        baselines = [read_envelope(b) for b in baseline_envelopes]
+    except (ValueError, TypeError) as error:
+        raise HorizonBlockError(f"ADR-R2 Chart 2: {error}") from error
+    for b in baselines:
+        if b.world != env.world:
+            raise HorizonBlockError(f"ADR-R2 Chart 2: baseline {b.model_name!r} is for world {b.world!r}, not {env.world!r}")
+        if b.is_fixture:
+            raise HorizonBlockError(f"ADR-R2 Chart 2: {b.model_name!r} is a fixture, not a baseline")
+    switches = horizon_switches(env.verdict.get("climatology"))
+    chart = build_horizon_figure(
+        env.verdict.get("error_vs_horizon"), env.model_name, env.is_fixture,
+        baselines=tuple((b.model_name, b.verdict.get("error_vs_horizon")) for b in baselines), switches=switches,
+    )
+    caption = captions.CHART2_FULL if chart.switch_lines else captions.CHART2_SCOPED
+    paths = chart_paths(charts_dir, captions_dir, f"{env.world}-{env.model_name}-horizon")
+    style.save_figure(chart.figure, paths.png, paths.svg, contains_fixture=env.is_fixture)
+    captions.write_caption(paths.caption, caption)
+    return paths
+

@@ -112,22 +112,42 @@ def new_figure() -> Figure:
     return Figure(figsize=FIGURE_SIZE, dpi=DPI)
 
 
-def mark_fixture(ax: Axes) -> Text:
-    """ADR-R4: draw the fixture sentence inside the axes, top-left.
+FIXTURE_FONT_SIZE = 7.5
 
-    Returns the Text artist so a test can assert the call happened on
-    the figure object before it was saved (TC-RP8-01).
+
+def _wrapped(text: str, max_chars: int) -> str:
+    """Break `text` at spaces into lines of at most `max_chars` (a single longer word keeps its own line)."""
+    lines: list[str] = []
+    for word in text.split():
+        if lines and len(lines[-1]) + 1 + len(word) <= max_chars:
+            lines[-1] += " " + word
+        else:
+            lines.append(word)
+    return "\n".join(lines)
+
+
+def _same_words(a: str, b: str) -> bool:
+    return a.split() == b.split()
+
+
+def mark_fixture(ax: Axes) -> Text:
+    """ADR-R4: draw the fixture sentence inside the axes, top-left, wrapped to the axes' own width.
+
+    Call it once the figure's layout is final (after `subplots_adjust`): the sentence is broken into lines
+    that fit this panel, so in a row of narrow panels it is never cut off by the next one. Returns the Text
+    artist so a test can assert the call happened on the figure object before it was saved (TC-RP8-01).
     """
+    width_points = ax.get_position().width * ax.figure.get_figwidth() * 72.0
+    max_chars = max(20, int(width_points * 0.95 / (0.5 * FIXTURE_FONT_SIZE)))  # about half an em per character, measured
     return ax.text(
         0.02,
         0.97,
-        FIXTURE_LABEL,
+        _wrapped(FIXTURE_LABEL, max_chars),
         transform=ax.transAxes,
         ha="left",
         va="top",
-        fontsize=7.5,
+        fontsize=FIXTURE_FONT_SIZE,
         color=FIXTURE_COLOUR,
-        wrap=True,
         bbox={"boxstyle": "round,pad=0.4", "facecolor": "white", "alpha": 0.85,
               "edgecolor": FIXTURE_COLOUR},
         zorder=10,
@@ -168,7 +188,7 @@ def has_fixture_mark(fig: Figure) -> bool:
     texts = list(fig.texts)
     for ax in fig.get_axes():
         texts.extend(ax.texts)
-    return any(text.get_text() == FIXTURE_LABEL and _shown(text) for text in texts)
+    return any(_same_words(text.get_text(), FIXTURE_LABEL) and _shown(text) for text in texts)
 
 
 def _colours(artist) -> list:
@@ -201,6 +221,26 @@ def fixture_traces(fig: Figure) -> list[str]:
             if str(line.get_label()).startswith(FIXTURE_PREFIX.strip()):
                 found.append(f"line label {line.get_label()!r}")
     return found
+
+
+def direct_labels(ax: Axes, items: list[tuple[float, float, str, str]], *, fontsize: float = 8.0) -> list[Text]:
+    """Label line ends directly (Tufte: no legend), nudging labels apart vertically so none overprints.
+
+    `items` are `(x, y, text, colour)` in data coordinates. Each label sits just right of its point; where two
+    would be closer than one line of text (1.3 x the font size), the lower one moves down. A label of two lines
+    takes two. Call after the axes' limits are final."""
+    ax.autoscale_view()
+    px_per_point = ax.figure.dpi / 72.0
+    placed = sorted(((ax.transData.transform((x, y))[1], x, y, text, colour) for x, y, text, colour in items), reverse=True)
+    texts, previous = [], None
+    for display_y, x, y, text, colour in placed:
+        gap_points = 1.3 * fontsize * (text.count("\n") + 1)
+        target = display_y if previous is None else min(display_y, previous - gap_points * px_per_point)
+        offset = (target - display_y) / px_per_point
+        texts.append(ax.annotate(text, xy=(x, y), xytext=(4, offset), textcoords="offset points",
+                                 ha="left", va="center", fontsize=fontsize, color=colour))
+        previous = target
+    return texts
 
 
 def save_figure(fig: Figure, png_path: Path, svg_path: Path, *, contains_fixture: bool) -> None:

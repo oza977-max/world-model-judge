@@ -22,7 +22,6 @@ chart set would misrepresent the run).
 from __future__ import annotations
 
 import math
-import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -35,6 +34,7 @@ from matplotlib.text import Text
 
 from wmj.errors import WmjError
 from wmj.reporting import captions, style
+from wmj.reporting.envelope import ChartPaths, chart_paths, file_part, read_envelope
 
 EXCEPTION_KEYS = frozenset(
     {"task", "region", "horizon_step", "n_trials", "expected", "observed", "band", "low_side_sharpness_flag", "bands"}
@@ -45,7 +45,6 @@ _FLOAT_MAX = float(np.finfo(np.float64).max)
 _LOG10_MAX = math.log10(_FLOAT_MAX)
 HEADROOM = 1.3  # a linear axis reaches 1.3 x the largest value ...
 LOG_HEADROOM = 1.45  # ... a log axis 1.45 x the decades above the line (its linear part below the line takes room)
-_FILE_SAFE = re.compile(r"[A-Za-z0-9._-]{1,40}")  # also keeps the header strip clear of the scale
 
 
 class ExceptionBlockError(WmjError):
@@ -65,13 +64,6 @@ class ExceptionFigure:
     marker: Line2D
     header: Text
     caption: str
-
-
-@dataclass(frozen=True)
-class ChartPaths:
-    png: Path
-    svg: Path
-    caption: Path
 
 
 def _is_whole(value: object, low: int) -> bool:
@@ -272,25 +264,21 @@ def build_exception_figure(entry: dict, trial: dict, model_name: str, is_fixture
 
 
 def _file_part(label: str, value: object) -> str:
-    if type(value) is not str or not _FILE_SAFE.fullmatch(value):
-        raise ExceptionBlockError(f"{label} {value!r} cannot be part of a file name (1 to 40 letters, digits, '.', '_', '-')")
-    return value
+    try:
+        return file_part(label, value)  # 1 to 40 safe characters: also keeps the header strip clear of the scale
+    except ValueError as error:
+        raise ExceptionBlockError(str(error)) from error
 
 
 def render_exception_charts(envelope: dict, charts_dir: Path, captions_dir: Path) -> list[ChartPaths]:
     """Every Chart-1 figure for one envelope: PNG + SVG under `charts_dir`, caption under `captions_dir`.
 
     Everything is validated and drawn before the first file is written, so a bad block writes nothing."""
-    if not isinstance(envelope, dict) or not isinstance(envelope.get("verdict"), dict):
-        raise ExceptionBlockError(f"an envelope needs a 'verdict' (judge §5), got {envelope!r:.80}")
-    verdict = envelope["verdict"]
-    model, is_fixture = envelope.get("model_name"), envelope.get("is_fixture")
     try:
-        style.display_name(model, is_fixture)  # a real name and a real flag, or refuse
-    except (ValueError, style.FixtureLabelError) as error:
+        env = read_envelope(envelope)
+    except ValueError as error:
         raise ExceptionBlockError(f"envelope: {error}") from error
-    world = _file_part("world", verdict.get("world"))
-    _file_part("model name", model)
+    verdict, world, model, is_fixture = env.verdict, env.world, env.model_name, env.is_fixture
     for entry in verdict.get("exceptions", {}).get("per_task", []) if isinstance(verdict.get("exceptions"), dict) else []:
         if isinstance(entry, dict):
             _file_part("region", entry.get("region"))  # long names are refused before anything is drawn
@@ -303,7 +291,7 @@ def render_exception_charts(envelope: dict, charts_dir: Path, captions_dir: Path
         built.append((stem, build_exception_figure(entry, trial, model, is_fixture)))
     written = []
     for stem, chart in built:
-        paths = ChartPaths(Path(charts_dir) / f"{stem}.png", Path(charts_dir) / f"{stem}.svg", Path(captions_dir) / f"{stem}.txt")
+        paths = chart_paths(charts_dir, captions_dir, stem)
         style.save_figure(chart.figure, paths.png, paths.svg, contains_fixture=is_fixture)
         captions.write_caption(paths.caption, chart.caption)
         written.append(paths)

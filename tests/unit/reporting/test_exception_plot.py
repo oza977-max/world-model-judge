@@ -16,6 +16,7 @@ import numpy as np
 import pytest
 
 from tests.unit.judge._builders import make_input
+from tests.unit.reporting._svg import says
 from wmj.judge.exceptions import compute_exceptions_and_trials
 from wmj.reporting import exception_plot as ep
 from wmj.reporting import style
@@ -64,9 +65,9 @@ def test_tc_rp8_01_a_fixture_models_saved_chart_carries_the_fixture_sentence(tmp
     written = ep.render_exception_charts(_envelope(name="fx-brittle", is_fixture=True), tmp_path / "c", tmp_path / "t")
     for paths in written:
         svg = paths.svg.read_text(encoding="utf-8")
-        assert style.FIXTURE_LABEL in svg and "FIXTURE: fx-brittle" in svg
+        assert says(svg, style.FIXTURE_LABEL) and "FIXTURE: fx-brittle" in svg
     plain = ep.render_exception_charts(_envelope(), tmp_path / "c2", tmp_path / "t2")
-    assert all(style.FIXTURE_LABEL not in p.svg.read_text(encoding="utf-8") for p in plain)
+    assert not any(says(p.svg.read_text(encoding="utf-8"), style.FIXTURE_LABEL) for p in plain)
 
 
 # --- what the figure draws (before saving) -------------------------------------------------------------
