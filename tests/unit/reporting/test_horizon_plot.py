@@ -138,3 +138,33 @@ def test_render_horizon_chart_writes_both_files(tmp_path):
     body = svg.read_bytes()
     assert b"dc:date" not in body
     assert b"training" in body  # svg.fonttype none keeps labels as text
+
+
+# --- P5-C03: Chart 2 at full scope — every model, baselines in grey, switch lines, full caption ----------
+
+
+def test_tc_rp2_01_full_the_saved_chart_marks_each_switch_and_the_caption_states_the_reading_rule(tmp_path):
+    from tests.unit.reporting._verdict_blocks import baseline_envelopes, envelope
+    from wmj.reporting.captions import CHART2_FULL
+    from wmj.reporting.horizon_plot import render_horizon_charts
+
+    env = envelope()
+    paths = render_horizon_charts(env, baseline_envelopes(), tmp_path / "charts", tmp_path / "captions")
+    assert (paths.png.name, paths.svg.name, paths.caption.name) == ("lv-direct-horizon.png", "lv-direct-horizon.svg", "lv-direct-horizon.txt")
+    svg = paths.svg.read_text(encoding="utf-8")
+    switching = [e for e in env["verdict"]["climatology"]["per_task"] if e["switch_step"] is not None]
+    assert switching  # the judge builder's tasks do switch
+    for entry in switching:
+        assert f"{entry['task']} switches to climate here" in svg
+    assert "persistence" in svg and "linear" in svg and "world divergence (reference)" in svg
+    caption = paths.caption.read_text(encoding="utf-8")
+    assert caption == CHART2_FULL and "only the gap above that line is the model's fault" in caption
+
+
+def test_tc_rp8_01_a_fixtures_horizon_chart_carries_the_fixture_sentence(tmp_path):
+    from tests.unit.reporting._verdict_blocks import baseline_envelopes, envelope
+    from wmj.reporting.horizon_plot import render_horizon_charts
+
+    paths = render_horizon_charts(envelope(name="fx-brittle", is_fixture=True), baseline_envelopes(), tmp_path / "c", tmp_path / "t")
+    svg = paths.svg.read_text(encoding="utf-8")
+    assert style.FIXTURE_LABEL in svg and "FIXTURE: fx-brittle" in svg
