@@ -100,7 +100,7 @@ src/wmj/                        the code: worlds, models, judge, harness, report
 tests/                          unit tests and gates
 ```
 
-Build state (2026-10-22): Phases 1–4 built. Phase 3 (the models and the
+Build state (2026-10-24): Phases 1–4 built. Phase 3 (the models and the
 harness around them): P3-C01 to P3-C10, its wiring audit (passed) and its independent
 code review (code-review-002: 0 Critical, 6 Important, all fixed). Phase 4 (the judge):
 P4-C01 (the input and verdict doors), P4-C02 (skill), P4-C03 (calibration, sharpness), P4-C04
@@ -109,7 +109,10 @@ climatology table and measured bins) and P4-C06 (blindness and purity gates, fiv
 done and reviewed to zero Critical/Important each; the Phase 4 wiring audit passed (matrix rows owed,
 backlog A38). The Phase 4 independent code review (code-review-003, 2026-10-22: Merge with caveats) is
 closed — its Critical (the exception test now uses the joint 90% region, backlog A39) and Important
-findings are fixed. Next: Phase 5 (reporting) and Phase 6 (full wiring). Owner decisions D19 (disclosed; prediction unchanged) and D21 (agreement mark measured
+findings are fixed. Phase 5 (reporting) under way: P5-C01 (style + captions; the fixture label is enforced
+at save time) and P5-C02 (Chart 1, the exception plot) are done and reviewed to zero Critical/Important
+(2026-10-24). Next: P5-C03 (horizon + calibration charts), P5-C04 (comparison table, results page,
+writer), then Phase 6 (full wiring). Owner decisions D19 (disclosed; prediction unchanged) and D21 (agreement mark measured
 from the true world: pendulum 1.63; the test is weak and its statistic goes to the next design review)
 were settled on 2026-10-22, after an independent fix-check of code-review-003. Round 10 design review closed 2026-09-28. Owner decisions D17/D18
 were applied on 2026-10-04 (`subsample_pairs` now 100,000). The freeze
