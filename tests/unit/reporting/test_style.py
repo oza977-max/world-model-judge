@@ -59,10 +59,83 @@ def test_save_figure_writes_png_and_dateless_svg_reproducibly(tmp_path):
     ax.plot([1, 2, 3], [1.0, 2.0, 4.0], color=style.MODEL_COLOUR)
 
     png, svg = tmp_path / "a" / "c.png", tmp_path / "a" / "c.svg"
-    style.save_figure(fig, png, svg)
+    style.save_figure(fig, png, svg, contains_fixture=False)
     assert png.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
     first = svg.read_bytes()
     assert b"<svg" in first and b"dc:date" not in first
 
-    style.save_figure(fig, png, svg)
+    style.save_figure(fig, png, svg, contains_fixture=False)
     assert svg.read_bytes() == first
+
+
+# --- P5-C01: the fixture rule is enforced at the one place every chart passes through ---------------
+# In plain words: a chart holding a deliberately broken test model must say so in words on the image
+# (RP-8, ADR-R4). The save step checks the figure object itself, so no renderer can forget, and it
+# refuses the opposite mistake too: a chart of real models wearing the fixture label.
+
+import pytest
+
+
+def _figure_with(*, marked: bool, at_figure_level: bool = False):
+    fig = style.new_figure()
+    ax = fig.subplots()
+    ax.plot([1, 2], [1.0, 2.0])
+    if marked and at_figure_level:
+        fig.text(0.1, 0.9, style.FIXTURE_LABEL)
+    elif marked:
+        style.mark_fixture(ax)
+    return fig
+
+
+def test_tc_rp8_01_a_fixture_figure_is_saved_only_when_the_label_is_on_it(tmp_path):
+    png, svg = tmp_path / "c.png", tmp_path / "c.svg"
+    with pytest.raises(style.FixtureLabelError, match="fixture"):
+        style.save_figure(_figure_with(marked=False), png, svg, contains_fixture=True)
+    assert not png.exists() and not svg.exists()  # refused before anything is written
+    style.save_figure(_figure_with(marked=True), png, svg, contains_fixture=True)
+    assert style.FIXTURE_LABEL.encode() in svg.read_bytes()  # the words are on the image itself
+
+
+def test_a_figure_without_fixture_output_may_not_carry_the_fixture_label(tmp_path):
+    png, svg = tmp_path / "c.png", tmp_path / "c.svg"
+    with pytest.raises(style.FixtureLabelError, match="no fixture"):
+        style.save_figure(_figure_with(marked=True), png, svg, contains_fixture=False)
+    style.save_figure(_figure_with(marked=False), png, svg, contains_fixture=False)
+    assert style.FIXTURE_LABEL.encode() not in svg.read_bytes()
+
+
+def test_the_fixture_flag_must_be_stated_and_must_be_a_real_boolean(tmp_path):
+    png, svg = tmp_path / "c.png", tmp_path / "c.svg"
+    with pytest.raises(TypeError):
+        style.save_figure(_figure_with(marked=False), png, svg)  # no silent default
+    for flag in (1, 0, "yes", None):
+        with pytest.raises(style.FixtureLabelError, match="True or False"):
+            style.save_figure(_figure_with(marked=False), png, svg, contains_fixture=flag)
+
+
+def test_has_fixture_mark_reads_axes_and_figure_level_text_and_ignores_lookalikes():
+    assert style.has_fixture_mark(_figure_with(marked=True))
+    assert style.has_fixture_mark(_figure_with(marked=True, at_figure_level=True))
+    assert not style.has_fixture_mark(_figure_with(marked=False))
+    fig = _figure_with(marked=False)
+    fig.axes[0].set_title("TEST FIXTURE")  # a title that merely starts the same way is not the label
+    fig.axes[0].text(0.5, 0.5, style.FIXTURE_LABEL[:-1])
+    assert not style.has_fixture_mark(fig)
+
+
+def test_display_name_prefixes_fixtures_once_and_leaves_other_models_alone():
+    assert style.display_name("fx-brittle", True) == "FIXTURE: fx-brittle"
+    assert style.display_name("direct", False) == "direct"
+    assert style.display_name("FIXTURE: fx-brittle", True) == "FIXTURE: fx-brittle"  # never doubled
+    for bad in ("", "   "):
+        with pytest.raises(ValueError, match="name"):
+            style.display_name(bad, False)
+    with pytest.raises(style.FixtureLabelError, match="True or False"):
+        style.display_name("direct", 1)
+
+
+def test_line_colour_follows_the_fixed_semantics_and_fixture_orange_wins():
+    assert style.line_colour(False) == style.MODEL_COLOUR
+    assert style.line_colour(False, baseline=True) == style.BASELINE_COLOUR
+    assert style.line_colour(True) == style.FIXTURE_COLOUR
+    assert style.line_colour(True, baseline=True) == style.FIXTURE_COLOUR

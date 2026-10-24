@@ -20,9 +20,9 @@ arrive at P5-C03 together with the full caption.
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 import numpy as np
 from matplotlib.axes import Axes
@@ -109,8 +109,8 @@ def build_horizon_figure(
     def to_steps(world_time: float) -> float:
         return world_time / dt
 
-    model_colour = style.FIXTURE_COLOUR if is_fixture else style.MODEL_COLOUR
-    label = f"FIXTURE: {model_label}" if is_fixture else model_label
+    model_colour = style.line_colour(is_fixture)
+    label = style.display_name(model_label, is_fixture)
     secondaries = []
     for ax, entry in zip(axes, entries):
         steps = np.asarray(entry["steps"])[1:]
@@ -158,5 +158,5 @@ def render_horizon_chart(
 ) -> HorizonFigure:
     """Build Chart 2 and write its PNG and SVG (the only side effect)."""
     chart = build_horizon_figure(error_vs_horizon, model_label, is_fixture=is_fixture)
-    style.save_figure(chart.figure, out_png, out_svg)
+    style.save_figure(chart.figure, out_png, out_svg, contains_fixture=is_fixture)
     return chart

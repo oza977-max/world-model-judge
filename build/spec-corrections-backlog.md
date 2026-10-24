@@ -1311,6 +1311,11 @@ the region instead, same total size (200 starts × 1,000 steps = 200,000 samples
 15. **Tables (worlds §5):** one per region, 50 starts × 20,000 null-action steps (now the default), not one 200,000-step run nor 200 × 1,000.
 16. **The statistic needs replacing (next design review):** measured, mean |z| cannot tell a forecast frozen at its start (0.32–0.80) or one with 10% too much energy (0.84–1.50) from the truth (0.82–1.48). It rewards sitting near the middle of an energy level's spread of states. A candidate replacement asks "does the forecast keep the truth's energy level?". JU-10 sentence 10 discloses the weakness until then.
 
+**P5-C01 (2026-10-24):**
+
+17. **Chart 1's caption (reporting ADR-R3) changes with the chart.** The spec's text ("Each vertical bar is what the model said was 90% likely for one test run; the dot is what actually happened…") describes a per-trial range bar. Since item 9 the chart plots each trial's whole-answer miss, in its own stated sizes, against one fixed line. `captions.CHART1_TEMPLATE` now reads: "Each dot is one test run: how far the outcome landed from the model's guess, measured in the model's own stated error sizes and combined over everything it predicts. Dots above the line fell outside the range the model called 90% likely — those misses are circled in red. A model this confident should miss about {expected} of {n} times — it missed {observed}, which lands it in the {band} band drawn on the right." It is still three sentences. TC-RP5-01's judged reading at P6-C03 should use this text.
+18. **The fixture rule is enforced at save time (ADR-R4).** `style.save_figure` takes a required `contains_fixture` flag and refuses a mismatch in either direction (`FixtureLabelError`), reading the figure object itself. ADR-R4's "one code path, no per-chart discretion" is now a check, not a convention. The spec could say so.
+
 **Deferred door-tightening (REMEMBER §3, P5–P6):** require the horizon-step-1 entry in each exception/trials pair, require `steps` to equal `range(1, H+1)`, check tolerance consistency across blocks, handle a zero-error chart; one shared pipeline helper across four test files; rename `task_region_step`; a shape variant with 3 regions and d=4; mixed-element list tests; the `io.open` guard case.
 
 *Where recorded:* `code-review/code-review-003.html`, commits 8d5689f, f0f9927, ff692db.

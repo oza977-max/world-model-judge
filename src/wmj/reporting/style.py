@@ -15,6 +15,13 @@ wall clock into the file). Reporting spec §7 executed both: either one
 alone leaves a difference. PNG bytes are not claimed identical
 (ADR-R5) — font rasterisation is not something this project controls.
 
+The fixture rule lives in one place (ADR-R4, P5-C01): `save_figure` takes a
+required `contains_fixture` flag and reads the figure object itself. A
+figure holding fixture output cannot be saved without the fixture sentence
+on it, and a figure of real models cannot be saved wearing it. No renderer
+has discretion, and none can forget. `display_name` and `line_colour` give
+every chart the same `FIXTURE:` prefix and orange line.
+
 Figures are created directly from `matplotlib.figure.Figure`, never
 through `pyplot`: no global figure registry, no display backend, no
 hidden state between renders.
@@ -38,6 +45,8 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.text import Text
 
+from wmj.errors import WmjError
+
 # --- ADR-R1 fixed colour semantics -----------------------------------------
 MODEL_COLOUR = "#1f4e9c"  # model under discussion: dark blue
 BASELINE_COLOUR = "#8c8c8c"  # baselines: mid grey
@@ -58,6 +67,13 @@ FIXTURE_LABEL = (
     "TEST FIXTURE — deliberately broken model; a detected fault here is the "
     "instrument working, not a finding."
 )
+
+FIXTURE_PREFIX = "FIXTURE: "  # ADR-R4: on every on-chart label of a fixture
+
+
+class FixtureLabelError(WmjError):
+    """A figure's fixture label does not match whether it holds fixture output (ADR-R4, RP-8)."""
+
 
 _RC = {
     "figure.figsize": FIGURE_SIZE,
@@ -112,8 +128,51 @@ def mark_fixture(ax: Axes) -> Text:
     )
 
 
-def save_figure(fig: Figure, png_path: Path, svg_path: Path) -> None:
-    """Write the PNG and its SVG duplicate (ADR-R1) with both §7 pins."""
+def _require_flag(value: object) -> bool:
+    if type(value) is not bool:
+        raise FixtureLabelError(f"the fixture flag must be True or False, got {value!r}")
+    return value
+
+
+def display_name(name: str, is_fixture: bool) -> str:
+    """The name a chart prints for a model: fixtures carry the `FIXTURE: ` prefix, exactly once."""
+    _require_flag(is_fixture)
+    if type(name) is not str or not name.strip():
+        raise ValueError(f"a model name must be a non-empty string, got {name!r}")
+    if is_fixture and not name.startswith(FIXTURE_PREFIX):
+        return FIXTURE_PREFIX + name
+    return name
+
+
+def line_colour(is_fixture: bool, *, baseline: bool = False) -> str:
+    """ADR-R1's colour for a model's line or marker; a fixture is orange whatever its role."""
+    if _require_flag(is_fixture):
+        return FIXTURE_COLOUR
+    return BASELINE_COLOUR if baseline else MODEL_COLOUR
+
+
+def has_fixture_mark(fig: Figure) -> bool:
+    """True if the exact ADR-R4 sentence is drawn on the figure, in any axes or on the figure itself."""
+    texts = list(fig.texts)
+    for ax in fig.get_axes():
+        texts.extend(ax.texts)
+    return any(text.get_text() == FIXTURE_LABEL for text in texts)
+
+
+def save_figure(fig: Figure, png_path: Path, svg_path: Path, *, contains_fixture: bool) -> None:
+    """Write the PNG and its SVG duplicate (ADR-R1) with both §7 pins.
+
+    `contains_fixture` must be stated: a figure holding fixture output is refused unless the ADR-R4
+    sentence is on it, and a figure without fixture output is refused if it carries the sentence
+    (TC-RP8-01: the label is checked on the figure object before anything is written)."""
+    marked = has_fixture_mark(fig)
+    if _require_flag(contains_fixture) and not marked:
+        raise FixtureLabelError(
+            "this figure holds fixture output but the fixture sentence is not on it (ADR-R4, RP-8): "
+            "call mark_fixture on its axes before saving"
+        )
+    if not contains_fixture and marked:
+        raise FixtureLabelError("this figure holds no fixture output but carries the fixture sentence (ADR-R4)")
     png_path = Path(png_path)
     svg_path = Path(svg_path)
     png_path.parent.mkdir(parents=True, exist_ok=True)
