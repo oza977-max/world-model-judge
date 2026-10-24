@@ -70,8 +70,8 @@ from wmj.reporting import captions as c
 
 CHART1 = (
     "Each dot is one test run: how far the outcome landed from the model's guess, measured in the "
-    "model's own stated error sizes and combined over everything it predicts. Dots above the line fell "
-    "outside the range the model called 90% likely — those misses are circled in red. A model this "
+    "model's own stated error sizes and combined over everything it predicts. The line marks the edge "
+    "of the range the model called 90% likely; dots above it are the misses, circled in red. A model this "
     "confident should miss about {expected} of {n} times — it missed {observed}, which lands it in the "
     "{band} band drawn on the right."
 )
@@ -147,7 +147,8 @@ def test_chart4_takes_display_names_as_given_including_fixture_prefixes_and_hyph
 
 @pytest.mark.parametrize(
     "pair",
-    [("direct",), ("direct", "direct"), ("", "ensemble"), ("direct", None), "de", ("a. B", "c"), ("a", "b", "c")],
+    [("direct",), ("direct", "direct"), ("", "ensemble"), ("direct", None), "de", ("a. B", "c"), ("a", "b", "c"),
+     ("A.", "b"), ("a!", "b"), (" a", "b"), ("a", "b\n"), ("a", "b ")],
 )
 def test_chart4_refuses_a_pair_that_is_not_two_different_plain_names(pair):
     with pytest.raises(c.CaptionSlotError, match="pair|name"):
@@ -162,3 +163,15 @@ def test_every_filled_caption_is_within_three_sentences_and_has_no_unfilled_slot
     for text in filled:
         assert c.sentence_count(text) <= c.MAX_SENTENCES
         assert "{" not in text and "}" not in text
+
+
+def test_an_expected_count_that_is_not_whole_is_shown_to_one_decimal_never_rounded_away():
+    assert "about 0.4 of 20 times — it missed 7" in c.chart1_caption(expected=0.4, n=20, observed=7, band="red")
+    assert "about 2.5 of 25" in c.chart1_caption(expected=2.5, n=25, observed=2, band="green")  # not a half-to-even 2
+
+
+def test_the_sentence_limit_guard_refuses_an_over_long_filled_caption(monkeypatch):
+    # every validated slot keeps charts 1, 3 and 4 within three sentences; the guard is for a template edit
+    monkeypatch.setattr(c, "CHART3_TEMPLATE", c.CHART3_TEMPLATE + " A fourth sentence.")
+    with pytest.raises(c.CaptionLengthError):
+        c.chart3_caption(level=90)

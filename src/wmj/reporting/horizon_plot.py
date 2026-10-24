@@ -20,9 +20,9 @@ arrive at P5-C03 together with the full caption.
 from __future__ import annotations
 
 import math
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable  # noqa: UP035 - the reporting import gate (TC-NF6-10) allows typing, not collections.abc
 
 import numpy as np
 from matplotlib.axes import Axes

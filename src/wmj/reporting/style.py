@@ -42,7 +42,11 @@ from pathlib import Path
 
 import matplotlib
 from matplotlib.axes import Axes
+from matplotlib.collections import Collection
+from matplotlib.colors import to_hex
 from matplotlib.figure import Figure
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 from matplotlib.text import Text
 
 from wmj.errors import WmjError
@@ -137,8 +141,8 @@ def _require_flag(value: object) -> bool:
 def display_name(name: str, is_fixture: bool) -> str:
     """The name a chart prints for a model: fixtures carry the `FIXTURE: ` prefix, exactly once."""
     _require_flag(is_fixture)
-    if type(name) is not str or not name.strip():
-        raise ValueError(f"a model name must be a non-empty string, got {name!r}")
+    if type(name) is not str or not name.strip() or name != name.strip():
+        raise ValueError(f"a model name must be a non-empty string with no surrounding spaces, got {name!r}")
     if is_fixture and not name.startswith(FIXTURE_PREFIX):
         return FIXTURE_PREFIX + name
     return name
@@ -151,12 +155,53 @@ def line_colour(is_fixture: bool, *, baseline: bool = False) -> str:
     return BASELINE_COLOUR if baseline else MODEL_COLOUR
 
 
+def _shown(text: Text) -> bool:
+    """A text that will actually appear: visible, on a visible axes (if any), not fully transparent."""
+    alpha = text.get_alpha()
+    return text.get_visible() and (text.axes is None or text.axes.get_visible()) and (alpha is None or alpha > 0)
+
+
 def has_fixture_mark(fig: Figure) -> bool:
-    """True if the exact ADR-R4 sentence is drawn on the figure, in any axes or on the figure itself."""
+    """True if the exact ADR-R4 sentence is drawn, and shown, on the figure: in any axes or on the figure itself."""
     texts = list(fig.texts)
     for ax in fig.get_axes():
         texts.extend(ax.texts)
-    return any(text.get_text() == FIXTURE_LABEL for text in texts)
+    return any(text.get_text() == FIXTURE_LABEL and _shown(text) for text in texts)
+
+
+def _colours(artist) -> list:
+    if isinstance(artist, Line2D):
+        return [artist.get_color(), artist.get_markerfacecolor(), artist.get_markeredgecolor()]
+    if isinstance(artist, Collection):
+        return [*artist.get_facecolors(), *artist.get_edgecolors()]
+    if isinstance(artist, Patch):
+        return [artist.get_facecolor(), artist.get_edgecolor()]
+    if isinstance(artist, Text):
+        return [artist.get_color()]
+    return []
+
+
+def fixture_traces(fig: Figure) -> list[str]:
+    """What on the figure looks like fixture output: anything in the fixture colour, or a `FIXTURE:` label.
+
+    A figure saved as holding no fixture output must show none of these (review of P5-C01: the flag is
+    the caller's claim, so the figure is checked against it)."""
+    found = []
+    for artist in fig.findobj():
+        if isinstance(artist, Text) and artist.get_text().lstrip().startswith(FIXTURE_PREFIX.strip()):
+            found.append(f"text {artist.get_text()[:40]!r}")
+        for colour in _colours(artist):
+            try:
+                if to_hex(colour, keep_alpha=False) == FIXTURE_COLOUR:
+                    found.append(f"{type(artist).__name__} in the fixture colour")
+                    break
+            except ValueError:  # 'none' and similar non-colours
+                continue
+    for ax in fig.get_axes():  # line labels a legend would show
+        for line in ax.get_lines():
+            if str(line.get_label()).startswith(FIXTURE_PREFIX.strip()):
+                found.append(f"line label {line.get_label()!r}")
+    return found
 
 
 def save_figure(fig: Figure, png_path: Path, svg_path: Path, *, contains_fixture: bool) -> None:
@@ -173,6 +218,11 @@ def save_figure(fig: Figure, png_path: Path, svg_path: Path, *, contains_fixture
         )
     if not contains_fixture and marked:
         raise FixtureLabelError("this figure holds no fixture output but carries the fixture sentence (ADR-R4)")
+    if not contains_fixture and (traces := fixture_traces(fig)):
+        raise FixtureLabelError(
+            f"this figure was declared to hold no fixture output, but it shows fixture output ({traces[0]}): "
+            "pass contains_fixture=True if any model on it is a fixture, and mark it"
+        )
     png_path = Path(png_path)
     svg_path = Path(svg_path)
     png_path.parent.mkdir(parents=True, exist_ok=True)

@@ -41,10 +41,11 @@ CHART2_FULL = (
 
 
 # Chart 1, amended for the A39 item 9 chart (backlog): dots in the model's own stated sizes, one line.
+# Every fill function ends in `_checked`, so a future template edit that grows a fourth sentence is refused.
 CHART1_TEMPLATE = (
     "Each dot is one test run: how far the outcome landed from the model's guess, measured in the "
-    "model's own stated error sizes and combined over everything it predicts. Dots above the line fell "
-    "outside the range the model called 90% likely — those misses are circled in red. A model this "
+    "model's own stated error sizes and combined over everything it predicts. The line marks the edge "
+    "of the range the model called 90% likely; dots above it are the misses, circled in red. A model this "
     "confident should miss about {expected} of {n} times — it missed {observed}, which lands it in the "
     "{band} band drawn on the right."
 )
@@ -106,7 +107,10 @@ def chart1_caption(*, expected: float, n: int, observed: int, band: str) -> str:
         raise CaptionSlotError(f"expected must be a finite number of misses between 0 and n = {n}, got {expected!r}")
     if band not in BANDS:
         raise CaptionSlotError(f"band must be one of {BANDS}, got {band!r}")
-    return _checked(CHART1_TEMPLATE.format(expected=round(expected), n=n, observed=observed, band=band))
+    shown = round(expected)
+    # a whole number reads as one ("about 20"); otherwise one decimal, never a rounded-away "about 0" or a half-to-even 2
+    text = str(shown) if abs(expected - shown) < 1e-9 * max(1.0, abs(expected)) else f"{expected:.1f}"
+    return _checked(CHART1_TEMPLATE.format(expected=text, n=n, observed=observed, band=band))
 
 
 def chart3_caption(*, level: int) -> str:
@@ -124,7 +128,7 @@ def chart4_caption(disagreeing: tuple[str, str] | None) -> str:
         raise CaptionSlotError(f"the disagreeing models must be a pair of two names, got {disagreeing!r}")
     a, b = disagreeing
     for name in (a, b):
-        if type(name) is not str or not name.strip() or len(sentences(name)) != 1 or name.rstrip()[-1] in ".!?":
+        if type(name) is not str or not name.strip() or name != name.strip() or len(sentences(name)) != 1 or name[-1] in ".!?":
             raise CaptionSlotError(f"a model name in the caption must be one plain name, got {name!r}")
     if a == b:
         raise CaptionSlotError(f"the pair must name two different models, got {disagreeing!r}")

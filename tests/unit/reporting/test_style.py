@@ -127,7 +127,7 @@ def test_display_name_prefixes_fixtures_once_and_leaves_other_models_alone():
     assert style.display_name("fx-brittle", True) == "FIXTURE: fx-brittle"
     assert style.display_name("direct", False) == "direct"
     assert style.display_name("FIXTURE: fx-brittle", True) == "FIXTURE: fx-brittle"  # never doubled
-    for bad in ("", "   "):
+    for bad in ("", "   ", " direct", "direct\n"):
         with pytest.raises(ValueError, match="name"):
             style.display_name(bad, False)
     with pytest.raises(style.FixtureLabelError, match="True or False"):
@@ -139,3 +139,40 @@ def test_line_colour_follows_the_fixed_semantics_and_fixture_orange_wins():
     assert style.line_colour(False, baseline=True) == style.BASELINE_COLOUR
     assert style.line_colour(True) == style.FIXTURE_COLOUR
     assert style.line_colour(True, baseline=True) == style.FIXTURE_COLOUR
+
+
+def test_a_figure_declared_fixture_free_is_refused_if_it_shows_fixture_output(tmp_path):
+    # review of P5-C01: the flag is the caller's claim; a renderer that passes the first envelope's flag
+    # instead of any(...) must not publish a fixture line unlabelled
+    png, svg = tmp_path / "c.png", tmp_path / "c.svg"
+    cases = []
+    fig = style.new_figure(); ax = fig.subplots(); ax.plot([1, 2], [1.0, 2.0], color=style.FIXTURE_COLOUR); cases.append(fig)
+    fig = style.new_figure(); ax = fig.subplots(); ax.plot([1, 2], [1.0, 2.0], label="FIXTURE: fx-brittle"); cases.append(fig)
+    fig = style.new_figure(); ax = fig.subplots(); ax.scatter([1, 2], [1.0, 2.0], color=style.FIXTURE_COLOUR); cases.append(fig)
+    fig = style.new_figure(); ax = fig.subplots(); ax.annotate("FIXTURE: fx", xy=(0.5, 0.5)); cases.append(fig)
+    fig = style.new_figure(); ax = fig.subplots(); ax.bar([1], [1.0], color=style.FIXTURE_COLOUR); cases.append(fig)
+    for fig in cases:
+        with pytest.raises(style.FixtureLabelError, match="shows fixture output"):
+            style.save_figure(fig, png, svg, contains_fixture=False)
+    assert not svg.exists()
+    clean = style.new_figure(); ax = clean.subplots()
+    ax.plot([1, 2], [1.0, 2.0], color=style.MODEL_COLOUR, label="direct"); ax.plot([1, 2], [2.0, 3.0], color=style.BASELINE_COLOUR)
+    ax.fill_between([1, 2], 0, 1, color=style.BAND_COLOURS["amber"])
+    style.save_figure(clean, png, svg, contains_fixture=False)  # ordinary colours and names pass
+    assert style.fixture_traces(clean) == []
+
+
+def test_a_hidden_label_does_not_count_as_the_label(tmp_path):
+    png, svg = tmp_path / "c.png", tmp_path / "c.svg"
+    for hide in ("text", "axes", "alpha"):
+        fig = style.new_figure(); ax = fig.subplots(); ax.plot([1, 2], [1.0, 2.0])
+        label = style.mark_fixture(ax)
+        if hide == "text":
+            label.set_visible(False)
+        elif hide == "axes":
+            ax.set_visible(False)
+        else:
+            label.set_alpha(0.0)
+        assert not style.has_fixture_mark(fig), hide
+        with pytest.raises(style.FixtureLabelError, match="not on it"):
+            style.save_figure(fig, png, svg, contains_fixture=True)
