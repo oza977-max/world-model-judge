@@ -20,7 +20,7 @@ from pathlib import Path
 sys.path.insert(0, {root!r})
 from tests.unit.reporting._verdict_blocks import run_envelopes
 from wmj.reporting.writer import write_run
-write_run(run_envelopes(), frozenset({{"persistence", "linear"}}), Path({out!r}))
+write_run(run_envelopes(), frozenset({{"persistence", "linear"}}), Path({out!r}), 0.05)
 """
 
 

@@ -73,3 +73,10 @@ def test_a_page_without_its_model_card_or_results_is_refused(args):
 def test_only_text_goes_on_the_page():
     with pytest.raises(page.PageError):
         page.escape(3)
+
+
+def test_attribute_values_are_escaped_too():
+    shown = page.Shown("charts/x.png", 'say "hi" & <b>it\'s</b>')
+    model = page.ModelSection("direct", False, shown, shown, ())
+    html = page.render_page(CARD, NEVER, (page.WorldSection("lv", shown, (model,)),))
+    assert 'alt="say &quot;hi&quot; &amp; &lt;b&gt;it&#x27;s&lt;/b&gt;"' in html and 'alt="say "' not in html

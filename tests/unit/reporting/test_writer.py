@@ -27,6 +27,7 @@ from wmj.judge.verdict import NOT_TESTED, Verdict
 from wmj.reporting.writer import VerdictSchemaError
 
 BASELINES = frozenset({"persistence", "linear"})
+MARGIN = 0.05  # prereg/recipe.md's matching_margin
 
 
 @pytest.fixture(scope="module")
@@ -40,7 +41,7 @@ def plain_run(tmp_path_factory):
 def _write(tmp_path, envelopes=None):
     from wmj.reporting.writer import write_run
 
-    return write_run(envelopes if envelopes is not None else run_envelopes(), BASELINES, tmp_path / "out")
+    return write_run(envelopes if envelopes is not None else run_envelopes(), BASELINES, tmp_path / "out", MARGIN)
 
 
 def test_tc_rp6_01_each_verdict_is_a_schema_valid_file_beside_its_charts(plain_run):
@@ -154,7 +155,7 @@ def _spoiled(change):
         (lambda es: es[0]["verdict"].pop("schema"), "schema"),
         (lambda es: es[0]["verdict"].update(is_fixture=False), "fields must be exactly"),
         (lambda es: es[0]["verdict"].pop("trials"), "fields must be exactly"),
-        (lambda es: es[0]["verdict"].update(not_tested=tuple(es[0]["verdict"]["not_tested"])), "plain form"),
+        (lambda es: es[0]["verdict"].update(not_tested=tuple(es[0]["verdict"]["not_tested"])), "plain JSON"),
         (lambda es: es[0]["verdict"]["skill"]["per_task_region"][0].update(crps=-1.0), "judge's own check"),
         (lambda es: es.pop(0), "baseline"),
         (lambda es: es.append(dict(es[2], model_ref="opaque-9")), "appears twice"),
@@ -173,7 +174,7 @@ def test_the_run_needs_envelopes_and_a_set_of_baseline_names(tmp_path):
 
     for envelopes, baselines in (([], BASELINES), (run_envelopes(), ["persistence", "linear"])):
         with pytest.raises(VerdictSchemaError):
-            write_run(envelopes, baselines, tmp_path / "out")
+            write_run(envelopes, baselines, tmp_path / "out", MARGIN)
     assert list(tmp_path.iterdir()) == []
 
 
@@ -211,10 +212,83 @@ def test_two_worlds_into_an_empty_folder_each_get_their_files_and_page_section(t
                  for i, (n, s, w) in enumerate((("persistence", 2, "lv"), ("linear", 3, "lv"),
                                                 ("persistence", 2, "pendulum"), ("linear", 3, "pendulum")))]
     (tmp_path / "out").mkdir()
-    paths = write_run(envelopes, BASELINES, tmp_path / "out")
+    paths = write_run(envelopes, BASELINES, tmp_path / "out", MARGIN)
     names = sorted(p.name for p in paths.verdicts)
     assert names == ["lv-linear.json", "lv-persistence.json", "pendulum-linear.json", "pendulum-persistence.json"]
     html = paths.page.read_text(encoding="utf-8")
     assert html.index("World: lv") < html.index("World: pendulum")
     assert all(p.png.exists() and p.svg.exists() and p.caption.exists() for p in paths.charts)
     assert not (tmp_path / "out.partial").exists()
+
+
+# --- review of P5-C04, pass 1 ------------------------------------------------------------------------------
+
+
+def test_two_world_model_pairs_that_make_the_same_file_names_are_refused(tmp_path):
+    from tests.unit.reporting._verdict_blocks import full_envelope
+
+    envelopes = [full_envelope(name=n, seed=s, world=w, ref=f"r{i}") for i, (n, s, w) in enumerate((
+        ("persistence", 2, "a"), ("linear", 3, "a"), ("b-c", 1, "a"),
+        ("persistence", 2, "a-b"), ("linear", 3, "a-b"), ("c", 1, "a-b")))]
+    with pytest.raises(VerdictSchemaError, match="same file names"):
+        _write(tmp_path, envelopes)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_an_interrupt_part_way_also_leaves_nothing(tmp_path, monkeypatch):
+    from wmj.reporting import writer
+
+    def interrupted(*args, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(writer, "render_exception_charts", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        _write(tmp_path)
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("value", ["np-float", "np-array", "tuple"])
+def test_values_that_are_not_plain_json_are_refused_up_front(tmp_path, value):
+    import numpy as np
+
+    envelopes = run_envelopes()
+    entry = envelopes[2]["verdict"]["skill"]["per_task_region"][1]
+    entry["crps"] = {"np-float": np.float64(entry["crps"]), "np-array": np.array([1.0]), "tuple": (1.0,)}[value]
+    with pytest.raises(VerdictSchemaError, match="not plain JSON"):
+        _write(tmp_path, envelopes)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_a_symlinked_or_parentless_output_folder_is_refused(tmp_path):
+    from wmj.reporting.writer import OutputFolderError, write_run
+
+    (tmp_path / "real").mkdir()
+    (tmp_path / "out").symlink_to(tmp_path / "real")
+    with pytest.raises(OutputFolderError, match="plain folder"):
+        _write(tmp_path)
+    with pytest.raises(OutputFolderError, match="parent"):
+        write_run(run_envelopes(), BASELINES, tmp_path / "missing" / "deeper" / "out", MARGIN)
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["out", "real"] and not any((tmp_path / "real").iterdir())
+
+
+@pytest.mark.parametrize("margin", [0.0, 1.0, 0, "0.05", None])
+def test_the_matching_margin_is_checked_before_anything_is_written(tmp_path, margin):
+    from wmj.reporting.writer import write_run
+
+    with pytest.raises(VerdictSchemaError, match="matching margin"):
+        write_run(run_envelopes(), BASELINES, tmp_path / "out", margin)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_a_file_written_twice_or_a_chart_that_does_not_match_its_entry_stops_the_run(tmp_path, monkeypatch):
+    from wmj.reporting import writer
+
+    monkeypatch.setattr(writer, "render_calibration_chart", lambda env, c, t: writer.render_horizon_charts(env, [], c, t))
+    with pytest.raises(writer.OutputFolderError, match="written twice"):
+        _write(tmp_path)
+    monkeypatch.undo()
+    real = writer.render_exception_charts
+    monkeypatch.setattr(writer, "render_exception_charts", lambda env, c, t: list(reversed(real(env, c, t))))
+    with pytest.raises(writer.OutputFolderError, match="does not match its verdict entry"):
+        _write(tmp_path)
+    assert list(tmp_path.iterdir()) == []

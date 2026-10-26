@@ -62,7 +62,28 @@ class RunPaths:
     charts: tuple[ChartPaths, ...]
 
 
+def _plain_data(value: object, path: str) -> None:
+    """Only what JSON holds, exactly: no numpy values, tuples or other look-alikes that would print the same
+    but are not the judge's plain form (review of P5-C04: a numpy number passed the door and failed later)."""
+    if value is None or type(value) in (bool, int, str):
+        return
+    if type(value) is float:
+        return
+    if type(value) is list:
+        for i, item in enumerate(value):
+            _plain_data(item, f"{path}[{i}]")
+        return
+    if type(value) is dict:
+        for key, item in value.items():
+            if type(key) is not str:
+                raise VerdictSchemaError(f"{path} has a key that is not text: {key!r}")
+            _plain_data(item, f"{path}.{key}")
+        return
+    raise VerdictSchemaError(f"{path} holds a {type(value).__name__}, which is not plain JSON data (judge §5)")
+
+
 def _check_verdict(index: int, verdict: dict) -> None:
+    _plain_data(verdict, f"envelope {index}: verdict")
     fields = dict(verdict)
     schema = fields.pop("schema", None)
     if schema != VERDICT_SCHEMA:
@@ -80,7 +101,7 @@ def _check_verdict(index: int, verdict: dict) -> None:
 
 
 def _check_meta(index: int, meta: object) -> dict:
-    if not isinstance(meta, dict) or set(meta) != META_KEYS:
+    if type(meta) is not dict or set(meta) != META_KEYS:
         raise VerdictSchemaError(f"envelope {index}: meta must have exactly {sorted(META_KEYS)} (judge §5)")
     if type(meta["seed"]) is not int:
         raise VerdictSchemaError(f"envelope {index}: meta seed must be a whole number, got {meta['seed']!r}")
@@ -114,6 +135,7 @@ def check_run(envelopes: object, baseline_names: object) -> dict[str, list[dict]
         elif this_meta != meta:
             raise VerdictSchemaError(f"envelope {index}: meta differs from the first envelope's; one run has one meta")
         worlds.setdefault(read.world, []).append(env)
+    stems = [f"{world}-{e['model_name']}" for world, group in worlds.items() for e in group]
     for world, group in worlds.items():
         names = [e["model_name"] for e in group]
         if len(set(names)) != len(names):
@@ -121,6 +143,9 @@ def check_run(envelopes: object, baseline_names: object) -> dict[str, list[dict]
         missing = sorted(set(baseline_names) - set(names))
         if missing:
             raise VerdictSchemaError(f"world {world!r}: baseline(s) {missing} have no envelope (Chart 2 draws them)")
+    if len(set(stems)) != len(stems):  # world "a" + model "b-c" and world "a-b" + model "c" share every file name
+        clash = sorted({s for s in stems if stems.count(s) > 1})
+        raise VerdictSchemaError(f"two (world, model) pairs make the same file names {clash}; rename one")
     return worlds
 
 
@@ -146,20 +171,33 @@ def _shown(stage: Path, paths: ChartPaths) -> page.Shown:
     return page.Shown(paths.png.relative_to(stage).as_posix(), paths.caption.read_text(encoding="utf-8"))
 
 
-def _write_all(stage: Path, worlds: dict[str, list[dict]], baseline_names, envelopes) -> tuple[list, list]:
+def _write_all(stage: Path, worlds: dict[str, list[dict]], baseline_names, envelopes, margin: float) -> tuple[list, list]:
     charts_dir, captions_dir = stage / "charts", stage / "captions"
     charts, verdict_files, sections = [], [], []
+    written: set[Path] = set()
+
+    def claim(*paths: Path) -> None:  # no file may be written twice: a second write would silently replace the first
+        for path in paths:
+            if path in written:
+                raise OutputFolderError(f"{path.name} would be written twice; two names in this run make the same file name")
+            written.add(path)
+
     for world, group in worlds.items():
-        comparison = render_comparison_chart(group, charts_dir, captions_dir)
+        comparison = render_comparison_chart(group, charts_dir, captions_dir, margin)
+        claim(comparison.png, comparison.svg, comparison.caption)
         charts.append(comparison)
         baselines = [e for e in group if e["model_name"] in baseline_names]
         models = []
         for env in group:
             name = env["model_name"]
-            verdict_files.append(_write_bytes(stage / "verdicts" / f"{world}-{name}.json", canonical_serialize(env)))
+            verdict_path = stage / "verdicts" / f"{world}-{name}.json"
+            claim(verdict_path)
+            verdict_files.append(_write_bytes(verdict_path, canonical_serialize(env)))
             horizon = render_horizon_charts(env, baselines, charts_dir, captions_dir)
             calibration = render_calibration_chart(env, charts_dir, captions_dir)
             exception_paths = render_exception_charts(env, charts_dir, captions_dir)
+            for paths in (horizon, calibration, *exception_paths):
+                claim(paths.png, paths.svg, paths.caption)
             entries = env["verdict"]["exceptions"]["per_task"]
             exceptions = []
             for entry, paths in zip(entries, exception_paths, strict=True):
@@ -178,22 +216,29 @@ def _write_all(stage: Path, worlds: dict[str, list[dict]], baseline_names, envel
     return charts, verdict_files
 
 
-def write_run(envelopes: list[dict], baseline_names: frozenset[str], out_dir: Path) -> RunPaths:
-    """Check every envelope, write the whole `out/` folder into a staging folder, then move it into place."""
+def write_run(envelopes: list[dict], baseline_names: frozenset[str], out_dir: Path, matching_margin: float) -> RunPaths:
+    """Check every envelope, write the whole `out/` folder into a staging folder, then move it into place.
+
+    `matching_margin` is the pre-registered MU-5 margin (`prereg/recipe.md`): Chart 4's caption may call two
+    models "equals" only within it."""
     worlds = check_run(envelopes, baseline_names)
+    if type(matching_margin) is not float or not 0.0 < matching_margin < 1.0:
+        raise VerdictSchemaError(f"the matching margin must be a number strictly between 0 and 1 (MU-5), got {matching_margin!r}")
     out_dir = Path(out_dir)
+    if out_dir.is_symlink() or not out_dir.parent.is_dir():
+        raise OutputFolderError(f"{out_dir} must be a plain folder whose parent already exists")
     if out_dir.exists() and (not out_dir.is_dir() or any(out_dir.iterdir())):
         raise OutputFolderError(f"{out_dir} already holds files; clear it first (a run never mixes with an older one)")
     stage = out_dir.with_name(out_dir.name + ".partial")
-    if stage.exists():
+    if stage.exists() or stage.is_symlink():
         raise OutputFolderError(f"{stage} is in the way (a previous run stopped part-way); remove it first")
-    stage.mkdir(parents=True)
+    stage.mkdir()
     try:
-        charts, verdict_files = _write_all(stage, worlds, baseline_names, envelopes)
+        charts, verdict_files = _write_all(stage, worlds, baseline_names, envelopes, matching_margin)
+        stage.replace(out_dir)  # one rename: `out/` appears complete or not at all
     except BaseException:
         _remove_staging(stage)
         raise
-    stage.replace(out_dir)  # one rename: `out/` appears complete or not at all
     moved = [Path(out_dir) / p.relative_to(stage) for p in verdict_files]
     charts = [ChartPaths(*(Path(out_dir) / p.relative_to(stage) for p in (c.png, c.svg, c.caption))) for c in charts]
     return RunPaths(out_dir, tuple(moved), out_dir / "run-manifest.json", out_dir / "results.html", tuple(charts))

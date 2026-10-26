@@ -185,3 +185,11 @@ def test_the_sentence_limit_guard_refuses_an_over_long_filled_caption(monkeypatc
     monkeypatch.setattr(c, "CHART3_TEMPLATE", c.CHART3_TEMPLATE + " A fourth sentence.")
     with pytest.raises(c.CaptionLengthError):
         c.chart3_caption(level=90)
+
+
+def test_chart4_says_equals_only_when_told_the_pair_is_equal():
+    assert c.chart4_caption(("direct", "ensemble"), equals=False).endswith(
+        "Ordinary error ranks direct ahead of ensemble; the judge ranks ensemble ahead.")
+    assert "equals" in c.chart4_caption(("direct", "ensemble"))
+    with pytest.raises(c.CaptionSlotError):
+        c.chart4_caption(("direct", "ensemble"), equals=1)

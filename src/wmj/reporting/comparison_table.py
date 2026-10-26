@@ -8,10 +8,15 @@ In plain words: every model judged on one world, one row each, set side by side.
   model can be trusted, in steps, in world time and as a share of the world's natural cycle ("—" where the
   world has none).
 - **Disagreement.** Where ordinary error puts one real model strictly ahead of another and some
-  trust-horizon column puts it strictly behind, both rows are marked "⇄ disagree". The caption names the
-  pair closest on ordinary error: "ordinary error says they are equals; the judge does not". When no pair
+  trust-horizon column puts it strictly behind, both rows are marked "⇄ disagree". When no pair
   disagrees, the caption says so plainly, and no row is marked, because the marker is not decoration
   (TC-RP4-02).
+- **The caption names one disagreeing pair** (owner decision 2026-10-26). It may call the two models
+  "equals" only when they are equal by the pre-registered test: their one-step skill scores against both
+  baselines differ by no more than the matching margin (MU-5's own test, `harness.prereg`). Such a pair
+  is preferred, and among those the closest on ordinary error. Otherwise the caption names the closest
+  disagreeing pair and says only what is true: "Ordinary error ranks A ahead of B; the judge ranks B
+  ahead."
 - **Fixtures.** Fixture rows are shown, labelled and tinted, but never marked and never named in the
   caption: a deliberately broken model is not a finding (MU-4).
 
@@ -77,6 +82,7 @@ class Comparison:
     ranks: tuple[int, ...]
     marked: tuple[bool, ...]
     caption_pair: tuple[str, str] | None
+    pair_matched: bool  # the caption pair is equal by the pre-registered margin, so "equals" is true
 
 
 @dataclass(frozen=True)
@@ -134,10 +140,16 @@ def _control_task(horizons: list[dict]) -> str:
     return control[0]
 
 
-def _row(env, columns, control: str) -> Row:
+def _tolerances(horizons: list[dict]) -> tuple[tuple[str, float], ...]:
+    """Each task's one tolerance, in verdict order (checked by `_control_task`)."""
+    return tuple({e["task"]: e["tolerance"] for e in horizons}.items())
+
+
+def _row(env, columns, tolerances, control: str) -> Row:
     skill = {(e["task"], e["region"]): e for e in _entries(env.verdict.get("skill"), "per_task_region", SKILL_KEYS, "skill")}
     horizons = _entries(env.verdict.get("trust_horizons"), "per_task", HORIZON_KEYS, "trust_horizons")
-    if _columns(horizons) != columns or _control_task(horizons) != control:
+    _control_task(horizons)  # each task states one positive tolerance
+    if _columns(horizons) != columns or _tolerances(horizons) != tolerances:
         raise ComparisonBlockError(
             f"ADR-R2 Chart 4: {env.model_name!r} was judged on different tasks, regions or tolerances from the others"
         )
@@ -173,10 +185,20 @@ def disagreements(rows: tuple[Row, ...]) -> list[tuple[Row, Row]]:
     return [(a, b) for i, a in enumerate(real) for b in real[i + 1:] if _discordant(a, b)]
 
 
-def _closest(pairs: list[tuple[Row, Row]]) -> tuple[str, str] | None:
-    """The discordant pair closest on ordinary error, better-CRPS model first; ties broken by name."""
+def matched(a: Row, b: Row, margin: float) -> bool:
+    """Equal by the pre-registered test: one-step skill against each baseline within the matching margin (MU-5)."""
+    return abs(a.vs_persistence - b.vs_persistence) <= margin and abs(a.vs_linear - b.vs_linear) <= margin
+
+
+def _closest(pairs: list[tuple[Row, Row]], margin: float) -> tuple[tuple[str, str] | None, bool]:
+    """The pair the caption names, better-CRPS model first, and whether it may be called equal.
+
+    A pair equal by the pre-registered margin is preferred; among the candidates, the closest on ordinary
+    error (ratio of the larger CRPS to the smaller), ties broken by name."""
     if not pairs:
-        return None
+        return None, False
+    equal = [pair for pair in pairs if matched(*pair, margin)]
+    candidates = equal or pairs
 
     def ordered(pair):
         return tuple(sorted(pair, key=lambda r: (r.crps, r.name)))
@@ -186,12 +208,19 @@ def _closest(pairs: list[tuple[Row, Row]]) -> tuple[str, str] | None:
         ratio = math.inf if better.crps == 0 else worse.crps / better.crps
         return (ratio, better.name, worse.name)
 
-    better, worse = ordered(min(pairs, key=closeness))
-    return better.name, worse.name
+    better, worse = ordered(min(candidates, key=closeness))
+    return (better.name, worse.name), bool(equal)
 
 
-def comparison_rows(envelopes: list[dict]) -> Comparison:
+def _check_margin(margin: object) -> float:
+    if type(margin) is not float or not 0.0 < margin < 1.0:
+        raise ComparisonBlockError(f"ADR-R2 Chart 4: the matching margin must be a number strictly between 0 and 1 (MU-5), got {margin!r}")
+    return margin
+
+
+def comparison_rows(envelopes: list[dict], matching_margin: float) -> Comparison:
     """Validate one world's envelopes and set out Chart 4's rows, ranks, markers and caption pair."""
+    margin = _check_margin(matching_margin)
     if not isinstance(envelopes, list) or not envelopes:
         raise ComparisonBlockError("ADR-R2 Chart 4: needs the envelopes of every model on one world (reporting §5)")
     try:
@@ -207,13 +236,15 @@ def comparison_rows(envelopes: list[dict]) -> Comparison:
     first = _entries(envs[0].verdict.get("trust_horizons"), "per_task", HORIZON_KEYS, "trust_horizons")
     columns = _columns(first)
     control = _control_task(first)
-    rows = sorted((_row(e, columns, control) for e in envs), key=lambda r: (r.crps, r.name))
+    tolerances = _tolerances(first)
+    rows = sorted((_row(e, columns, tolerances, control) for e in envs), key=lambda r: (r.crps, r.name))
     if all(r.is_fixture for r in rows):
         raise ComparisonBlockError("ADR-R2 Chart 4: every model is a fixture; there is nothing to compare (MU-4)")
     ranks = tuple(1 + sum(other.crps < r.crps for other in rows) for r in rows)  # competition rank: ties share
     pairs = disagreements(tuple(rows))
     in_pair = {r.name for pair in pairs for r in pair}
-    return Comparison(worlds.pop(), control, columns, tuple(rows), ranks, tuple(r.name in in_pair for r in rows), _closest(pairs))
+    pair, pair_matched = _closest(pairs, margin)
+    return Comparison(worlds.pop(), control, columns, tuple(rows), ranks, tuple(r.name in in_pair for r in rows), pair, pair_matched)
 
 
 def _two(value: float) -> str:
@@ -268,13 +299,13 @@ def build_comparison_figure(comparison: Comparison) -> ComparisonFigure:
     fig.suptitle(f"Ordinary error and trust horizon — {comparison.world}", fontsize=10)
     if has_fixture:
         style.mark_fixture(ax)
-    caption = captions.chart4_caption(comparison.caption_pair)
+    caption = captions.chart4_caption(comparison.caption_pair, equals=comparison.pair_matched)
     return ComparisonFigure(fig, table, comparison, caption)
 
 
-def render_comparison_chart(envelopes: list[dict], charts_dir: Path, captions_dir: Path) -> ChartPaths:
+def render_comparison_chart(envelopes: list[dict], charts_dir: Path, captions_dir: Path, matching_margin: float) -> ChartPaths:
     """Chart 4 for one world: `{world}-comparison` PNG + SVG + caption; validated and drawn before writing."""
-    comparison = comparison_rows(envelopes)
+    comparison = comparison_rows(envelopes, matching_margin)
     chart = build_comparison_figure(comparison)
     paths = chart_paths(charts_dir, captions_dir, f"{comparison.world}-comparison")
     style.save_figure(chart.figure, paths.png, paths.svg, contains_fixture=any(r.is_fixture for r in comparison.rows))

@@ -1341,7 +1341,7 @@ the region instead, same total size (200 starts × 1,000 steps = 200,000 samples
     - **Why change it:** the spec's literal rule ("rows where error-rank and any trust-horizon rank disagree") marks tied rows (several models at 0 steps) and says nothing about fixtures.
     - **Discordant pair:** two non-fixture models where `crps` puts one strictly ahead and some trust-horizon column puts the other strictly ahead. A tie on either side is not disagreement.
     - **Marked rows:** a row is marked when it is in such a pair. Fixture rows are shown and tinted but never marked (MU-4).
-    - **Caption:** it names the discordant pair closest on ordinary error (smallest ratio of the larger CRPS to the smaller), the better-CRPS model first.
+    - **Caption:** superseded by item 29.
     - **Control task:** the task with the tightest `trust_horizons` tolerance. The verdict carries no task kind; a tie is refused.
 26. **Chart 4 display choices not in the spec:**
     - the rank is a competition rank (ties share);
@@ -1361,6 +1361,20 @@ the region instead, same total size (200 starts × 1,000 steps = 200,000 samples
     - everything is written into a sibling `out.partial/` and moved into place with one rename. A failure part-way removes the staging folder, so no partial `out/` ever exists;
     - each verdict must round-trip through the judge's `Verdict` unchanged (`VerdictSchemaError` otherwise), and `meta` must be identical across envelopes;
     - the exception charts on the page are grouped per task, one row per task (ADR-R2's "side by side").
+
+29. **Chart 4's caption may say "equals" only within the pre-registered margin (ADR-R3), owner decision 2026-10-26, after review pass 1 of P5-C04.**
+    - **The problem:** the spec's sentence "Ordinary error says {A} and {B} are equals; the judge does not." was printed for any disagreeing pair, including one 4.5 times apart on CRPS, where it is false.
+    - **When "equals" is allowed:** only when the pair's one-step skill scores against both baselines, at the ranking entry (control task, training), differ by no more than `prereg/recipe.md`'s `matching_margin`. That is the same test as `harness.prereg.within_matching_margin`, MU-5.
+    - **Which pair is named:** such a pair is preferred; among the candidates, the closest on CRPS ratio, the better-CRPS model first, ties broken by name.
+    - **Any other disagreeing pair** gets a new, always-true form: "Ordinary error ranks {A} ahead of {B}; the judge ranks {B} ahead." (`captions.CHART4_APART`).
+    - **Plumbing:** `write_run` and `render_comparison_chart` now take `matching_margin`. `wmj run` (P6-C01) passes `harness.prereg.read_matching_margin(prereg/recipe.md)`.
+30. **Writer hardening (review pass 1 of P5-C04):**
+    - two (world, model) pairs that make the same file name (world `a` with model `b-c`, world `a-b` with model `c`) are refused, and any file about to be written twice stops the run;
+    - verdicts must be plain JSON data: no numpy values, tuples or other look-alikes;
+    - `out_dir` must be a plain folder (not a symlink) whose parent already exists;
+    - the final rename is inside the clean-up, so a failed move also leaves nothing;
+    - tolerances must match across a world's models;
+    - on the page, a task's exception charts sit at most two per row, so their text stays legible, and fixture text uses the fixture orange darkened to 5.5:1 contrast.
 
 **Deferred door-tightening (REMEMBER §3, P5–P6):** require the horizon-step-1 entry in each exception/trials pair, require `steps` to equal `range(1, H+1)`, check tolerance consistency across blocks, handle a zero-error chart; one shared pipeline helper across four test files; rename `task_region_step`; a shape variant with 3 regions and d=4; mixed-element list tests; the `io.open` guard case.
 
