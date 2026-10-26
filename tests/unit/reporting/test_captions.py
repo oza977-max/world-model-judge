@@ -78,13 +78,13 @@ CHART1 = (
 CHART3 = (
     "When the model said it was {level}% sure, was it right that often? Of every 100 ranges it drew at "
     "90% confidence, about 90 should contain the true outcome. The solid line is familiar territory; the "
-    "dashed line is territory it never saw in training — the honest model's lines both hug the diagonal."
+    "dashed lines are territory it never saw in training — an honest model's lines all hug the diagonal."
 )
 
 
 def test_the_templates_are_the_pinned_text():
     assert c.CHART1_TEMPLATE == CHART1  # amended from ADR-R3 for the A39 item 9 chart (backlog)
-    assert c.CHART3_TEMPLATE == CHART3  # ADR-R3 verbatim
+    assert c.CHART3_TEMPLATE == CHART3  # amended from ADR-R3 by owner decision: two dashed lines (backlog A39 item 23)
     assert c.CHART4_HEAD == "Ordinary accuracy and the judge's trust horizon, side by side."
     assert c.CHART4_DISAGREE == "Ordinary error says {A} and {B} are equals; the judge does not."
     assert c.CHART4_AGREE == (

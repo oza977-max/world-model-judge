@@ -49,10 +49,10 @@ CHART1_TEMPLATE = (
     "confident should miss about {expected} of {n} times — it missed {observed}, which lands it in the "
     "{band} band drawn on the right."
 )
-CHART3_TEMPLATE = (  # ADR-R3 verbatim
+CHART3_TEMPLATE = (  # ADR-R3, amended: three regions draw two dashed lines (backlog A39 item 23)
     "When the model said it was {level}% sure, was it right that often? Of every 100 ranges it drew at "
     "90% confidence, about 90 should contain the true outcome. The solid line is familiar territory; the "
-    "dashed line is territory it never saw in training — the honest model's lines both hug the diagonal."
+    "dashed lines are territory it never saw in training — an honest model's lines all hug the diagonal."
 )
 CHART4_HEAD = "Ordinary accuracy and the judge's trust horizon, side by side."  # ADR-R3 verbatim
 CHART4_DISAGREE = "Ordinary error says {A} and {B} are equals; the judge does not."
