@@ -185,8 +185,11 @@ def _is_allowed_models_import(name: str) -> bool:
 # flags variation) — so this is the one place a static allowlist is
 # doing work no other control does. `importlib.metadata` is included
 # for reporting.md §6's one sanctioned `package_versions` read
-# (writer.py, not yet built); `wmj.judge` for the Verdict type reporting
-# reads read-only (reporting.md §4).
+# (writer.py); `wmj.judge` for the Verdict type reporting reads read-only
+# (reporting.md §4). `wmj.harness.serialize` — exactly that one module, not
+# the harness package — is the canonical serializer writer.py must use for
+# out/verdicts and the manifest (cross-cutting ADR-002 rule 4; owner decision
+# 2026-10-26, backlog A39 item 24): one serializer, one byte path for NF-1.
 REPORTING_ALLOWLIST = {
     "numpy",
     "matplotlib",
@@ -198,6 +201,7 @@ REPORTING_ALLOWLIST = {
     "importlib.metadata",
     "wmj.errors",
     "wmj.judge",
+    "wmj.harness.serialize",
 }
 REPORTING_OWN_PACKAGE = "wmj.reporting"
 

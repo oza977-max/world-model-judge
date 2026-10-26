@@ -1331,6 +1331,37 @@ the region instead, same total size (200 starts × 1,000 steps = 200,000 samples
 
 23. **Chart 3's caption (ADR-R3), owner-decided 2026-10-26.** The spec's text says "the dashed line … the honest model's lines both hug the diagonal", but both worlds have three regions, so each panel draws one solid and two dashed lines (reporting §ADR-R2 Chart 3: every non-training region dashed). `captions.CHART3_TEMPLATE` now ends: "The solid line is familiar territory; the dashed lines are territory it never saw in training — an honest model's lines all hug the diagonal." Still three sentences. Found by review pass 3 of P5-C03.
 
+**P5-C04 (2026-10-26):**
+
+24. **The writer reaches the canonical serializer through one allowlisted module (cross-cutting ADR-002 rule 4; TC-NF6-10), owner decision 2026-10-26.**
+    - The conflict: the spec requires `writer.py` to write `out/verdicts/*.json` and `run-manifest.json` with the one shared serializer, but TC-NF6-10's allowlist did not let reporting import the harness, or even `json`.
+    - The resolution: exactly `wmj.harness.serialize` was added to `REPORTING_ALLOWLIST`. The rest of the harness stays forbidden.
+    - TC-NF6-10's allowlist text should name it.
+25. **Chart 4's disagreement rule (ADR-R2 Chart 4), owner decision 2026-10-26.**
+    - **Why change it:** the spec's literal rule ("rows where error-rank and any trust-horizon rank disagree") marks tied rows (several models at 0 steps) and says nothing about fixtures.
+    - **Discordant pair:** two non-fixture models where `crps` puts one strictly ahead and some trust-horizon column puts the other strictly ahead. A tie on either side is not disagreement.
+    - **Marked rows:** a row is marked when it is in such a pair. Fixture rows are shown and tinted but never marked (MU-4).
+    - **Caption:** it names the discordant pair closest on ordinary error (smallest ratio of the larger CRPS to the smaller), the better-CRPS model first.
+    - **Control task:** the task with the tightest `trust_horizons` tolerance. The verdict carries no task kind; a tie is refused.
+26. **Chart 4 display choices not in the spec:**
+    - the rank is a competition rank (ties share);
+    - the ordinary-error cell reads "rank N · CRPS x", with both skills beneath;
+    - a horizon cell reads steps, then "time units", then the cycle fraction or "—";
+    - "1 step" is singular, and "-0.00" is never printed;
+    - columns are as wide as their text and the figure grows to fit;
+    - fixture rows are tinted light orange with the name in the fixture colour;
+    - rows are in rank order, with ties broken by name.
+27. **The results page's methods note (TC-JU12-04) states the residual as the build measured it.**
+    - What the page says: the purity check cannot see `ctypes`, capabilities captured before it starts, or some of numpy's date routines that reach the clock (A37 items 5 and 7a); the backstop is the ten separate-process runs, valid on the same CPU family and library build (A29).
+    - Where the spec lags: judge §4 and cross-cutting ADR-002 rule 3 still name only `ctypes` and pre-capture. TC-JU12-04's three-way consistency holds once A37 is applied to those two texts.
+    - The model card shows ten limitations (A39 items 10, 11 and 16), not the spec's seven.
+28. **The writer (ADR-R5, §7):**
+    - the call is `write_run(envelopes, baseline_names, out_dir)`;
+    - it refuses an `out_dir` that holds files, because a run never mixes with an older one; `wmj run` (P6-C01) decides how to clear it;
+    - everything is written into a sibling `out.partial/` and moved into place with one rename. A failure part-way removes the staging folder, so no partial `out/` ever exists;
+    - each verdict must round-trip through the judge's `Verdict` unchanged (`VerdictSchemaError` otherwise), and `meta` must be identical across envelopes;
+    - the exception charts on the page are grouped per task, one row per task (ADR-R2's "side by side").
+
 **Deferred door-tightening (REMEMBER §3, P5–P6):** require the horizon-step-1 entry in each exception/trials pair, require `steps` to equal `range(1, H+1)`, check tolerance consistency across blocks, handle a zero-error chart; one shared pipeline helper across four test files; rename `task_region_step`; a shape variant with 3 regions and d=4; mixed-element list tests; the `io.open` guard case.
 
 *Where recorded:* `code-review/code-review-003.html`, commits 8d5689f, f0f9927, ff692db.
