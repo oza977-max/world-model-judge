@@ -292,3 +292,20 @@ def test_a_file_written_twice_or_a_chart_that_does_not_match_its_entry_stops_the
     with pytest.raises(writer.OutputFolderError, match="does not match its verdict entry"):
         _write(tmp_path)
     assert list(tmp_path.iterdir()) == []
+
+
+
+def test_a_failed_final_move_also_leaves_nothing(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    real = Path.replace
+
+    def failing(self, target):
+        if self.name.endswith(".partial"):
+            raise OSError("the move failed")
+        return real(self, target)
+
+    monkeypatch.setattr(Path, "replace", failing)
+    with pytest.raises(OSError, match="the move failed"):
+        _write(tmp_path)
+    assert list(tmp_path.iterdir()) == []

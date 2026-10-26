@@ -188,8 +188,11 @@ def test_the_sentence_limit_guard_refuses_an_over_long_filled_caption(monkeypatc
 
 
 def test_chart4_says_equals_only_when_told_the_pair_is_equal():
-    assert c.chart4_caption(("direct", "ensemble"), equals=False).endswith(
-        "Ordinary error ranks direct ahead of ensemble; the judge ranks ensemble ahead.")
+    assert c.chart4_caption(("direct", "ensemble"), equals=False, where=("lv-control", "training")).endswith(
+        "Ordinary error ranks direct ahead of ensemble; the judge trusts ensemble further ahead on lv-control, training.")
+    for where in (None, ("lv-control",), ("lv-control", "train."), ("", "training")):
+        with pytest.raises(c.CaptionSlotError):
+            c.chart4_caption(("direct", "ensemble"), equals=False, where=where)
     assert "equals" in c.chart4_caption(("direct", "ensemble"))
     with pytest.raises(c.CaptionSlotError):
         c.chart4_caption(("direct", "ensemble"), equals=1)

@@ -15,8 +15,8 @@ In plain words: every model judged on one world, one row each, set side by side.
   "equals" only when they are equal by the pre-registered test: their one-step skill scores against both
   baselines differ by no more than the matching margin (MU-5's own test, `harness.prereg`). Such a pair
   is preferred, and among those the closest on ordinary error. Otherwise the caption names the closest
-  disagreeing pair and says only what is true: "Ordinary error ranks A ahead of B; the judge ranks B
-  ahead."
+  disagreeing pair and says only what the table shows: "Ordinary error ranks A ahead of B; the judge
+  trusts B further ahead on {task}, {region}", naming the column where B's lead is largest.
 - **Fixtures.** Fixture rows are shown, labelled and tinted, but never marked and never named in the
   caption: a deliberately broken model is not a finding (MU-4).
 
@@ -83,6 +83,7 @@ class Comparison:
     marked: tuple[bool, ...]
     caption_pair: tuple[str, str] | None
     pair_matched: bool  # the caption pair is equal by the pre-registered margin, so "equals" is true
+    lead_column: tuple[str, str] | None  # where the judge puts the caption's second model furthest ahead
 
 
 @dataclass(frozen=True)
@@ -244,7 +245,17 @@ def comparison_rows(envelopes: list[dict], matching_margin: float) -> Comparison
     pairs = disagreements(tuple(rows))
     in_pair = {r.name for pair in pairs for r in pair}
     pair, pair_matched = _closest(pairs, margin)
-    return Comparison(worlds.pop(), control, columns, tuple(rows), ranks, tuple(r.name in in_pair for r in rows), pair, pair_matched)
+    lead = None
+    if pair is not None:
+        by_name = {r.name: r for r in rows}
+        ahead, behind = by_name[pair[0]], by_name[pair[1]]
+        gaps = [(hb.steps - ha.steps, -i) for i, (ha, hb) in enumerate(zip(ahead.horizons, behind.horizons, strict=True))]
+        gap, index = max(gaps)
+        if gap <= 0:  # cannot happen for a discordant pair; refuse rather than print an untrue sentence
+            raise ComparisonBlockError("ADR-R2 Chart 4: the caption pair has no column where the judge ranks the second ahead")
+        lead = columns[-index]
+    marked = tuple(r.name in in_pair for r in rows)
+    return Comparison(worlds.pop(), control, columns, tuple(rows), ranks, marked, pair, pair_matched, lead)
 
 
 def _two(value: float) -> str:
@@ -255,7 +266,8 @@ def _two(value: float) -> str:
 
 def _horizon_text(h: Horizon) -> str:
     steps = f"{h.steps} step" if h.steps == 1 else f"{h.steps} steps"
-    return f"{steps}\n{h.world_time:g} time units\n{h.natural_units if h.natural_units is not None else '—'}"
+    time = f"{h.world_time:g} time unit" if h.world_time == 1 else f"{h.world_time:g} time units"
+    return f"{steps}\n{time}\n{h.natural_units if h.natural_units is not None else '—'}"
 
 
 def build_comparison_figure(comparison: Comparison) -> ComparisonFigure:
@@ -293,13 +305,13 @@ def build_comparison_figure(comparison: Comparison) -> ComparisonFigure:
         if row.is_fixture:
             cell.set_facecolor(FIXTURE_FILL)
             if c == 0:
-                cell.get_text().set_color(style.FIXTURE_COLOUR)
+                cell.get_text().set_color(style.FIXTURE_TEXT_COLOUR)  # darker, readable on the tint
         elif comparison.marked[r - 1]:
             cell.set_facecolor(DISAGREE_FILL)
     fig.suptitle(f"Ordinary error and trust horizon — {comparison.world}", fontsize=10)
     if has_fixture:
         style.mark_fixture(ax)
-    caption = captions.chart4_caption(comparison.caption_pair, equals=comparison.pair_matched)
+    caption = captions.chart4_caption(comparison.caption_pair, equals=comparison.pair_matched, where=comparison.lead_column)
     return ComparisonFigure(fig, table, comparison, caption)
 
 

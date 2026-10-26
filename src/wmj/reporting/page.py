@@ -53,8 +53,9 @@ h1 { font-size: 1.6em; } h2 { margin-top: 2em; border-bottom: 1px solid #d0d0d0;
 section.card { border: 2px solid #1f4e9c; padding: 8px 20px 16px; margin: 1.5em 0; } section.card h2 { margin-top: 0.6em; }
 figure { margin: 1em 0 2em; } figure img { max-width: 100%; height: auto; border: 1px solid #eeeeee; }
 figcaption { max-width: 60em; font-size: 0.95em; }
-.row { display: flex; flex-wrap: wrap; gap: 16px; } .row figure { flex: 1 1 560px; }  /* two per row at most: chart text stays legible */
-.fixture { color: #a35400; font-weight: 600; }  /* the fixture orange, darkened for text: 5.5:1 on white */
+.row { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(560px, 100%), 1fr)); gap: 16px; }
+.row figure { margin: 0; }  /* equal columns, at most two per row on a wide screen: every chart the same size */
+.fixture { color: #a35400; font-weight: 600; }  /* style.FIXTURE_TEXT_COLOUR: 5.5:1 on white */
 """
 
 

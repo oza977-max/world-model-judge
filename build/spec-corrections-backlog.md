@@ -1366,7 +1366,8 @@ the region instead, same total size (200 starts × 1,000 steps = 200,000 samples
     - **The problem:** the spec's sentence "Ordinary error says {A} and {B} are equals; the judge does not." was printed for any disagreeing pair, including one 4.5 times apart on CRPS, where it is false.
     - **When "equals" is allowed:** only when the pair's one-step skill scores against both baselines, at the ranking entry (control task, training), differ by no more than `prereg/recipe.md`'s `matching_margin`. That is the same test as `harness.prereg.within_matching_margin`, MU-5.
     - **Which pair is named:** such a pair is preferred; among the candidates, the closest on CRPS ratio, the better-CRPS model first, ties broken by name.
-    - **Any other disagreeing pair** gets a new, always-true form: "Ordinary error ranks {A} ahead of {B}; the judge ranks {B} ahead." (`captions.CHART4_APART`).
+    - **Any other disagreeing pair** gets a new form that says only what the table shows, naming the column where B's lead is largest (ties go to the first in column order): "Ordinary error ranks {A} ahead of {B}; the judge trusts {B} further ahead on {task}, {region}." (`captions.CHART4_APART`). Owner decision 2026-10-26, after review pass 2: the first wording, "the judge ranks {B} ahead", overclaimed when B led in one column only.
+    - **A tie on CRPS is not a disagreement** (item 25). Two models with exactly equal CRPS but different horizons give the agreement caption. Exact ties do not occur in practice; recorded for the design review.
     - **Plumbing:** `write_run` and `render_comparison_chart` now take `matching_margin`. `wmj run` (P6-C01) passes `harness.prereg.read_matching_margin(prereg/recipe.md)`.
 30. **Writer hardening (review pass 1 of P5-C04):**
     - two (world, model) pairs that make the same file name (world `a` with model `b-c`, world `a-b` with model `c`) are refused, and any file about to be written twice stops the run;
@@ -1374,7 +1375,9 @@ the region instead, same total size (200 starts × 1,000 steps = 200,000 samples
     - `out_dir` must be a plain folder (not a symlink) whose parent already exists;
     - the final rename is inside the clean-up, so a failed move also leaves nothing;
     - tolerances must match across a world's models;
-    - on the page, a task's exception charts sit at most two per row, so their text stays legible, and fixture text uses the fixture orange darkened to 5.5:1 contrast.
+    - on the page, a task's exception charts sit in an equal-column grid, at most two per row, so every chart is the same size and its text stays legible;
+    - fixture text, on the page and in Chart 4's name cells, uses `style.FIXTURE_TEXT_COLOUR` (the fixture orange darkened to 5.5:1 contrast);
+    - a world time of exactly 1 reads "1 time unit".
 
 **Deferred door-tightening (REMEMBER §3, P5–P6):** require the horizon-step-1 entry in each exception/trials pair, require `steps` to equal `range(1, H+1)`, check tolerance consistency across blocks, handle a zero-error chart; one shared pipeline helper across four test files; rename `task_region_step`; a shape variant with 3 regions and d=4; mixed-element list tests; the `io.open` guard case.
 

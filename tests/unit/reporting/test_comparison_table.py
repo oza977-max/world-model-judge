@@ -136,7 +136,7 @@ def test_fixture_rows_are_labelled_tinted_and_the_figure_carries_the_fixture_sen
     chart = ct.build_comparison_figure(ct.comparison_rows(_rows(), MARGIN))
     names = [chart.table[r, 0].get_text().get_text() for r in range(1, 6)]
     fixture_row = names.index("FIXTURE: fx-brittle") + 1
-    assert chart.table[fixture_row, 0].get_text().get_color() == style.FIXTURE_COLOUR
+    assert chart.table[fixture_row, 0].get_text().get_color() == style.FIXTURE_TEXT_COLOUR  # readable on the tint
     assert chart.table[fixture_row, 3].get_facecolor()[:3] != chart.table[1, 3].get_facecolor()[:3]
     assert style.has_fixture_mark(chart.figure)
 
@@ -245,7 +245,7 @@ def test_equals_is_said_only_of_a_pair_inside_the_pre_registered_margin():
     envelopes = _discordant_pair(_rows(), "direct", "ensemble", (0.2, 0.9), skill=(0.9, 0.9))
     chart = ct.build_comparison_figure(ct.comparison_rows(envelopes, MARGIN))
     assert chart.comparison.caption_pair == ("direct", "ensemble") and not chart.comparison.pair_matched
-    assert "Ordinary error ranks direct ahead of ensemble; the judge ranks ensemble ahead." in chart.caption
+    assert "Ordinary error ranks direct ahead of ensemble; the judge trusts ensemble further ahead on lv-planning, training." in chart.caption
     assert "equals" not in chart.caption
 
 
@@ -320,3 +320,60 @@ def test_equal_needs_both_skill_scores_inside_the_margin(b_skills, equal):
     a = ct.Row("a", False, 0.4, 0.30, 0.60, ())
     b = ct.Row("b", False, 0.5, *b_skills, ())
     assert ct.matched(a, b, MARGIN) is equal
+
+
+
+# --- review of P5-C04, pass 2 ------------------------------------------------------------------------------
+
+
+def test_the_apart_caption_names_the_column_where_the_second_model_leads_even_when_it_leads_in_one_only():
+    envelopes = _rows()
+    by = _named(envelopes)
+    for name in by:
+        for task, region in (("lv-control", "training"), ("lv-control", "out-of-range"), ("lv-planning", "out-of-range")):
+            set_horizon(by[name], 1 if name in ("direct", "persistence", "linear") else 0, task, region)
+        set_horizon(by[name], 2 if name in ("persistence", "linear") else 0, "lv-planning", "training")
+    set_crps(by["direct"], 0.3)
+    set_crps(by["ensemble"], 0.6)
+    set_horizon(by["ensemble"], 1, "lv-planning", "training")  # direct leads in three columns, ensemble in one
+    for entry in by["ensemble"]["verdict"]["skill"]["per_task_region"]:
+        entry.update(vs_persistence=9.0)  # not equal by the margin
+    comparison = ct.comparison_rows(envelopes, MARGIN)
+    assert comparison.caption_pair == ("direct", "ensemble") and comparison.lead_column == ("lv-planning", "training")
+    assert ct.build_comparison_figure(comparison).caption.endswith(
+        "the judge trusts ensemble further ahead on lv-planning, training.")
+
+
+def test_the_lead_column_is_the_largest_lead_first_in_column_order_on_a_tie():
+    envelopes = _rows()
+    by = _named(envelopes)
+    for name in by:
+        for entry in by[name]["verdict"]["trust_horizons"]["per_task"]:
+            set_horizon(by[name], 0, entry["task"], entry["region"])
+    for name in ("persistence", "linear"):
+        set_horizon(by[name], 2, "lv-planning")
+        set_horizon(by[name], 1, "lv-control")
+    set_horizon(by["ensemble"], 1, "lv-control")
+    set_horizon(by["ensemble"], 1, "lv-planning")  # two columns with the same one-step lead
+    for entry in by["ensemble"]["verdict"]["skill"]["per_task_region"]:
+        entry.update(vs_persistence=9.0)
+    assert ct.comparison_rows(envelopes, MARGIN).lead_column == ("lv-control", "training")
+    set_horizon(by["ensemble"], 2, "lv-planning")  # now the planning lead is larger
+    assert ct.comparison_rows(envelopes, MARGIN).lead_column == ("lv-planning", "training")
+
+
+def test_a_pair_exactly_at_the_margin_is_equal_as_mu5_counts_it():
+    a = ct.Row("a", False, 0.4, 0.25, 0.5, ())
+    b = ct.Row("b", False, 0.5, 0.3125, 0.5625, ())  # differences of exactly 0.0625, a binary-exact margin
+    assert ct.matched(a, b, 0.0625)
+
+
+def test_closeness_is_the_ratio_of_errors_not_their_difference():
+    rows = [ct.Row(n, False, c, 9.0 * i, 0.0, ()) for i, (n, c) in enumerate((("a", 0.1), ("b", 0.2), ("c", 1.0), ("d", 1.5)))]
+    pairs = [(rows[0], rows[1]), (rows[2], rows[3])]  # 2x apart (0.1 difference) and 1.5x apart (0.5 difference)
+    assert ct._closest(pairs, MARGIN) == (("c", "d"), False)
+
+
+def test_a_world_time_of_exactly_one_is_singular():
+    assert "1 time unit\n" in ct._horizon_text(ct.Horizon(50, 1.0, None))
+    assert "2 time units\n" in ct._horizon_text(ct.Horizon(100, 2.0, None))

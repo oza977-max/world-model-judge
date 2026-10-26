@@ -58,7 +58,9 @@ CHART4_HEAD = "Ordinary accuracy and the judge's trust horizon, side by side."  
 CHART4_DISAGREE = "Ordinary error says {A} and {B} are equals; the judge does not."
 # Owner decision 2026-10-26 (backlog A39 item 29): "equals" is said only of a pair equal by the
 # pre-registered matching margin; any other disagreeing pair gets this form, which is always true.
-CHART4_APART = "Ordinary error ranks {A} ahead of {B}; the judge ranks {B} ahead."
+# Owner decision 2026-10-26, after review pass 2: it names the column where B leads, so it never claims more
+# than the table shows (B may lead in one column only).
+CHART4_APART = "Ordinary error ranks {A} ahead of {B}; the judge trusts {B} further ahead on {task}, {region}."
 CHART4_AGREE = (
     "On this run the two rankings agree — the interesting case did not occur, and saying so plainly "
     "beats manufacturing one."
@@ -128,11 +130,14 @@ def chart3_caption(*, level: int) -> str:
     return _checked(CHART3_TEMPLATE.format(level=level))
 
 
-def chart4_caption(disagreeing: tuple[str, str] | None, *, equals: bool = True) -> str:
+def chart4_caption(
+    disagreeing: tuple[str, str] | None, *, equals: bool = True, where: tuple[str, str] | None = None
+) -> str:
     """Chart 4's caption: the agreement form for None, else a disagreement form naming the two models.
 
     `equals` says whether the pair is equal by the pre-registered matching margin: only then may the
-    caption call them equals. Otherwise A is the model ordinary error ranks ahead."""
+    caption call them equals. Otherwise A is the model ordinary error ranks ahead, and `where` is the
+    (task, region) whose trust horizon puts B ahead."""
     if type(equals) is not bool:
         raise CaptionSlotError(f"equals must be True or False, got {equals!r}")
     if disagreeing is None:
@@ -145,8 +150,14 @@ def chart4_caption(disagreeing: tuple[str, str] | None, *, equals: bool = True) 
             raise CaptionSlotError(f"a model name in the caption must be one plain name, got {name!r}")
     if a == b:
         raise CaptionSlotError(f"the pair must name two different models, got {disagreeing!r}")
-    sentence = CHART4_DISAGREE if equals else CHART4_APART
-    return _checked(f"{CHART4_HEAD} {sentence.format(A=a, B=b)}")
+    if equals:
+        return _checked(f"{CHART4_HEAD} {CHART4_DISAGREE.format(A=a, B=b)}")
+    if type(where) is not tuple or len(where) != 2:
+        raise CaptionSlotError(f"the apart form must say where the judge puts B ahead, as (task, region), got {where!r}")
+    for name in where:
+        if type(name) is not str or not name.strip() or name != name.strip() or "\n" in name or len(sentences(name)) != 1 or name[-1] in ".!?":
+            raise CaptionSlotError(f"a task or region in the caption must be one plain name, got {name!r}")
+    return _checked(f"{CHART4_HEAD} {CHART4_APART.format(A=a, B=b, task=where[0], region=where[1])}")
 
 
 # The scoped Chart-2 caption used by P2-C05's preview (the full one comes with P5-C03's switch lines).

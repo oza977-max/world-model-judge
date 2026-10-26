@@ -80,3 +80,10 @@ def test_attribute_values_are_escaped_too():
     model = page.ModelSection("direct", False, shown, shown, ())
     html = page.render_page(CARD, NEVER, (page.WorldSection("lv", shown, (model,)),))
     assert 'alt="say &quot;hi&quot; &amp; &lt;b&gt;it&#x27;s&lt;/b&gt;"' in html and 'alt="say "' not in html
+
+
+
+def test_chart_rows_are_an_equal_column_grid_at_most_two_wide_so_no_chart_is_stretched():
+    # review of P5-C04, pass 2: a flex row stretched a lone chart on its line to twice the others' size
+    assert "grid-template-columns: repeat(auto-fill, minmax(min(560px, 100%), 1fr))" in page.STYLE
+    assert "flex" not in page.STYLE

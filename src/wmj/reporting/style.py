@@ -57,6 +57,7 @@ BASELINE_COLOUR = "#8c8c8c"  # baselines: mid grey
 DIVERGENCE_COLOUR = "#000000"  # world's own divergence reference: black (dashed)
 EXCEPTION_COLOUR = "#c8102e"  # misses: red circles
 FIXTURE_COLOUR = "#e07b00"  # fixtures: orange, and always labelled in words
+FIXTURE_TEXT_COLOUR = "#a35400"  # the fixture orange darkened for text: 5.5:1 on white (review of P5-C04)
 BAND_COLOURS = {"green": "#cfe8cf", "amber": "#f5e1a4", "red": "#f2c4c4"}
 REGION_EDGE_COLOUR = "#4d4d4d"  # the edge of a model's stated 90% range (Chart 1's line): dark neutral grey
 REGION_FILL_COLOUR = "#efefef"  # the inside of that range: the lightest grey, behind everything
