@@ -195,3 +195,15 @@ def test_the_diagonals_label_sits_outside_the_plotted_area_clear_of_the_region_l
         assert label.x0 >= ax.get_window_extent().x1  # right of the plotted area: no point, bar or line reaches it
         others = [t.get_window_extent() for t in ax.texts if t.get_text() != cp.DIAGONAL_LABEL]
         assert others and not any(label.overlaps(o) for o in others)
+
+
+def test_at_full_coverage_the_diagonals_label_keeps_the_top_slot_at_its_line_end():
+    # review of P5-C03, pass 4: regions at 100% tied with the diagonal's end and pushed its label down
+    env = envelope()
+    for entry in env["verdict"]["calibration"]["per_task"]:
+        entry["coverage"] = [1.0, 1.0, 1.0, 1.0]
+    _, chart = _figure(env)
+    chart.figure.draw_without_rendering()
+    for ax in chart.panels:
+        labels = sorted((t for t in ax.texts if t.get_text() and t.get_bbox_patch() is None), key=lambda t: -t.get_window_extent().y1)
+        assert labels[0].get_text() == cp.DIAGONAL_LABEL

@@ -154,7 +154,8 @@ def build_calibration_figure(panels: dict[str, list[tuple[dict, float]]], model_
         # the diagonal is labelled at its end, beside the regions' labels and spaced with them: a label inside the
         # panel was overprinted by exactly the points the chart exists to show (review of P5-C03, pass 3)
         ends = [(LEVELS[-1], e["coverage"][-1], e["region"], colour) for e, _w in pairs]
-        style.direct_labels(ax, [*ends, (1.0, 1.0, DIAGONAL_LABEL, style.DIVERGENCE_COLOUR)], fontsize=7.5)
+        # listed first so it wins a tie at 100% and stays at its line's end (the order is kept for equal heights)
+        style.direct_labels(ax, [(1.0, 1.0, DIAGONAL_LABEL, style.DIVERGENCE_COLOUR), *ends], fontsize=7.5)
         ax.set_xticks(LEVELS, [str(round(v * 100)) for v in LEVELS])
         ax.tick_params(axis="x", labelsize=8)
         ax.set_xlabel("stated confidence (%)")
