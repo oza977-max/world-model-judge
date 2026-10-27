@@ -98,7 +98,7 @@ ACTION_BASELINE = ("Ignores its action lever, by construction: it is a simple ba
 ACTION_FIXTURE = ("Ignores its action lever: it is a deliberately broken test model, and the check catching it is the "
                   "instrument working, not a finding.")
 ACTION_FLAGGED = ("Flagged (MU-3): this model's guess and error bar did not change with the action lever in any of "
-                  "{n} probe pairs, so it is not using the action it is given.")
+                  "{n} probe pairs, at the three tested action levels, so it shows no use of the action it is given.")
 
 
 def action_sentence(action_blind: bool, n_probes: int, n_responding: int, *, is_fixture: bool, is_baseline: bool) -> str:

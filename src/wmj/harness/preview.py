@@ -219,7 +219,7 @@ def run_chart_preview(
     if (Path(out_dir) / "run-manifest.json").exists():
         raise PreviewArgumentError(
             f"chart-preview: {out_dir} holds a finished run (run-manifest.json); the preview never writes into "
-            "a run's output folder — use another folder"
+            "a run's output folder — remove run-manifest.json from it, or pass another out_dir"
         )
     seeds = SeedSource(run_seed=seed, my_name=None)
     block = build_lv_persistence_error_vs_horizon(seeds, n_starts, n_trials, horizon)

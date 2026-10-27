@@ -10,7 +10,7 @@ results folder:
 Nothing else in the project writes there (design-review-008 C8). It works in three steps:
 1. **Check everything first.** Each verdict goes back through the judge's own door, so a record the judge
    would refuse is refused here too (`VerdictSchemaError`, reporting §7). Each envelope must carry exactly
-   its five parts. The run's four `meta` fields must be the same in every envelope.
+   its six parts (judge §5's five plus `action_response`, MU-3). The run's four `meta` fields must be the same in every envelope.
 2. **Write into a fresh staging folder** beside `out/`.
 3. **Move it into place**, only once every file is written. If anything fails part-way, the staging folder,
    which this module itself created and filled, is removed. A failed run leaves no `out/` that could be
@@ -19,7 +19,8 @@ Nothing else in the project writes there (design-review-008 C8). It works in thr
 The verdict files and the manifest go through the project's one canonical serializer
 (`wmj.harness.serialize`; owner decision 2026-10-26: that single module is on reporting's import
 allowlist), so `wmj verify` can compare them byte for byte. The manifest adds the exact numpy and
-matplotlib versions, read here at write time (reporting §6).
+matplotlib versions, read here at write time (reporting §6), and the machine's runtime fingerprint the
+harness hands over (backlog A29, A41 item 2).
 """
 
 from __future__ import annotations

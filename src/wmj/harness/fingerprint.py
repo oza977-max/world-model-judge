@@ -11,8 +11,9 @@ maths library NumPy was built against, the platform, and which CPU features NumP
 detected — so a sceptic re-running on another machine can see *why* a number differs in
 its last digits, and can tell a real disagreement from a hardware one.
 
-The fingerprint goes into the harness envelope's `meta` (judge spec §5), never into the
-judge (the judge may not read the environment, JU-12). Wiring it into `wmj run` is
+The fingerprint goes into the run manifest, handed to `wmj.reporting.writer.write_run`
+(owner decision 2026-10-26, backlog A41 item 2; not into the envelope's `meta`), never into
+the judge (the judge may not read the environment, JU-12). Wiring it into `wmj run` is
 P6-C01's job.
 """
 
