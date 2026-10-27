@@ -104,7 +104,8 @@ def test_a_fixture_is_never_marked_nor_named_however_it_ranks():
     comparison = ct.comparison_rows(envelopes, MARGIN)
     assert not any(comparison.marked) and comparison.caption_pair is None
     chart = ct.build_comparison_figure(comparison)
-    assert chart.caption == chart4_caption(None)
+    assert chart.caption == chart4_caption(None, fixtures_shown=True)
+    assert "Among the real models, the two rankings agree" in chart.caption  # the fixture row may disagree, by design
 
 
 def test_the_caption_names_the_disagreeing_pair_closest_on_ordinary_error_better_first():
@@ -169,6 +170,9 @@ def _spoil(change):
         (lambda es: es[0]["verdict"]["trust_horizons"]["per_task"][0].update(natural_units=3), "natural_units"),
         (lambda es: es[0]["verdict"]["skill"]["per_task_region"][1].update(crps=float("nan")), "finite"),
         (lambda es: es[0]["verdict"]["skill"]["per_task_region"][1].update(vs_linear=None), "finite"),
+        (lambda es: es[0]["verdict"]["skill"]["per_task_region"][1].update(vs_linear=True), "finite"),
+        (lambda es: es[0]["verdict"]["skill"]["per_task_region"][1].update(crps=-0.1), "finite"),
+        (lambda es: es[0]["verdict"]["skill"]["per_task_region"][1].update(crps=10**400), "finite"),
         (lambda es: es[0]["verdict"]["skill"].update(extra=[]), "skill"),
         (lambda es: es[0]["verdict"]["trust_horizons"]["per_task"][0].pop("tolerance"), "trust_horizons entry"),
         (lambda es: [e["verdict"]["trust_horizons"]["per_task"][i].update(region="r2")
@@ -377,3 +381,10 @@ def test_closeness_is_the_ratio_of_errors_not_their_difference():
 def test_a_world_time_of_exactly_one_is_singular():
     assert "1 time unit\n" in ct._horizon_text(ct.Horizon(50, 1.0, None))
     assert "2 time units\n" in ct._horizon_text(ct.Horizon(100, 2.0, None))
+
+
+
+def test_without_fixtures_the_agree_caption_keeps_the_spec_wording(tmp_path):
+    envelopes = [e for e in _rows() if not e["is_fixture"]]
+    paths = ct.render_comparison_chart(envelopes, tmp_path / "c", tmp_path / "t", MARGIN)
+    assert paths.caption.read_text(encoding="utf-8") == chart4_caption(None)

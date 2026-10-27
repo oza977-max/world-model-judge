@@ -1367,6 +1367,8 @@ the region instead, same total size (200 starts × 1,000 steps = 200,000 samples
     - **When "equals" is allowed:** only when the pair's one-step skill scores against both baselines, at the ranking entry (control task, training), differ by no more than `prereg/recipe.md`'s `matching_margin`. That is the same test as `harness.prereg.within_matching_margin`, MU-5.
     - **Which pair is named:** such a pair is preferred; among the candidates, the closest on CRPS ratio, the better-CRPS model first, ties broken by name.
     - **Any other disagreeing pair** gets a new form that says only what the table shows, naming the column where B's lead is largest (ties go to the first in column order): "Ordinary error ranks {A} ahead of {B}; the judge trusts {B} further ahead on {task}, {region}." (`captions.CHART4_APART`). Owner decision 2026-10-26, after review pass 2: the first wording, "the judge ranks {B} ahead", overclaimed when B led in one column only.
+    - **With fixture rows on the table, the agreement form names the real models** (owner decision 2026-10-26, after review pass 3): "Among the real models, the two rankings agree — the interesting case did not occur, and saying so plainly beats manufacturing one." (`captions.CHART4_AGREE_REAL`). Fixtures are never compared, and `fx-brittle` exists to disagree, so the spec's "On this run the two rankings agree" read as false above a fixture row that visibly does. Without fixtures the spec wording is used.
+    - **`chart4_caption` must be told** whether a pair is equal (`equals` is required for a pair); omitting it is refused rather than defaulting to "equals".
     - **A tie on CRPS is not a disagreement** (item 25). Two models with exactly equal CRPS but different horizons give the agreement caption. Exact ties do not occur in practice; recorded for the design review.
     - **Plumbing:** `write_run` and `render_comparison_chart` now take `matching_margin`. `wmj run` (P6-C01) passes `harness.prereg.read_matching_margin(prereg/recipe.md)`.
 30. **Writer hardening (review pass 1 of P5-C04):**
@@ -1377,7 +1379,8 @@ the region instead, same total size (200 starts × 1,000 steps = 200,000 samples
     - tolerances must match across a world's models;
     - on the page, a task's exception charts sit in an equal-column grid, at most two per row, so every chart is the same size and its text stays legible;
     - fixture text, on the page and in Chart 4's name cells, uses `style.FIXTURE_TEXT_COLOUR` (the fixture orange darkened to 5.5:1 contrast);
-    - a world time of exactly 1 reads "1 time unit".
+    - a world time that reads as 1 is "1 time unit";
+    - an `out_dir` of `.` or `..` is refused; file names that differ only in case are refused as one name (a case-insensitive file system would make them one file).
 
 **Deferred door-tightening (REMEMBER §3, P5–P6):** require the horizon-step-1 entry in each exception/trials pair, require `steps` to equal `range(1, H+1)`, check tolerance consistency across blocks, handle a zero-error chart; one shared pipeline helper across four test files; rename `task_region_step`; a shape variant with 3 regions and d=4; mixed-element list tests; the `io.open` guard case.
 

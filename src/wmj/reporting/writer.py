@@ -143,8 +143,9 @@ def check_run(envelopes: object, baseline_names: object) -> dict[str, list[dict]
         missing = sorted(set(baseline_names) - set(names))
         if missing:
             raise VerdictSchemaError(f"world {world!r}: baseline(s) {missing} have no envelope (Chart 2 draws them)")
-    if len(set(stems)) != len(stems):  # world "a" + model "b-c" and world "a-b" + model "c" share every file name
-        clash = sorted({s for s in stems if stems.count(s) > 1})
+    folded = [stem.lower() for stem in stems]  # a case-insensitive file system makes "Direct" and "direct" one file
+    if len(set(folded)) != len(folded):  # world "a" + model "b-c" and world "a-b" + model "c" share every file name
+        clash = sorted({s for s in stems if folded.count(s.lower()) > 1})
         raise VerdictSchemaError(f"two (world, model) pairs make the same file names {clash}; rename one")
     return worlds
 
@@ -174,13 +175,13 @@ def _shown(stage: Path, paths: ChartPaths) -> page.Shown:
 def _write_all(stage: Path, worlds: dict[str, list[dict]], baseline_names, envelopes, margin: float) -> tuple[list, list]:
     charts_dir, captions_dir = stage / "charts", stage / "captions"
     charts, verdict_files, sections = [], [], []
-    written: set[Path] = set()
+    written: set[str] = set()  # case-folded, for case-insensitive file systems
 
     def claim(*paths: Path) -> None:  # no file may be written twice: a second write would silently replace the first
         for path in paths:
-            if path in written:
+            if str(path).lower() in written:
                 raise OutputFolderError(f"{path.name} would be written twice; two names in this run make the same file name")
-            written.add(path)
+            written.add(str(path).lower())
 
     for world, group in worlds.items():
         comparison = render_comparison_chart(group, charts_dir, captions_dir, margin)
@@ -224,7 +225,9 @@ def write_run(envelopes: list[dict], baseline_names: frozenset[str], out_dir: Pa
     worlds = check_run(envelopes, baseline_names)
     if type(matching_margin) is not float or not 0.0 < matching_margin < 1.0:
         raise VerdictSchemaError(f"the matching margin must be a number strictly between 0 and 1 (MU-5), got {matching_margin!r}")
-    out_dir = Path(out_dir)
+    if Path(out_dir).name in ("", ".", ".."):  # "." or "sub/.." has no name to stage beside
+        raise OutputFolderError(f"{out_dir} must name a folder, not '.' or '..'")
+    out_dir = Path(out_dir).absolute()
     if out_dir.is_symlink() or not out_dir.parent.is_dir():
         raise OutputFolderError(f"{out_dir} must be a plain folder whose parent already exists")
     if out_dir.exists() and (not out_dir.is_dir() or any(out_dir.iterdir())):

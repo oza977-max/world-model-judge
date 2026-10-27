@@ -134,13 +134,13 @@ def test_chart3_takes_only_the_four_levels_the_judge_reports():
 def test_chart4_has_its_two_fixed_forms_and_names_the_two_models_it_compares():
     agree = c.chart4_caption(None)
     assert agree == c.CHART4_HEAD + " " + c.CHART4_AGREE and c.sentence_count(agree) == 2
-    disagree = c.chart4_caption(("direct", "ensemble"))
+    disagree = c.chart4_caption(("direct", "ensemble"), equals=True)
     assert disagree == c.CHART4_HEAD + " Ordinary error says direct and ensemble are equals; the judge does not."
     assert c.sentence_count(disagree) == 2
 
 
 def test_chart4_takes_display_names_as_given_including_fixture_prefixes_and_hyphens():
-    text = c.chart4_caption(("FIXTURE: fx-honest-rough", "direct"))
+    text = c.chart4_caption(("FIXTURE: fx-honest-rough", "direct"), equals=True)
     assert "Ordinary error says FIXTURE: fx-honest-rough and direct are equals" in text
     assert c.sentence_count(text) == 2
 
@@ -159,7 +159,7 @@ def test_every_filled_caption_is_within_three_sentences_and_has_no_unfilled_slot
     filled = [
         c.chart1_caption(expected=20.0, n=200, observed=k, band=b)
         for k in (0, 7, 200) for b in ("green", "amber", "red")
-    ] + [c.chart3_caption(level=v) for v in (50, 80, 90, 95)] + [c.chart4_caption(None), c.chart4_caption(("a", "b"))]
+    ] + [c.chart3_caption(level=v) for v in (50, 80, 90, 95)] + [c.chart4_caption(None), c.chart4_caption(("a", "b"), equals=True)]
     for text in filled:
         assert c.sentence_count(text) <= c.MAX_SENTENCES
         assert "{" not in text and "}" not in text
@@ -193,6 +193,16 @@ def test_chart4_says_equals_only_when_told_the_pair_is_equal():
     for where in (None, ("lv-control",), ("lv-control", "train."), ("", "training")):
         with pytest.raises(c.CaptionSlotError):
             c.chart4_caption(("direct", "ensemble"), equals=False, where=where)
-    assert "equals" in c.chart4_caption(("direct", "ensemble"))
+    assert "equals" in c.chart4_caption(("direct", "ensemble"), equals=True)
     with pytest.raises(c.CaptionSlotError):
         c.chart4_caption(("direct", "ensemble"), equals=1)
+
+
+
+def test_a_pair_must_say_whether_it_is_equal_and_the_agree_form_names_real_models_when_fixtures_are_shown():
+    with pytest.raises(c.CaptionSlotError, match="equals must be stated"):
+        c.chart4_caption(("direct", "ensemble"))
+    assert "Among the real models, the two rankings agree" in c.chart4_caption(None, fixtures_shown=True)
+    assert "On this run the two rankings agree" in c.chart4_caption(None)
+    with pytest.raises(c.CaptionSlotError):
+        c.chart4_caption(None, fixtures_shown=1)

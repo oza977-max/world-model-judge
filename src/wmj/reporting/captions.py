@@ -65,6 +65,12 @@ CHART4_AGREE = (
     "On this run the two rankings agree — the interesting case did not occur, and saying so plainly "
     "beats manufacturing one."
 )
+# Owner decision 2026-10-26 (review pass 3 of P5-C04): with fixture rows on the table, which are never
+# compared, "the two rankings agree" is said of the real models only.
+CHART4_AGREE_REAL = (
+    "Among the real models, the two rankings agree — the interesting case did not occur, and saying so "
+    "plainly beats manufacturing one."
+)
 
 BANDS = ("green", "amber", "red")  # ADR-J4's three bands, as the verdict spells them
 LEVELS_PERCENT = (50, 80, 90, 95)  # ADR-J2's four confidence levels
@@ -131,33 +137,44 @@ def chart3_caption(*, level: int) -> str:
 
 
 def chart4_caption(
-    disagreeing: tuple[str, str] | None, *, equals: bool = True, where: tuple[str, str] | None = None
+    disagreeing: tuple[str, str] | None,
+    *,
+    equals: bool | None = None,
+    where: tuple[str, str] | None = None,
+    fixtures_shown: bool = False,
 ) -> str:
     """Chart 4's caption: the agreement form for None, else a disagreement form naming the two models.
 
-    `equals` says whether the pair is equal by the pre-registered matching margin: only then may the
-    caption call them equals. Otherwise A is the model ordinary error ranks ahead, and `where` is the
-    (task, region) whose trust horizon puts B ahead."""
-    if type(equals) is not bool:
-        raise CaptionSlotError(f"equals must be True or False, got {equals!r}")
+    For a pair, `equals` must be stated: True only when the pair is equal by the pre-registered matching
+    margin, the one case the caption may call them equals. Otherwise A is the model ordinary error ranks
+    ahead, and `where` is the (task, region) whose trust horizon puts B ahead. `fixtures_shown` says the
+    table holds fixture rows: they are never compared, so the agreement form then says "among the real
+    models" (owner decision 2026-10-26: a fixture row may visibly disagree, by design)."""
+    if type(fixtures_shown) is not bool:
+        raise CaptionSlotError(f"fixtures_shown must be True or False, got {fixtures_shown!r}")
     if disagreeing is None:
-        return _checked(f"{CHART4_HEAD} {CHART4_AGREE}")
+        return _checked(f"{CHART4_HEAD} {CHART4_AGREE_REAL if fixtures_shown else CHART4_AGREE}")
     if type(disagreeing) is not tuple or len(disagreeing) != 2:
         raise CaptionSlotError(f"the disagreeing models must be a pair of two names, got {disagreeing!r}")
     a, b = disagreeing
     for name in (a, b):
-        if type(name) is not str or not name.strip() or name != name.strip() or "\n" in name or len(sentences(name)) != 1 or name[-1] in ".!?":
-            raise CaptionSlotError(f"a model name in the caption must be one plain name, got {name!r}")
+        _plain_name(name, "a model name")
     if a == b:
         raise CaptionSlotError(f"the pair must name two different models, got {disagreeing!r}")
+    if type(equals) is not bool:
+        raise CaptionSlotError(f"equals must be stated as True or False for a pair, got {equals!r}")
     if equals:
         return _checked(f"{CHART4_HEAD} {CHART4_DISAGREE.format(A=a, B=b)}")
     if type(where) is not tuple or len(where) != 2:
         raise CaptionSlotError(f"the apart form must say where the judge puts B ahead, as (task, region), got {where!r}")
     for name in where:
-        if type(name) is not str or not name.strip() or name != name.strip() or "\n" in name or len(sentences(name)) != 1 or name[-1] in ".!?":
-            raise CaptionSlotError(f"a task or region in the caption must be one plain name, got {name!r}")
+        _plain_name(name, "a task or region")
     return _checked(f"{CHART4_HEAD} {CHART4_APART.format(A=a, B=b, task=where[0], region=where[1])}")
+
+
+def _plain_name(name: object, label: str) -> None:
+    if type(name) is not str or not name.strip() or name != name.strip() or "\n" in name or len(sentences(name)) != 1 or name[-1] in ".!?":
+        raise CaptionSlotError(f"{label} in the caption must be one plain name, got {name!r}")
 
 
 # The scoped Chart-2 caption used by P2-C05's preview (the full one comes with P5-C03's switch lines).

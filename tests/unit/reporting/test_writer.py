@@ -309,3 +309,22 @@ def test_a_failed_final_move_also_leaves_nothing(tmp_path, monkeypatch):
     with pytest.raises(OSError, match="the move failed"):
         _write(tmp_path)
     assert list(tmp_path.iterdir()) == []
+
+
+
+def test_a_nameless_output_folder_is_refused(tmp_path, monkeypatch):
+    from wmj.reporting.writer import OutputFolderError, write_run
+
+    monkeypatch.chdir(tmp_path)
+    for name in (".", "sub/.."):
+        with pytest.raises(OutputFolderError, match="must name a folder"):
+            write_run(run_envelopes(), BASELINES, name, MARGIN)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_names_that_differ_only_in_case_are_refused_as_one_file_name(tmp_path):
+    envelopes = run_envelopes()
+    envelopes[3]["model_name"] = "Direct"  # beside "direct": one file on a case-insensitive file system
+    with pytest.raises(VerdictSchemaError, match="same file names"):
+        _write(tmp_path, envelopes)
+    assert list(tmp_path.iterdir()) == []

@@ -95,7 +95,10 @@ class ComparisonFigure:
 
 
 def _number(value: object) -> bool:
-    return type(value) in (int, float) and math.isfinite(value)
+    try:
+        return type(value) in (int, float) and math.isfinite(value)
+    except OverflowError:  # an int too large for a float
+        return False
 
 
 def _entries(block: object, name: str, keys: frozenset, label: str) -> list[dict]:
@@ -266,7 +269,8 @@ def _two(value: float) -> str:
 
 def _horizon_text(h: Horizon) -> str:
     steps = f"{h.steps} step" if h.steps == 1 else f"{h.steps} steps"
-    time = f"{h.world_time:g} time unit" if h.world_time == 1 else f"{h.world_time:g} time units"
+    shown = f"{h.world_time:g}"
+    time = f"{shown} time unit" if shown == "1" else f"{shown} time units"  # singular when it reads as 1
     return f"{steps}\n{time}\n{h.natural_units if h.natural_units is not None else '—'}"
 
 
@@ -311,7 +315,8 @@ def build_comparison_figure(comparison: Comparison) -> ComparisonFigure:
     fig.suptitle(f"Ordinary error and trust horizon — {comparison.world}", fontsize=10)
     if has_fixture:
         style.mark_fixture(ax)
-    caption = captions.chart4_caption(comparison.caption_pair, equals=comparison.pair_matched, where=comparison.lead_column)
+    caption = captions.chart4_caption(comparison.caption_pair, equals=comparison.pair_matched, where=comparison.lead_column,
+                                      fixtures_shown=has_fixture)
     return ComparisonFigure(fig, table, comparison, caption)
 
 
