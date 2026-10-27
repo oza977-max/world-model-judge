@@ -157,22 +157,27 @@ def _imports_and_step_callers(module) -> tuple[set[str], set[str]]:
 
 
 @pytest.mark.parametrize("world_name", ["lv", "pendulum"])
-def test_tc_wd3_01_full_scope_all_three_truth_generators_take_the_same_step_with_the_same_dt(world_name):
-    """TC-WD3-01, full scope (P6-C01): the evaluation truth (`harness.trials`), the training data
-    (`harness.training`) and the divergence benchmark (`harness.benchmarks`) all advance the world only
-    through its own `transition_batch`, none imports the integrator, and from one state the evaluation truth's
-    step is bit-identical to the shared `rk4_step` with the world's own dt."""
+def test_tc_wd3_01_full_scope_all_four_truth_generators_take_the_same_step_with_the_same_dt(world_name):
+    """TC-WD3-01, full scope (P6-C01): every generator of ground truth — the evaluation truth
+    (`harness.trials`), the training data (`harness.training`), the climatology reference run
+    (`harness.climatology`) and the divergence benchmark (`harness.benchmarks`) — advances the world only
+    through its own `transition_batch` (the benchmark hands it to `worlds.divergence`), none imports the
+    integrator, and from one state the evaluation truth's step is bit-identical to the shared `rk4_step`
+    with the world's own dt."""
     import numpy as np
 
-    from wmj.harness import benchmarks, training, trials
+    from wmj.harness import benchmarks, climatology, training, trials
     from wmj.worlds import pendulum
 
-    for module, function in ((trials, "_true_rollout"), (training, "build_training_data")):
+    for module, function in ((trials, "_true_rollout"), (training, "build_training_data"),
+                             (climatology, "build_climatology_table")):
         imported, callers = _imports_and_step_callers(module)
         assert not [name for name in imported if "rk4_step" in name or "integrator" in name], module.__name__
         assert function in callers, module.__name__
     imported, _callers = _imports_and_step_callers(benchmarks)
     assert not [name for name in imported if "rk4_step" in name or "integrator" in name]
+    source = Path(inspect.getsourcefile(benchmarks)).read_text()
+    assert source.count("world.transition_batch,") == 2  # the separation curves and the drift run
 
     module = {"lv": lv, "pendulum": pendulum}[world_name]
     world = module.WORLD

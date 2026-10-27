@@ -3,7 +3,9 @@
 In plain words: this is the exam. For each world, in a fixed order, it:
 1. makes the world's training data once, and hands the same data to every model;
 2. draws one set of test starting points per region, the same for every model, so models are compared on
-   the very same trials (judge ADR-J4). It also checks that no test start is a training start (MU-7);
+   the very same trials (judge ADR-J4), and steps the true world once from each, with no kick: grading
+   starts after that step, and every model is first shown it, so a model that extrapolates has a direction
+   to go on (the warm start, owner decision 2026-10-27). No drawn point or start may be a training start (MU-7);
 3. runs the true world forward from those starts, with each trial's own seeded kicks;
 4. runs the two simple baselines first, because every other model is scored against them (MU-2);
 5. runs each model from the same starts with the same kicks. A model is given the true start once; after
@@ -76,6 +78,7 @@ from wmj.judge.types import (
 from wmj.judge.verdict import assemble_verdict
 from wmj.models import registry
 from wmj.models.base import SeedSource
+from wmj.reporting.writer import META_KEYS
 from wmj.worlds import lv, pendulum
 
 WORLDS = {"lv": lv.WORLD, "pendulum": pendulum.WORLD}  # fixed, not discovered (ADR-004's disclosed asymmetry)
@@ -151,7 +154,7 @@ def judge_thresholds(raw: dict, world_name: str, scale: np.ndarray) -> Threshold
             hedge / np.asarray(scale, dtype=float),
             agreement,
         )
-    except (KeyError, TypeError) as error:
+    except (KeyError, TypeError, AttributeError, ValueError) as error:
         raise TrialsError(f"prereg/thresholds.json lacks the {world_name!r} thresholds the judge needs: {error!r}") from error
 
 
@@ -163,7 +166,8 @@ class WorldTrials:
     ctx: Any
     training: Any
     region_names: tuple[str, ...]
-    starts: dict[str, np.ndarray]  # [N, d] per region
+    warmups: dict[str, np.ndarray]  # [N, d] per region: the drawn points, one true step before each start
+    starts: dict[str, np.ndarray]  # [N, d] per region: the true state after that step, where grading begins
     kicks: dict[str, np.ndarray]  # [N, H, a] per region
     truth: dict[str, np.ndarray]  # [N, H, d] per region, raw units, the true state after steps 1..H
     labels: dict[str, tuple[RegionLabel, ...]]
@@ -191,15 +195,20 @@ def build_world_trials(world_name: str, world: Any, config: RunConfig) -> WorldT
     training = build_training_data(world_name, world, seeds, config.recipe, horizon=config.training_horizon)
     spec = world.regions()
     divergence = build_divergence_artefact(world_name, world, seeds, n_starts=config.divergence_starts, horizon=horizon)
-    names, starts, kicks, truth, labels, curves, tables, bins = [], {}, {}, {}, {}, {}, {}, {}
+    names, warmups, starts, kicks, truth, labels, curves, tables, bins = [], {}, {}, {}, {}, {}, {}, {}, {}
     for region, box, band in declared_regions(world):
         names.append(region)
-        starts[region] = sample_region_starts(seeds.rng_for(world_name, region, "eval-starts"), box, config.n_trials)
-        assert_eval_starts_disjoint(training, starts[region])  # MU-7, at run time
+        # The warm start (owner decision 2026-10-27, backlog A43 item 6): draw a point in the region, step the
+        # true world once with no kick, and grade from there; every model is first shown that true step, so
+        # "carry on in a straight line" has a direction to carry on.
+        warmups[region] = sample_region_starts(seeds.rng_for(world_name, region, "eval-starts"), box, config.n_trials)
+        starts[region] = world.transition_batch(warmups[region], np.zeros((config.n_trials, world.a)))
+        assert_eval_starts_disjoint(training, warmups[region])  # MU-7, at run time: neither the drawn point
+        assert_eval_starts_disjoint(training, starts[region])  # nor the start may be a training start
         kicks[region] = seeded_kick_sequences(seeds, world_name, world, region, band, "eval-kicks", config.n_trials, horizon)
         truth[region] = _true_rollout(world, starts[region], kicks[region])
-        labels[region] = tuple(
-            RegionLabel(**label_trial(spec, region, starts[region][i], kicks[region][i])) for i in range(config.n_trials)
+        labels[region] = tuple(  # the state axis is judged at the drawn point: the point the region's box was drawn for
+            RegionLabel(**label_trial(spec, region, warmups[region][i], kicks[region][i])) for i in range(config.n_trials)
         )
         curves[region] = np.asarray(divergence["regions"][region]["median_separation"], dtype=float)
         tables[region] = build_climatology_table(
@@ -207,7 +216,11 @@ def build_world_trials(world_name: str, world: Any, config: RunConfig) -> WorldT
             n_bins=config.climatology_bins, min_samples=config.climatology_min_samples, region_name=region,
         )
         bins[region] = measure_invariant_bins(world, truth[region], tables[region])
-    return WorldTrials(world_name, ctx, training, tuple(names), starts, kicks, truth, labels, curves, tables, bins)
+        for shared in (warmups[region], starts[region], kicks[region], truth[region], bins[region]):
+            # every model faces these same arrays: a model that wrote into its input (a kick, a state) would
+            # silently change every later model's trials, so writing into them fails instead (review of P6-C01a)
+            shared.setflags(write=False)
+    return WorldTrials(world_name, ctx, training, tuple(names), warmups, starts, kicks, truth, labels, curves, tables, bins)
 
 
 def _checked(name: str, mean: Any, spread: Any, shape: tuple[int, int]) -> tuple[np.ndarray, np.ndarray]:
@@ -220,19 +233,27 @@ def _checked(name: str, mean: Any, spread: Any, shape: tuple[int, int]) -> tuple
     return mean, spread
 
 
-def roll_out(model: Any, world: Any, starts: np.ndarray, kicks: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def roll_out(
+    model: Any, warmups: np.ndarray, starts: np.ndarray, kicks: np.ndarray, name: str = "the model"
+) -> tuple[np.ndarray, np.ndarray]:
     """`(mean, spread)`, each `[N, H, d]` in raw units: the model's own rollout from each start.
 
-    Step 1 is predicted from the true start; each later step from the model's previous guess, with the
-    trial's true kick for that step. A model that keeps no memory runs all trials together (`predict_batch`);
-    one that does runs trial by trial after `reset()`. Both give the same numbers bit for bit (TC-MU1-04)."""
+    First the model is shown the true step it has just watched: one call from the drawn point with no kick,
+    whose answer is not scored (the warm start). Step 1 is then predicted from the true start; each later
+    step from the model's previous guess, with the trial's true kick for that step. A model that keeps no memory runs all trials together (`predict_batch`);
+    one that does runs trial by trial after `reset()`. Both give the same numbers bit for bit (TC-MU1-04).
+    `name` is the model's roster name, for error messages."""
     starts = np.asarray(starts, dtype=float)
     n, d = starts.shape
     h = kicks.shape[1]
-    name = type(model).__name__
     means, spreads = np.empty((n, h, d)), np.empty((n, h, d))
+    warmups = np.asarray(warmups, dtype=float)
+    if warmups.shape != (n, d):
+        raise TrialsError(f"{name}: one warm-up point per start is needed, got {warmups.shape} for {n} starts")
+    quiet = np.zeros((n, kicks.shape[2]))
     if model.stateless:
         model.reset()
+        _checked(name, *model.predict_batch(warmups.copy(), quiet), (n, d))  # the warm-up: shown, not scored
         state = starts.copy()
         for step in range(h):
             means[:, step], spreads[:, step] = _checked(name, *model.predict_batch(state, kicks[:, step]), (n, d))
@@ -240,6 +261,8 @@ def roll_out(model: Any, world: Any, starts: np.ndarray, kicks: np.ndarray) -> t
         return means, spreads
     for i in range(n):
         model.reset()
+        warm = model.predict(warmups[i].copy(), quiet[i])  # the warm-up: shown, not scored
+        _checked(name, np.asarray(warm.mean)[None, :], np.asarray(warm.spread)[None, :], (1, d))
         state = starts[i].copy()
         for step in range(h):
             forecast = model.predict(state, kicks[i, step])
@@ -302,49 +325,65 @@ class RunResult:
     baseline_names: frozenset[str]  # every model that declares itself a baseline (for the page's action sentence)
 
 
-def _flag(name: str, model: Any, attribute: str) -> bool:
-    value = getattr(model, attribute, None)
-    if type(value) is not bool:
-        raise TrialsError(f"{name}: a model must declare {attribute} as True or False (models ADR-M1)")
-    return value
+def _flags(name: str, model: Any) -> dict[str, bool]:
+    """The three flags every model declares (models ADR-M1), each True or False, or the run refuses."""
+    flags = {}
+    for attribute in ("stateless", "is_baseline", "is_fixture"):
+        value = getattr(model, attribute, None)
+        if type(value) is not bool:
+            raise TrialsError(f"{name}: a model must declare {attribute} as True or False (models ADR-M1)")
+        flags[attribute] = value
+    if name in BASELINES and not flags["is_baseline"]:
+        raise TrialsError(f"{name} is a pinned reference baseline but does not declare is_baseline (MU-2, models ADR-M1)")
+    return flags
 
 
-def _run_model(factory: Any, name: str, world: Any, shared: WorldTrials, run_seed: int) -> tuple[Any, dict]:
+def _run_model(factory: Any, name: str, shared: WorldTrials, run_seed: int) -> tuple[Any, dict]:
     """A fresh instance of one model for this world, and its rollout from every region's shared starts."""
     model = factory(shared.ctx, SeedSource(run_seed, name), shared.training)
-    return model, {r: roll_out(model, world, shared.starts[r], shared.kicks[r]) for r in shared.region_names}
+    _flags(name, model)  # checked before the long rollout, not after it
+    return model, {
+        r: roll_out(model, shared.warmups[r], shared.starts[r], shared.kicks[r], name) for r in shared.region_names
+    }
 
 
 def run_trials(config: RunConfig, meta: dict, *, models: dict | None = None) -> RunResult:
-    """Run every model on every world and return the envelopes. `models` replaces the discovered roster (tests)."""
+    """Run every model on every world and return the envelopes. `models` replaces the discovered roster (tests).
+
+    **This does not check the pre-registration.** With the discovered roster it trains and evaluates the two
+    unrigged models, which must never happen before the freeze (models ADR-M5; backlog A42 item 2). The only
+    production caller, `wmj run`, calls `check_prereg` first; tests pass a stand-in roster."""
     table = roster() if models is None else dict(sorted(models.items()))
     missing = [b for b in BASELINES if b not in table]
     if missing:
         raise TrialsError(f"the roster lacks the reference baseline(s) {missing}: every model is scored against both (MU-2)")
-    if config.thresholds.get("bands", {}).get("n") != config.n_trials:
+    if type(meta) is not dict or set(meta) != META_KEYS:
+        raise TrialsError(f"meta must be a record of exactly {sorted(META_KEYS)} (judge §5)")
+    thresholds = {name: judge_thresholds(config.thresholds, name, WORLDS[name].scale) for name in sorted(WORLDS)}
+    if any(t.bands.n != config.n_trials for t in thresholds.values()):
         raise TrialsError(
-            f"the pre-registered bands are for n = {config.thresholds.get('bands', {}).get('n')!r} trials per region, "
-            f"but this run has {config.n_trials}: they would grade the wrong number (judge ADR-J4)"
+            f"the pre-registered bands are for n = {thresholds['lv'].bands.n} trials per region, but this run has "
+            f"{config.n_trials}: they would grade the wrong number (judge ADR-J4)"
         )
     names = sorted(table)
     envelopes, baseline_names = [], set()
     for world_name in sorted(WORLDS):
         world = WORLDS[world_name]
         shared = build_world_trials(world_name, world, config)
-        thresholds = judge_thresholds(config.thresholds, world_name, world.scale)
         # the pre-pass: every input needs both baselines' forecasts, so they run first (ADR-004)
-        runs = {name: _run_model(table[name], name, world, shared, config.run_seed) for name in BASELINES}
+        runs = {name: _run_model(table[name], name, shared, config.run_seed) for name in BASELINES}
         baselines = {name: runs[name][1] for name in BASELINES}
         for ref, name in enumerate(names):
-            model, forecast = runs[name] if name in runs else _run_model(table[name], name, world, shared, config.run_seed)
-            if _flag(name, model, "is_baseline"):
+            model, forecast = runs[name] if name in runs else _run_model(table[name], name, shared, config.run_seed)
+            flags = _flags(name, model)
+            if flags["is_baseline"]:
                 baseline_names.add(name)
             action = asdict(check_action_response(model, shared.ctx, config.run_seed, n_states=config.probe_states))
-            verdict = judge_one(assemble_input(world, shared, thresholds, forecast, baselines))
+            verdict = judge_one(assemble_input(world, shared, thresholds[world_name], forecast, baselines))
             envelopes.append({
                 "model_ref": MODEL_REF.format(ref),
                 "model_name": name,
-                "is_fixture": _flag(name, model, "is_fixture"),
+                "is_fixture": flags["is_fixture"],
                 "verdict": verdict,
                 "meta": dict(meta),
                 "action_response": action,

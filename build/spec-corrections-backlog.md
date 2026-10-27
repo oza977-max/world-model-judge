@@ -1442,7 +1442,7 @@ the region instead, same total size (200 starts × 1,000 steps = 200,000 samples
 
 ### A43 — P6-C01a: what the orchestration loop had to decide that the specs leave unsaid (2026-10-27)
 
-**In plain words:** building the loop that runs every model on every world needed five small decisions the specs do not state outright. None changes a reviewed spec. Each is written down here for the next design review to confirm or correct.
+**In plain words:** building the loop that runs every model on every world needed six decisions the specs do not state outright. None edits a reviewed spec; item 6 was the owner's choice. Each is written down here for the next design review to confirm or correct.
 
 1. **A rollout feeds the model its own guesses (amends cross-cutting ADR-004's `roll_out`, which says "one `predict_batch(states, actions)`" without saying which states).** Step 1 is predicted from the true start. Every later step is predicted from the model's previous guess (`mean`), with the trial's true kick for that step. The error bar recorded at step h is the one the model states for step h, from the state it was given. This is the only reading the one-step interface allows. It matches:
    - the requirements ("feeds its own guesses back into itself … small errors pile up");
@@ -1464,4 +1464,12 @@ the region instead, same total size (200 starts × 1,000 steps = 200,000 samples
 4. **`preview.py` and `skeleton.py` now take their baselines from `trials.roster()`.** They used to import `wmj.models.baselines` directly, which TC-MU9-01(c) forbids. Their output is unchanged.
 5. **TC-MU9-01(a) after D7.** `registry.all_models()` no longer discovers anything. Part (a) now checks that the registry holds the stub after the harness's roster function has run; part (b) checks the roster function itself. The test-cases document's wording of (a) should follow A42 item 1.
 
-*Where recorded:* `build/prompts/P6-C01a.md`, `build/handovers/P6-C01a.md`.
+6. **The warm start (owner decision 2026-10-27; amends cross-cutting ADR-004 and models ADR-M1's rollout description).** With item 1's rule, a trial that begins at a freshly drawn state gives the linear baseline no previous state. Its first guess falls back to "nothing changes"; it is then fed its own guesses, so its line stays flat. Measured: its guess equalled persistence's at every step, and only its error bar differed. That is one guess with two error bars, not the two baselines MU-2 requires. The fix:
+   - **Starts.** Each trial's point is still drawn from the region with `"eval-starts"`. The true world steps it once with no kick. Grading starts from the state after that step.
+   - **Warm-up call.** Before the rollout, every model is shown that true step: one call from the drawn point with a zero action, whose answer is checked but not scored. A model without memory is unaffected. Linear gets a real direction, `start + (start − drawn point)`, and carries it on.
+   - **MU-7.** Both the drawn point and the start must differ from every training start.
+   - **Region labels.** The state axis is judged at the drawn point, the point the region's box was drawn for. The start is one small step from it.
+
+   The next design review must ratify this before the freeze, because it changes what every evaluation trial is.
+
+*Where recorded:* `build/prompts/P6-C01a.md`, `build/handovers/P6-C01a.md`, `REMEMBER.md` (Closed decisions).

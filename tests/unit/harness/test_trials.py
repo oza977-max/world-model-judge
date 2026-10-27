@@ -20,6 +20,7 @@ from tests.unit.harness._standin import (
     standin_roster,
 )
 from wmj.harness import trials
+from wmj.harness.training import TrainingDataError
 from wmj.reporting import writer
 
 WORLDS = ("lv", "pendulum")
@@ -29,16 +30,17 @@ REGIONS = {"lv": 3, "pendulum": 3}
 @pytest.fixture(scope="module")
 def recorded():
     """One small run, with every judge input and every rollout's starts recorded on the way."""
-    inputs, starts_seen = [], []
+    inputs, starts_seen, kicks_seen = [], [], []
     real_judge, real_roll = trials.judge_one, trials.roll_out
 
     def judge_spy(inp):
         inputs.append(inp)
         return real_judge(inp)
 
-    def roll_spy(model, world, starts, kicks):
+    def roll_spy(model, warmups, starts, kicks, name):
         starts_seen.append(np.ascontiguousarray(starts).tobytes())
-        return real_roll(model, world, starts, kicks)
+        kicks_seen.append(np.ascontiguousarray(kicks).tobytes())
+        return real_roll(model, warmups, starts, kicks, name)
 
     patch = pytest.MonkeyPatch()
     patch.setattr(trials, "judge_one", judge_spy)
@@ -47,7 +49,7 @@ def recorded():
         result = trials.run_trials(small_config(), dict(META), models=standin_roster())
     finally:
         patch.undo()
-    return result, inputs, starts_seen
+    return result, inputs, (starts_seen, kicks_seen)
 
 
 # ---- outside in: the loop's output is a run the real writer accepts and writes ------------------------------
@@ -112,10 +114,12 @@ def test_judge_inputs_are_in_the_judges_units(recorded):
 
 
 def test_tc_nf1_05_every_model_sees_byte_identical_starts_per_world_and_region(recorded):
-    _result, _inputs, starts_seen = recorded
+    _result, _inputs, (starts_seen, kicks_seen) = recorded
     n_world_regions = sum(REGIONS.values())
-    assert len(starts_seen) == n_world_regions * len(standin_roster())
+    assert len(starts_seen) == len(kicks_seen) == n_world_regions * len(standin_roster())
     assert len(set(starts_seen)) == n_world_regions  # one set of starts per (world, region), shared by every model
+    # and each set of starts always comes with the same kicks (kicks are sparse: two regions' can both be all zero)
+    assert len(set(zip(starts_seen, kicks_seen))) == n_world_regions
 
 
 def test_truth_and_labels_are_shared_across_models(recorded):
@@ -134,11 +138,15 @@ class _Recorder(_standin.StandInModel):
     def __init__(self, ctx, stateless=True):
         super().__init__(ctx)
         self.stateless = stateless
-        self.seen = []
+        self.seen, self.seen_actions, self.stated = [], [], []
 
     def predict_batch(self, states, actions):
         self.seen.append(np.array(states, copy=True))
-        return super().predict_batch(states, actions)
+        self.seen_actions.append(np.array(actions, copy=True))
+        mean, _spread = super().predict_batch(states, actions)
+        spread = 0.01 + 0.03 * np.abs(states)  # depends on the state, so it changes from step to step
+        self.stated.append(spread.copy())
+        return mean, spread
 
 
 def _lv_trial_inputs(n=5, h=7):
@@ -147,37 +155,53 @@ def _lv_trial_inputs(n=5, h=7):
 
     ctx = make_world_context("lv", lv.WORLD)
     rng = np.random.default_rng(3)
-    starts = np.column_stack([rng.uniform(2, 6, n), rng.uniform(1, 4, n)])
+    warmups = np.column_stack([rng.uniform(2, 6, n), rng.uniform(1, 4, n)])
+    starts = lv.WORLD.transition_batch(warmups, np.zeros((n, 1)))
     kicks = np.zeros((n, h, 1))
     kicks[:, 2, 0] = 0.05
-    return ctx, lv.WORLD, starts, kicks
+    return ctx, warmups, starts, kicks
 
 
-def test_a_model_gets_the_true_start_then_its_own_previous_guess_and_the_trials_kick():
-    ctx, world, starts, kicks = _lv_trial_inputs()
+def test_a_model_is_shown_the_warm_up_step_then_gets_the_true_start_then_its_own_guesses_and_the_kicks():
+    ctx, warmups, starts, kicks = _lv_trial_inputs()
     model = _Recorder(ctx)
-    mean, spread = trials.roll_out(model, world, starts, kicks)
+    mean, spread = trials.roll_out(model, warmups, starts, kicks)
     assert mean.shape == spread.shape == (5, 7, 2)
-    assert np.array_equal(model.seen[0], starts)
+    assert np.array_equal(model.seen[0], warmups) and not np.any(model.seen_actions[0])  # the warm-up, no kick
+    assert np.array_equal(model.seen[1], starts)
     for step in range(1, 7):
-        assert np.array_equal(model.seen[step], mean[:, step - 1])  # its own guess, never the truth
-    assert len(model.seen) == 7  # advanced exactly once per truth step (WD-3, dt-alignment)
+        assert np.array_equal(model.seen[step + 1], mean[:, step - 1])  # its own guess, never the truth
+    for step in range(7):
+        assert np.array_equal(model.seen_actions[step + 1], kicks[:, step])  # the trial's own kick for that step
+        assert np.array_equal(spread[:, step], model.stated[step + 1])  # the error bar it stated for that step
+    assert len(model.seen) == 1 + 7  # one warm-up, then exactly once per truth step (WD-3, dt-alignment)
+
+
+def test_one_trial_at_a_time_a_model_gets_each_trials_own_kicks():
+    ctx, warmups, starts, kicks = _lv_trial_inputs()
+    kicks[3, 5, 0] = -0.07
+    model = _Recorder(ctx, stateless=False)
+    trials.roll_out(model, warmups, starts, kicks)
+    fed = np.array(model.seen_actions)[:, 0].reshape(5, 8, 1)  # trial by trial: the warm-up, then step by step
+    assert not np.any(fed[:, 0]) and np.array_equal(fed[:, 1:], kicks)
+    states = np.array(model.seen)[:, 0].reshape(5, 8, 2)
+    assert np.array_equal(states[:, 0], warmups) and np.array_equal(states[:, 1], starts)
 
 
 def test_batched_and_one_trial_at_a_time_rollouts_are_bit_identical():
-    ctx, world, starts, kicks = _lv_trial_inputs()
-    batched = trials.roll_out(_Recorder(ctx, stateless=True), world, starts, kicks)
-    single = trials.roll_out(_Recorder(ctx, stateless=False), world, starts, kicks)
+    ctx, warmups, starts, kicks = _lv_trial_inputs()
+    batched = trials.roll_out(_Recorder(ctx, stateless=True), warmups, starts, kicks)
+    single = trials.roll_out(_Recorder(ctx, stateless=False), warmups, starts, kicks)
     assert all(np.array_equal(a, b) for a, b in zip(batched, single))
 
 
 def test_a_stateful_model_is_reset_before_every_trial():
-    ctx, world, starts, kicks = _lv_trial_inputs()
+    ctx, warmups, starts, kicks = _lv_trial_inputs()
     model = _Recorder(ctx, stateless=False)
     resets = []
     model.reset = lambda: resets.append(len(model.seen))
-    trials.roll_out(model, world, starts, kicks)
-    assert resets == [0, 7, 14, 21, 28]
+    trials.roll_out(model, warmups, starts, kicks)
+    assert resets == [0, 8, 16, 24, 32]  # before each trial's warm-up
 
 
 @pytest.mark.parametrize(
@@ -186,14 +210,14 @@ def test_a_stateful_model_is_reset_before_every_trial():
     ids=["shape", "nan", "negative-spread", "zero-spread"],
 )
 def test_a_model_output_that_is_not_a_usable_forecast_is_refused(bad):
-    ctx, world, starts, kicks = _lv_trial_inputs()
+    ctx, warmups, starts, kicks = _lv_trial_inputs()
 
     class Broken(_standin.StandInModel):
         def predict_batch(self, states, actions):
             return bad(*super().predict_batch(states, actions))
 
     with pytest.raises(trials.TrialsError):
-        trials.roll_out(Broken(ctx), world, starts, kicks)
+        trials.roll_out(Broken(ctx), warmups, starts, kicks)
 
 
 # ---- MU-7, MU-2, bands, TC-MU6-05(b) --------------------------------------------------------------------------
@@ -204,7 +228,7 @@ def test_every_regions_starts_are_checked_against_the_training_starts(monkeypatc
     real = trials.assert_eval_starts_disjoint
     monkeypatch.setattr(trials, "assert_eval_starts_disjoint", lambda tr, st: calls.append(st.shape) or real(tr, st))
     trials.run_trials(small_config(), dict(META), models={k: standin_roster()[k] for k in ("linear", "persistence")})
-    assert calls == [(N_SMALL, 2)] * 3 + [(N_SMALL, 4)] * 3
+    assert calls == [(N_SMALL, 2)] * 6 + [(N_SMALL, 4)] * 6  # the drawn points and the starts, every region
 
 
 def test_a_planted_training_start_among_the_evaluation_starts_is_refused(monkeypatch):
@@ -225,7 +249,7 @@ def test_a_planted_training_start_among_the_evaluation_starts_is_refused(monkeyp
 
     monkeypatch.setattr(trials, "build_training_data", remember)
     monkeypatch.setattr(trials, "sample_region_starts", draw)
-    with pytest.raises(Exception, match="MU-7"):
+    with pytest.raises(TrainingDataError, match="MU-7"):
         trials.run_trials(small_config(), dict(META), models={k: standin_roster()[k] for k in ("linear", "persistence")})
 
 
@@ -259,3 +283,145 @@ def test_two_runs_of_the_loop_are_identical(recorded):
     result, _inputs, _starts = recorded
     again = trials.run_trials(small_config(), dict(META), models=standin_roster())
     assert again.envelopes == result.envelopes
+
+
+# ---- the units rule (A30) and the shared arrays, checked against an independent rebuild ----------------------
+
+
+@pytest.fixture(scope="module")
+def rebuilt():
+    return {w: trials.build_world_trials(w, trials.WORLDS[w], small_config()) for w in WORLDS}
+
+
+def _by_model(inputs, world):
+    return dict(zip(sorted(standin_roster()), [inp for inp in inputs if inp.world == world]))
+
+
+@pytest.mark.parametrize("world", WORLDS)
+def test_every_part_of_the_judge_input_is_the_shared_trials_in_judge_units(recorded, rebuilt, world):
+    _result, inputs, _seen = recorded
+    shared, scale = rebuilt[world], np.asarray(trials.WORLDS[world].scale)
+    names = shared.region_names
+    by_model = _by_model(inputs, world)
+    for inp in by_model.values():
+        assert np.array_equal(inp.outcomes, np.concatenate([shared.truth[r] for r in names]) / scale)
+        assert np.array_equal(inp.invariant_bins, np.concatenate([shared.bins[r] for r in names]))
+        for table, region in zip(inp.climatology, names):
+            assert table.region_name == region
+            for got, raw in zip(table.bins, shared.tables[region]["bins"]):
+                assert np.array_equal(got.mean, np.array(raw["mean"]) / scale)
+                assert np.array_equal(got.sd, np.array(raw["sd"]) / scale)
+        assert [c.region_name for c in inp.divergence_curves] == list(names)
+        # the baselines are the baselines, not swapped: each equals that model's own forecast
+        for baseline in ("persistence", "linear"):
+            assert np.array_equal(getattr(inp, baseline).mean, by_model[baseline].predictions.mean)
+            assert np.array_equal(getattr(inp, baseline).spread, by_model[baseline].predictions.spread)
+    starts = np.concatenate([shared.starts[r] for r in names]) / scale
+    assert np.array_equal(by_model["persistence"].predictions.mean[:, -1], starts)  # "nothing changes", in judge units
+    # the warm start (owner decision 2026-10-27): linear has seen one true step, so it carries on along it
+    warm = np.concatenate([shared.warmups[r] for r in names]) / scale
+    linear = by_model["linear"].predictions.mean
+    assert np.allclose(linear[:, 0], starts + (starts - warm), rtol=1e-12, atol=0.0)
+    assert np.allclose(linear[:, 1], linear[:, 0] + (linear[:, 0] - starts), rtol=1e-12, atol=0.0)
+    assert not np.array_equal(linear, by_model["persistence"].predictions.mean)
+    # the stand-in states an error bar of 0.02 x scale: divided by the scale, 0.02 in judge units
+    assert np.allclose(by_model["standin"].predictions.spread, 0.02, rtol=1e-15, atol=0.0)
+
+
+@pytest.mark.parametrize("world", WORLDS)
+def test_the_shared_truth_is_the_world_stepped_with_each_trials_own_kicks(world):
+    w = trials.WORLDS[world]
+    shared = trials.build_world_trials(world, w, small_config(horizon=300))  # long enough for every region to be kicked
+    for region in shared.region_names:
+        kicks = shared.kicks[region]
+        assert np.any(kicks != 0.0)  # the check below is about kicks, so there must be some
+        state, expected = shared.starts[region], []
+        for step in range(kicks.shape[1]):
+            state = w.transition_batch(state, kicks[:, step])
+            expected.append(state)
+        assert np.array_equal(shared.truth[region], np.stack(expected, axis=1))
+
+
+@pytest.mark.parametrize("world", WORLDS)
+def test_starts_and_kicks_come_from_their_own_pinned_seed_purposes(world):
+    from wmj.harness.benchmarks import declared_regions, sample_region_starts
+    from wmj.harness.kicks import seeded_kick_sequences
+    from wmj.models.base import SeedSource
+
+    w = trials.WORLDS[world]
+    shared = trials.build_world_trials(world, w, small_config(horizon=300))  # long enough for every region to be kicked
+    seeds = SeedSource(META["seed"], None)
+    for region, box, band in declared_regions(w):
+        drawn = sample_region_starts(seeds.rng_for(world, region, "eval-starts"), box, N_SMALL)
+        assert np.array_equal(shared.warmups[region], drawn)
+        assert np.array_equal(shared.starts[region], w.transition_batch(drawn, np.zeros((N_SMALL, w.a))))  # one quiet true step
+        assert np.array_equal(
+            shared.kicks[region], seeded_kick_sequences(seeds, world, w, region, band, "eval-kicks", N_SMALL, 300)
+        )
+        train_kicks = seeded_kick_sequences(seeds, world, w, region, band, "train-kicks", N_SMALL, 300)
+        assert np.any(shared.kicks[region] != 0.0)
+        assert not np.array_equal(shared.kicks[region], train_kicks)  # never the training kicks (ADR-002 rule 2)
+
+
+def test_each_model_gets_its_own_named_seed_stream_and_the_action_check_the_run_seed(monkeypatch):
+    from wmj.models.base import SeedSource
+
+    given, checked = {}, []
+    def spying(name, factory):
+        def build(ctx, seeds, training):
+            given[(ctx.world_name, name)] = seeds
+            return factory(ctx, seeds, training)
+        return build
+
+    roster = {k: spying(k, standin_roster()[k]) for k in ("linear", "persistence", "standin")}
+    real = trials.check_action_response
+    monkeypatch.setattr(trials, "check_action_response", lambda m, ctx, seed, **kw: checked.append(seed) or real(m, ctx, seed, **kw))
+    trials.run_trials(small_config(), dict(META), models=roster)
+    assert {key: (s.run_seed, s.my_name) for key, s in given.items()} == {
+        (w, k): (META["seed"], k) for w in WORLDS for k in ("linear", "persistence", "standin")
+    }
+    assert all(type(s) is SeedSource for s in given.values())
+    assert checked == [META["seed"]] * 6
+
+
+def test_a_model_that_writes_into_its_inputs_fails_instead_of_changing_later_models_trials():
+    class Mutator(_standin.StandInModel):
+        def predict_batch(self, states, actions):
+            actions *= 0.0  # in place: would rewrite the shared kicks every later model is fed
+            return super().predict_batch(states, actions)
+
+    roster = {k: standin_roster()[k] for k in ("linear", "persistence")}
+    roster["aa-mutator"] = lambda ctx, seeds, training: Mutator(ctx)
+    with pytest.raises(ValueError, match="read-only"):
+        trials.run_trials(small_config(), dict(META), models=roster)
+
+
+def test_the_shared_trial_arrays_are_read_only(rebuilt):
+    for shared in rebuilt.values():
+        for arrays in (shared.warmups, shared.starts, shared.kicks, shared.truth, shared.bins):
+            assert all(not a.flags.writeable for a in arrays.values())
+
+
+@pytest.mark.parametrize("attribute", ["stateless", "is_baseline", "is_fixture"])
+def test_a_model_without_its_three_flags_is_refused_before_it_is_rolled_out(attribute):
+    class Unflagged(_standin.StandInModel):
+        pass
+
+    setattr(Unflagged, attribute, None)
+    roster = {k: standin_roster()[k] for k in ("linear", "persistence")}
+    roster["unflagged"] = lambda ctx, seeds, training: Unflagged(ctx)
+    with pytest.raises(trials.TrialsError, match=attribute):
+        trials.run_trials(small_config(), dict(META), models=roster)
+
+
+def test_a_pinned_baseline_that_does_not_declare_itself_one_is_refused():
+    roster = {k: standin_roster()[k] for k in ("linear",)}
+    roster["persistence"] = lambda ctx, seeds, training: _standin.StandInModel(ctx)
+    with pytest.raises(trials.TrialsError, match="is_baseline"):
+        trials.run_trials(small_config(), dict(META), models=roster)
+
+
+@pytest.mark.parametrize("meta", [{}, {**META, "extra": "x"}, None])
+def test_meta_without_exactly_its_four_fields_is_refused_before_anything_runs(meta):
+    with pytest.raises(trials.TrialsError, match="meta"):
+        trials.run_trials(small_config(), meta, models=standin_roster())
