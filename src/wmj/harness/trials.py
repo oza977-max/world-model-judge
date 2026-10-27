@@ -244,6 +244,14 @@ def _one(name: str, forecast: Any, d: int) -> tuple[np.ndarray, np.ndarray]:
     return _checked(name, mean, spread, (1, d))
 
 
+def _batch(name: str, model: Any, states: np.ndarray, actions: np.ndarray, n: int, d: int) -> tuple[np.ndarray, np.ndarray]:
+    """One `predict_batch` call as a checked `(n, d)` guess and error bar."""
+    answer = model.predict_batch(states, actions)
+    if not isinstance(answer, tuple) or len(answer) != 2:
+        raise TrialsError(f"{name}: predict_batch must return (guesses, error bars) (models ADR-M1)")
+    return _checked(name, answer[0], answer[1], (n, d))
+
+
 def roll_out(
     model: Any, warmups: np.ndarray, starts: np.ndarray, kicks: np.ndarray, name: str = "the model"
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -264,10 +272,10 @@ def roll_out(
     quiet = np.zeros((n, kicks.shape[2]))
     if model.stateless:
         model.reset()
-        _checked(name, *model.predict_batch(warmups.copy(), quiet), (n, d))  # the warm-up: shown, not scored
+        _batch(name, model, warmups.copy(), quiet, n, d)  # the warm-up: shown, not scored
         state = starts.copy()
         for step in range(h):
-            means[:, step], spreads[:, step] = _checked(name, *model.predict_batch(state, kicks[:, step]), (n, d))
+            means[:, step], spreads[:, step] = _batch(name, model, state, kicks[:, step], n, d)
             state = means[:, step].copy()
         return means, spreads
     for i in range(n):

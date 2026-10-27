@@ -17,7 +17,7 @@ from wmj.harness import derive_thresholds
 from wmj.harness.training import TrainingRecipe
 from wmj.models.base import Prediction
 from wmj.models.baselines import linear_factory, persistence_factory
-from wmj.models.fixtures import FxActionBlind, FxBrittle, FxOverconfident
+from wmj.models.fixtures import FxActionBlind, FxBrittle, FxHonestRough, FxOverconfident
 
 N_SMALL = 36  # the smallest trial count whose pre-registered bands leave amber on both sides of green
 H_SMALL = 12
@@ -72,6 +72,9 @@ def standin_roster() -> dict:
     return {
         "fx-action-blind": lambda ctx, seeds, training: FxActionBlind(ctx, StandInCore(ctx)),
         "fx-brittle": lambda ctx, seeds, training: FxBrittle(ctx, StandInCore(ctx)),
+        "fx-honest-rough": lambda ctx, seeds, training: FxHonestRough(
+            ctx, StandInCore(ctx), int(seeds.rng("noise").integers(0, 2**63 - 1))  # keyed like the real factory
+        ),
         "fx-overconfident": lambda ctx, seeds, training: FxOverconfident(ctx, StandInCore(ctx)),
         "linear": linear_factory,
         "persistence": persistence_factory,

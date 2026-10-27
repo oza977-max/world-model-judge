@@ -1477,6 +1477,7 @@ the region instead, same total size (200 starts × 1,000 steps = 200,000 samples
      - predator–prey training region: 2 of 200;
      - pendulum training region: 1 of 200;
      - pendulum `out-large-action`: 4 of 200;
+     - pendulum `out-near-inverted`: 2 of 200;
      - predator–prey `out-high-amplitude`: 24 of 200, all still far outside the training box.
 
      By the rule above they keep their drawn point's label. A model that checks the box itself, like `fx-brittle`, treats them as away from home. A 150-seed sweep found no state-floor failure from the warm step.

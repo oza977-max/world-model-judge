@@ -62,6 +62,7 @@ def test_a_stand_in_run_produces_envelopes_the_writer_accepts_and_writes(recorde
     assert result.baseline_names == frozenset({"linear", "persistence"})
     grouped = writer.check_run(result.envelopes, result.baseline_names)
     assert sorted(grouped) == list(WORLDS)
+    assert [e["verdict"]["world"] for e in result.envelopes] == [w for w in WORLDS for _ in names]  # world by world
     for world, group in grouped.items():
         assert [e["model_name"] for e in group] == names  # sorted roster order, inside each world
         assert all(e["verdict"]["world"] == world for e in group)
@@ -305,6 +306,9 @@ def test_every_part_of_the_judge_input_is_the_shared_trials_in_judge_units(recor
     names = shared.region_names
     by_model = _by_model(inputs, world)
     for inp in by_model.values():
+        assert inp.region_labels == tuple(label for r in names for label in shared.labels[r])
+        blocks = [r for r in names for _ in range(N_SMALL)]  # row i of every array belongs to this region
+        assert [label.region_name for label in inp.region_labels] == blocks
         assert np.array_equal(inp.outcomes, np.concatenate([shared.truth[r] for r in names]) / scale)
         assert np.array_equal(inp.invariant_bins, np.concatenate([shared.bins[r] for r in names]))
         for table, region in zip(inp.climatology, names):
@@ -565,3 +569,99 @@ def test_the_rest_of_the_judge_input_is_the_worlds_own_declaration(recorded, wor
         )
         for curve in inp.divergence_curves:
             assert np.array_equal(curve.curve, np.array(artefact["regions"][curve.region_name]["median_separation"]))
+
+
+# ---- the production configuration ------------------------------------------------------------------------------
+
+
+def test_the_run_config_defaults_are_the_pinned_production_values():
+    import dataclasses
+
+    defaults = {f.name: f.default for f in dataclasses.fields(trials.RunConfig) if f.default is not dataclasses.MISSING}
+    assert defaults == {
+        "n_trials": 200,  # judge ADR-J4
+        "horizon": None, "training_horizon": None,  # each world's longest task horizon
+        "divergence_starts": 64,  # worlds ADR-W3
+        "climatology_starts": 50, "climatology_steps": 20_000,  # D21
+        "climatology_bins": 16, "climatology_min_samples": 50,  # worlds §5
+        "probe_states": 16,  # MU-3 check (backlog A26)
+    }
+    assert {w: max(t.horizon for t in trials.WORLDS[w].tasks()) for w in WORLDS} == {"lv": 700, "pendulum": 5000}
+
+
+class _Stop(Exception):
+    pass
+
+
+def test_with_no_horizon_given_every_generator_runs_to_the_worlds_longest_task_horizon(monkeypatch):
+    seen = {}
+
+    def stop_at_divergence(world_name, world, seeds, n_starts, horizon):
+        seen["divergence"] = horizon
+        raise _Stop
+
+    monkeypatch.setattr(trials, "build_divergence_artefact", stop_at_divergence)
+    with pytest.raises(_Stop):
+        trials.build_world_trials("pendulum", trials.WORLDS["pendulum"], small_config(horizon=None))
+    assert seen == {"divergence": 5000}
+
+
+@pytest.mark.parametrize("training_horizon", [None, 60])
+def test_the_training_horizon_is_passed_through_unchanged(monkeypatch, training_horizon):
+    seen = []
+
+    def stop_at_training(*args, horizon=None):
+        seen.append(horizon)
+        raise _Stop
+
+    monkeypatch.setattr(trials, "build_training_data", stop_at_training)
+    with pytest.raises(_Stop):
+        trials.build_world_trials("lv", trials.WORLDS["lv"], small_config(training_horizon=training_horizon))
+    assert seen == [training_horizon]
+
+
+@pytest.mark.parametrize(
+    "field, value",
+    [("run_seed", "11"), ("run_seed", True), ("n_trials", 0), ("probe_states", 2.0), ("horizon", 0),
+     ("training_horizon", -1), ("recipe", None), ("thresholds", [])],
+)
+def test_a_run_config_with_a_bad_size_is_refused(field, value):
+    with pytest.raises(trials.TrialsError, match=field):
+        small_config(**{field: value})
+
+
+def test_thresholds_without_a_worlds_entry_are_refused_by_name():
+    raw = _standin.small_thresholds()
+    del raw["agreement_threshold"]["pendulum"]
+    with pytest.raises(trials.TrialsError, match="pendulum"):
+        trials.judge_thresholds(raw, "pendulum", trials.WORLDS["pendulum"].scale)
+
+
+@pytest.mark.parametrize("stateless", [True, False])
+def test_a_model_that_writes_into_the_state_it_is_given_cannot_change_its_recorded_forecast(stateless):
+    ctx, warmups, starts, kicks = _lv_trial_inputs()
+
+    class Scribbler(_standin.StandInModel):
+        def predict_batch(self, states, actions):
+            answer = super().predict_batch(states, actions)
+            states *= 0.0  # in place, after answering
+            return answer
+
+    clean = _standin.StandInModel(ctx)
+    clean.stateless = stateless
+    model = Scribbler(ctx)
+    model.stateless = stateless
+    expected = trials.roll_out(clean, warmups, starts, kicks)
+    got = trials.roll_out(model, warmups, starts, kicks)
+    assert all(np.array_equal(a, b) for a, b in zip(got, expected))
+
+
+def test_a_predict_batch_that_returns_no_forecast_is_refused_with_a_clear_error():
+    ctx, warmups, starts, kicks = _lv_trial_inputs()
+
+    class Nothing(_standin.StandInModel):
+        def predict_batch(self, states, actions):
+            return None
+
+    with pytest.raises(trials.TrialsError, match="predict_batch"):
+        trials.roll_out(Nothing(ctx), warmups, starts, kicks)
