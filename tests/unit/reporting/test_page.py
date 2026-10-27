@@ -87,3 +87,11 @@ def test_chart_rows_are_an_equal_column_grid_at_most_two_wide_so_no_chart_is_str
     # review of P5-C04, pass 2: a flex row stretched a lone chart on its line to twice the others' size
     assert "grid-template-columns: repeat(auto-fill, minmax(min(560px, 100%), 1fr))" in page.STYLE
     assert "flex" not in page.STYLE
+
+
+
+def test_the_comparison_table_scrolls_in_its_own_box_rather_than_shrinking_on_a_narrow_screen():
+    html = page.render_page(CARD, NEVER, (_world(),))
+    assert '<div class="scroll"><img src="charts/lv-comparison.png"' in html
+    assert html.count('<div class="scroll">') == 1  # only the table: the other charts shrink with the page
+    assert ".scroll { overflow-x: auto; }" in page.STYLE

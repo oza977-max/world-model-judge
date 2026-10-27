@@ -52,6 +52,7 @@ body { font-family: Inter, "Helvetica Neue", Arial, sans-serif; color: #1a1a1a; 
 h1 { font-size: 1.6em; } h2 { margin-top: 2em; border-bottom: 1px solid #d0d0d0; }
 section.card { border: 2px solid #1f4e9c; padding: 8px 20px 16px; margin: 1.5em 0; } section.card h2 { margin-top: 0.6em; }
 figure { margin: 1em 0 2em; } figure img { max-width: 100%; height: auto; border: 1px solid #eeeeee; }
+.scroll { overflow-x: auto; } .scroll img { box-sizing: border-box; max-width: none; width: max(100%, 900px); }
 figcaption { max-width: 60em; font-size: 0.95em; }
 .row { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(560px, 100%), 1fr)); gap: 16px; }
 .row figure { margin: 0; }  /* equal columns, at most two per row on a wide screen: every chart the same size */
@@ -94,9 +95,13 @@ def escape(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").replace("'", "&#x27;")
 
 
-def _figure(shown: Shown) -> str:
-    return (f'<figure><img src="{escape(shown.image)}" alt="{escape(shown.caption)}">'
-            f"<figcaption>{escape(shown.caption)}</figcaption></figure>")
+def _figure(shown: Shown, *, wide: bool = False) -> str:
+    """One chart and its caption. A wide one (the comparison table) scrolls sideways inside its own box on a
+    narrow screen rather than shrinking until its numbers cannot be read (review of P5-C04, pass 4)."""
+    image = f'<img src="{escape(shown.image)}" alt="{escape(shown.caption)}">'
+    if wide:
+        image = f'<div class="scroll">{image}</div>'
+    return f"<figure>{image}<figcaption>{escape(shown.caption)}</figcaption></figure>"
 
 
 def _model(section: ModelSection) -> list[str]:
@@ -138,7 +143,7 @@ def render_page(limitations: tuple[str, ...], not_tested: tuple[str, ...], world
     ]
     for world in worlds:
         parts.append(f"<h2>World: {escape(world.world)}</h2>")
-        parts.append(_figure(world.comparison))
+        parts.append(_figure(world.comparison, wide=True))
         for model in world.models:
             parts += _model(model)
     parts.append("</body></html>")
