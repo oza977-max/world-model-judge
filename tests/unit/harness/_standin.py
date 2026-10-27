@@ -19,7 +19,7 @@ from wmj.models.base import Prediction
 from wmj.models.baselines import linear_factory, persistence_factory
 from wmj.models.fixtures import FxActionBlind, FxBrittle, FxOverconfident
 
-N_SMALL = 8
+N_SMALL = 36  # the smallest trial count whose pre-registered bands leave amber on both sides of green
 H_SMALL = 12
 META = {"seed": 11, "platform": "test-platform", "prereg_commit": "stand-in-no-freeze", "thresholds_file": "stand-in"}
 RECIPE = TrainingRecipe(training_trajectories=40, subsample_pairs=400, kick_pairs=1, heldout_pairs=50, gradcheck_pairs=4)
@@ -82,10 +82,10 @@ def standin_roster() -> dict:
 def small_config(**overrides):
     from wmj.harness.trials import RunConfig
 
-    values = dict(
-        run_seed=META["seed"], recipe=RECIPE, thresholds=small_thresholds(), n_trials=N_SMALL, horizon=H_SMALL,
-        training_horizon=60, divergence_starts=4, climatology_starts=4, climatology_steps=400, climatology_bins=4,
-        climatology_min_samples=20, probe_states=4,
-    )
+    values = {
+        "run_seed": META["seed"], "recipe": RECIPE, "thresholds": small_thresholds(), "n_trials": N_SMALL,
+        "horizon": H_SMALL, "training_horizon": 60, "divergence_starts": 4, "climatology_starts": 4,
+        "climatology_steps": 400, "climatology_bins": 4, "climatology_min_samples": 20, "probe_states": 4,
+    }
     values.update(overrides)
     return RunConfig(**values)

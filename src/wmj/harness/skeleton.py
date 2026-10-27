@@ -22,9 +22,9 @@ from pathlib import Path
 import numpy as np
 
 from wmj.harness.serialize import canonical_serialize
+from wmj.harness.trials import roster
 from wmj.judge.skill import crps_gaussian, skill_score
 from wmj.models.base import SeedSource, TrainingData, WorldContext
-from wmj.models.baselines import linear_factory, persistence_factory
 from wmj.worlds import lv
 
 SKELETON_SEED = 20260825
@@ -97,8 +97,9 @@ def build_skeleton_report(seed: int = SKELETON_SEED) -> dict:
     ctx = _build_context()
     training = _generate_training_data(seeds)
 
-    model = persistence_factory(ctx, seeds, training)
-    baseline = linear_factory(ctx, seeds, training)
+    factories = roster()  # through the registry, never a model module by name (MU-9, TC-MU9-01(c))
+    model = factories["persistence"](ctx, seeds, training)
+    baseline = factories["linear"](ctx, seeds, training)
 
     model_mean, model_spread, model_outcome = _run_one_step_trials(model, seeds)
     baseline_mean, baseline_spread, baseline_outcome = _run_one_step_trials(

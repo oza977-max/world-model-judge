@@ -224,6 +224,7 @@ class PendulumWorld:
     dt = DT
     scale = SCALE
     kick_rate_per_s = KICK_RATE_PER_S
+    natural_cycle_length = None  # worlds §4.2: chaotic, no natural period — declared absent, not omitted
 
     def transition(self, state: np.ndarray, action: np.ndarray) -> np.ndarray:
         return transition(state, action)

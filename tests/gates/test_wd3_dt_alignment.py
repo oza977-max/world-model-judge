@@ -136,3 +136,47 @@ def test_tc_wd3_01_training_data_generator_steps_only_through_the_worlds_batch_s
         for fn in ast.walk(tree)
         if isinstance(fn, ast.FunctionDef) and "deriv" in fn.name.lower()
     ]
+
+
+def _imports_and_step_callers(module) -> tuple[set[str], set[str]]:
+    tree = ast.parse(Path(inspect.getsourcefile(module)).read_text())
+    imported = {
+        part
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+        for part in [getattr(node, "module", None) or "", *(alias.name for alias in node.names)]
+    }
+    callers = {
+        fn.name
+        for fn in ast.walk(tree)
+        if isinstance(fn, ast.FunctionDef)
+        and any(isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute) and c.func.attr == "transition_batch"
+                for c in ast.walk(fn))
+    }
+    return imported, callers
+
+
+@pytest.mark.parametrize("world_name", ["lv", "pendulum"])
+def test_tc_wd3_01_full_scope_all_three_truth_generators_take_the_same_step_with_the_same_dt(world_name):
+    """TC-WD3-01, full scope (P6-C01): the evaluation truth (`harness.trials`), the training data
+    (`harness.training`) and the divergence benchmark (`harness.benchmarks`) all advance the world only
+    through its own `transition_batch`, none imports the integrator, and from one state the evaluation truth's
+    step is bit-identical to the shared `rk4_step` with the world's own dt."""
+    import numpy as np
+
+    from wmj.harness import benchmarks, training, trials
+    from wmj.worlds import pendulum
+
+    for module, function in ((trials, "_true_rollout"), (training, "build_training_data")):
+        imported, callers = _imports_and_step_callers(module)
+        assert not [name for name in imported if "rk4_step" in name or "integrator" in name], module.__name__
+        assert function in callers, module.__name__
+    imported, _callers = _imports_and_step_callers(benchmarks)
+    assert not [name for name in imported if "rk4_step" in name or "integrator" in name]
+
+    module = {"lv": lv, "pendulum": pendulum}[world_name]
+    world = module.WORLD
+    state = np.asarray(world.regions().training_state_box.mean(axis=1))
+    stepped = trials._true_rollout(world, state[None, :], np.zeros((1, 1, world.a)))[0, 0]
+    assert np.array_equal(stepped, integrator.rk4_step(module._deriv, state[None, :], module.DT)[0])
+    assert world.dt == module.DT

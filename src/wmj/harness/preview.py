@@ -44,9 +44,9 @@ from wmj.harness.benchmarks import (
     sample_region_starts,
 )
 from wmj.harness.kicks import seeded_kick_sequences
+from wmj.harness.trials import roster
 from wmj.judge.skill import crps_gaussian, skill_score
 from wmj.models.base import SeedSource, TrainingData, WorldContext
-from wmj.models.baselines import linear_factory, persistence_factory
 from wmj.reporting.captions import CHART2_SCOPED, write_caption
 from wmj.reporting.horizon_plot import render_horizon_chart
 from wmj.worlds import lv
@@ -174,8 +174,9 @@ def one_step_skill_persistence_vs_linear(seeds: SeedSource, n_trials: int) -> On
     _require_positive("n_trials", n_trials)
     ctx = _build_context()
     training = _generate_training_data(seeds)
-    persistence = persistence_factory(ctx, seeds, training)
-    linear = linear_factory(ctx, seeds, training)
+    factories = roster()  # through the registry, never a model module by name (MU-9, TC-MU9-01(c))
+    persistence = factories["persistence"](ctx, seeds, training)
+    linear = factories["linear"](ctx, seeds, training)
 
     rng = seeds.rng_for("lv", "training", "one-step-eval-starts")
     starts = sample_region_starts(rng, lv.regions().training_state_box, n_trials)

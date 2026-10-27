@@ -29,6 +29,9 @@ GAMMA = 0.8
 DELTA = 0.2
 
 DT = 0.02
+# Worlds §4.1: the near-equilibrium period, 2π/√(αγ) ≈ 7.0 time units (≈ 351 steps). The judge states a trust
+# horizon in these cycles as well as in steps and world time (JU-7, judge ADR-J5).
+NATURAL_CYCLE_LENGTH = 2 * math.pi / math.sqrt(ALPHA * GAMMA)
 HORIZON = 700
 SCALE = np.array([4.0, 2.5])
 
@@ -236,6 +239,7 @@ class LVWorld:
     dt = DT
     scale = SCALE
     kick_rate_per_s = KICK_RATE_PER_S
+    natural_cycle_length = NATURAL_CYCLE_LENGTH
 
     def transition(self, state: np.ndarray, action: np.ndarray) -> np.ndarray:
         return transition(state, action)

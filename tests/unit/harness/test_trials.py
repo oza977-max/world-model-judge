@@ -12,7 +12,13 @@ import numpy as np
 import pytest
 
 from tests.unit.harness import _standin
-from tests.unit.harness._standin import META, N_SMALL, H_SMALL, small_config, standin_roster
+from tests.unit.harness._standin import (
+    H_SMALL,
+    META,
+    N_SMALL,
+    small_config,
+    standin_roster,
+)
 from wmj.harness import trials
 from wmj.reporting import writer
 
@@ -60,8 +66,13 @@ def test_a_stand_in_run_produces_envelopes_the_writer_accepts_and_writes(recorde
         assert all(e["meta"] == META for e in group)
         assert {e["model_name"] for e in group if e["is_fixture"]} == {n for n in names if n.startswith("fx-")}
         assert [e["model_ref"] for e in group] == [f"opaque-index-{i}" for i in range(len(names))]
-    paths = writer.write_run(result.envelopes, result.baseline_names, tmp_path / "out", 0.05, {"machine": "test"})
-    assert (tmp_path / "out" / "results.html").is_file() and paths is not None
+    # Drawing every chart of all twelve envelopes takes about a minute; one world's baselines, one fixture and
+    # the stand-in exercise every kind of section the page has.
+    some = [e for e in result.envelopes
+            if e["verdict"]["world"] == "lv" and e["model_name"] in ("linear", "persistence", "fx-brittle", "standin")]
+    writer.write_run(some, result.baseline_names, tmp_path / "out", 0.05, {"machine": "test"})
+    page = (tmp_path / "out" / "results.html").read_text(encoding="utf-8")
+    assert "FIXTURE: fx-brittle" in page and "World: lv" in page
 
 
 def test_the_action_response_check_runs_on_every_model_and_catches_the_action_blind_fixture(recorded):

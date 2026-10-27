@@ -1439,3 +1439,29 @@ the region instead, same total size (200 starts × 1,000 steps = 200,000 samples
 1. **Discovery lives in the harness (D7, amends cross-cutting ADR-003's discovery bullet; owner decision 2026-10-27).** `harness.trials` scans the `wmj.models` package with `pkgutil.iter_modules` and imports each module with `importlib.import_module`, so every module's `register()` runs; then it reads `registry.all_models()`. The models import-allowlist (TC-NF6-09) stays exactly as reviewed. ADR-003 says "`registry.all_models()` calls `importlib.invalidate_caches()` and then `pkgutil.iter_modules`"; it should say the harness does, and TC-MU9-01's graft through `wmj.models.__path__` still applies.
 2. **`wmj run` refuses before the freeze; its tests never evaluate direct or ensemble (models §3 fifth residual risk; owner decision 2026-10-27).** The rule is that no evaluation-trial metric of either unrigged model is computed before the freeze. So `wmj run` calls `check_prereg` before anything else and refuses without a freeze. The tests drive the same orchestration code with a stand-in roster (the two baselines and the fixtures, at small sizes) injected for the test. Every listed test that needs the real models moves to P6-C03, after the freeze: TC-NF1-01/02 full scope, TC-MU2-02 full, the judged halves of TC-MU3-01/02/03, and TC-MU4-01 on a real run. One leak needs ruling out: the fixtures are "Model A plus one change", so evaluating a fixture also reveals much of direct's behaviour. The stand-in roster therefore uses fixtures built on a stand-in core, not the trained direct network, so nothing measured before the freeze describes the real direct model.
 
+
+### A43 — P6-C01a: what the orchestration loop had to decide that the specs leave unsaid (2026-10-27)
+
+**In plain words:** building the loop that runs every model on every world needed five small decisions the specs do not state outright. None changes a reviewed spec. Each is written down here for the next design review to confirm or correct.
+
+1. **A rollout feeds the model its own guesses (amends cross-cutting ADR-004's `roll_out`, which says "one `predict_batch(states, actions)`" without saying which states).** Step 1 is predicted from the true start. Every later step is predicted from the model's previous guess (`mean`), with the trial's true kick for that step. The error bar recorded at step h is the one the model states for step h, from the state it was given. This is the only reading the one-step interface allows. It matches:
+   - the requirements ("feeds its own guesses back into itself … small errors pile up");
+   - the chart-preview producer (persistence holds the start constant);
+   - the linear baseline's rule (current + (current − previous)).
+
+   **Consequence to state at the review:** a model's error bar does not accumulate over steps unless the model itself makes it grow from the state it is fed. That is how the two unrigged models are built, and it is what the calibration and exception checks at the task horizon will see.
+2. **`natural_cycle_length` is a world attribute.**
+   - LV: `2π/√(αγ)` time units, the value worlds §4.1 declares, as `lv.NATURAL_CYCLE_LENGTH`.
+   - Pendulum: `None`, worlds §4.2: "declared absent, not omitted".
+
+   The worlds spec's protocol (§4.3) should list it.
+3. **Test sizes.** `RunConfig` takes:
+   - a shorter evaluation horizon; each task's horizon is then `min(task.horizon, H)`;
+   - a shorter training horizon;
+   - smaller climatology and divergence sizes.
+
+   In production every default is the pinned value, and `min` changes nothing. The smallest trial count whose bands leave amber on both sides of green is 36, so the tests use 36.
+4. **`preview.py` and `skeleton.py` now take their baselines from `trials.roster()`.** They used to import `wmj.models.baselines` directly, which TC-MU9-01(c) forbids. Their output is unchanged.
+5. **TC-MU9-01(a) after D7.** `registry.all_models()` no longer discovers anything. Part (a) now checks that the registry holds the stub after the harness's roster function has run; part (b) checks the roster function itself. The test-cases document's wording of (a) should follow A42 item 1.
+
+*Where recorded:* `build/prompts/P6-C01a.md`, `build/handovers/P6-C01a.md`.
