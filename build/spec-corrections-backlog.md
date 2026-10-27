@@ -1432,3 +1432,10 @@ the region instead, same total size (200 starts × 1,000 steps = 200,000 samples
 
 *Where recorded:* `code-review/code-review-004.html`; `REMEMBER.md` §3 (P6-C01 notes).
 
+### A42 — P6-C01 owner decisions: model discovery and testing before the freeze (2026-10-27)
+
+**In plain words:** two choices were needed before `wmj run` could be built. Where the code that finds every model file lives, and how to test a run without breaking the rule that the two real models are never evaluated before the pre-registration is frozen.
+
+1. **Discovery lives in the harness (D7, amends cross-cutting ADR-003's discovery bullet; owner decision 2026-10-27).** `harness.trials` scans the `wmj.models` package with `pkgutil.iter_modules` and imports each module with `importlib.import_module`, so every module's `register()` runs; then it reads `registry.all_models()`. The models import-allowlist (TC-NF6-09) stays exactly as reviewed. ADR-003 says "`registry.all_models()` calls `importlib.invalidate_caches()` and then `pkgutil.iter_modules`"; it should say the harness does, and TC-MU9-01's graft through `wmj.models.__path__` still applies.
+2. **`wmj run` refuses before the freeze; its tests never evaluate direct or ensemble (models §3 fifth residual risk; owner decision 2026-10-27).** The rule is that no evaluation-trial metric of either unrigged model is computed before the freeze. So `wmj run` calls `check_prereg` before anything else and refuses without a freeze. The tests drive the same orchestration code with a stand-in roster (the two baselines and the fixtures, at small sizes) injected for the test. Every listed test that needs the real models moves to P6-C03, after the freeze: TC-NF1-01/02 full scope, TC-MU2-02 full, the judged halves of TC-MU3-01/02/03, and TC-MU4-01 on a real run. One leak needs ruling out: the fixtures are "Model A plus one change", so evaluating a fixture also reveals much of direct's behaviour. The stand-in roster therefore uses fixtures built on a stand-in core, not the trained direct network, so nothing measured before the freeze describes the real direct model.
+
