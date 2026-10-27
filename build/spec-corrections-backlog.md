@@ -1385,3 +1385,22 @@ the region instead, same total size (200 starts × 1,000 steps = 200,000 samples
 **Deferred door-tightening (REMEMBER §3, P5–P6):** require the horizon-step-1 entry in each exception/trials pair, require `steps` to equal `range(1, H+1)`, check tolerance consistency across blocks, handle a zero-error chart; one shared pipeline helper across four test files; rename `task_region_step`; a shape variant with 3 regions and d=4; mixed-element list tests; the `io.open` guard case.
 
 *Where recorded:* `code-review/code-review-003.html`, commits 8d5689f, f0f9927, ff692db.
+
+### A40 — Phase 5 wiring audit: one row to correct, rows to add (2026-10-27)
+
+**In plain words:** at the end of each phase the wiring table in the implementation guide is checked against the code. For every row whose wiring chunk is in this phase, the test is that the consumer really imports and calls the module, not that a chunk says it does. Phase 5's seams are all in place. One row names the wrong judge module, and the new reporting modules should be named rather than left under "reporting.*".
+
+1. **Verified by grep (2026-10-27):**
+   - `reporting.captions` → all four chart modules: each imports `captions` and calls it (`exception_plot` 4 calls, `horizon_plot` 1, `calibration_plot` 2, `comparison_table` 2) ✓.
+   - `reporting.style.mark_fixture` → every chart renderer: one call in each of the four ✓.
+   - `harness.serialize` → the verdict writer and the manifest: `reporting/writer.py` imports `canonical_serialize` and calls it for both ✓. The skeleton and thresholds writer were verified at Phases 1 and 3.
+   - `wmj chart-preview` → `reporting.horizon_plot`: `harness/preview.py` still calls `render_horizon_chart` ✓, and its CLI tests pass.
+2. **Row to correct:** "`judge.types` … consumed by … reporting reader (P4-C01, P5-C04)". Reporting reads the verdict through `judge.verdict` (`Verdict`, `VERDICT_SCHEMA`) and `judge.errors`, never `judge.types`; the `Verdict` lives in `judge.verdict` (A39 item 6). The row should name `judge.verdict`.
+3. **Rows to add** (built in Phase 5; today covered only by the `wmj run` row's "`reporting.*`"):
+   - `reporting.writer` (producer: `write_run`, the sole writer of `out/`), consumed by `wmj run`, wiring chunk **P6-C01**, demanded by P6-C02's clean-checkout acceptance. **No caller in `src/` yet (expected):** `grep -rlE 'reporting\.writer|write_run' src/wmj/harness` finds nothing.
+   - `reporting.comparison_table`, `reporting.page`, `reporting.exception_plot`, `reporting.calibration_plot`, consumed by `reporting.writer` (P5-C04).
+   - `reporting.envelope`, an internal helper consumed by the four chart renderers.
+4. **The module-audit script** (`gvm-build/scripts/_module_audit.py`) looks for `scripts/_shared/*.py`, which this project does not have. As at Phases 3 and 4, it does not apply, and the audit was done by hand-run greps.
+5. **Owed by P6-C01:** call `write_run(...)` from `wmj run`, and move or drop `harness/skeleton.py`'s write into `out/` (sole-writer rule; it also makes `out/` non-empty, which `write_run` refuses). Both are in `REMEMBER.md`.
+
+*Where recorded:* `REMEMBER.md` §3 (Phase 5 line).

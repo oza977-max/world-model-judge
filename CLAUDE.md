@@ -114,7 +114,7 @@ at save time), P5-C02 (Chart 1, the exception plot), P5-C03 (Chart 2 at full sco
 calibration; Chart 3's caption amended by owner decision, A39 item 23) and P5-C04 (Chart 4 comparison
 table, `results.html` with the model card, `writer.py` the sole writer of `out/`; owner decisions on the
 disagreement rule and caption, A39 items 24–30) are done and reviewed to zero Critical/Important
-(2026-10-24 to 10-27). Next: the Phase 5 wiring audit, then Phase 6 (full wiring). Owner decisions D19 (disclosed; prediction unchanged) and D21 (agreement mark measured
+(2026-10-24 to 10-27); the Phase 5 wiring audit passed (matrix rows owed, backlog A40). Next: Phase 6 (full wiring). Owner decisions D19 (disclosed; prediction unchanged) and D21 (agreement mark measured
 from the true world: pendulum 1.63; the test is weak and its statistic goes to the next design review)
 were settled on 2026-10-22, after an independent fix-check of code-review-003. Round 10 design review closed 2026-09-28. Owner decisions D17/D18
 were applied on 2026-10-04 (`subsample_pairs` now 100,000). The freeze
