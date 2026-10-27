@@ -177,7 +177,7 @@ def _plain_name(name: object, label: str) -> None:
         raise CaptionSlotError(f"{label} in the caption must be one plain name, got {name!r}")
 
 
-# The scoped Chart-2 caption used by P2-C05's preview (the full one comes with P5-C03's switch lines).
+# The two-sentence Chart-2 caption: P2-C05's preview, and any chart with no switch line to point at (A39 item 21).
 CHART2_SCOPED = _drop_last_sentence(CHART2_FULL)
 
 

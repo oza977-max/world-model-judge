@@ -88,17 +88,13 @@ def test_the_dots_are_the_verdicts_distances_in_trial_order_and_the_line_is_band
     assert list(chart.line.get_ydata()) == trial["band_hi"]
 
 
-def test_misses_are_circled_exactly_where_the_verdict_flags_them_never_re_derived():
+def test_misses_are_circled_exactly_where_the_verdict_flags_them():
     env = _envelope()
     trial = env["verdict"]["trials"]["per_task"][0]
     entry = env["verdict"]["exceptions"]["per_task"][0]
-    # a flag that disagrees with "dot above the line" is still drawn as the verdict says (judge §5 warning)
-    trial["is_exception"] = [not f for f in trial["is_exception"]]
-    entry["observed"] = sum(trial["is_exception"])
-    entry["band"] = ep._band_of(entry["observed"], entry["bands"])
     chart = ep.build_exception_figure(entry, trial, "direct", False)
     circled = [round(v) for v in chart.misses.get_offsets()[:, 0]]
-    assert circled == [i for i, f in enumerate(trial["is_exception"]) if f]
+    assert circled == [i for i, f in enumerate(trial["is_exception"]) if f] and circled
     assert chart.misses.get_edgecolor()[0][:3] == pytest.approx(tuple(int(style.EXCEPTION_COLOUR[i:i + 2], 16) / 255 for i in (1, 3, 5)))
 
 
@@ -351,3 +347,45 @@ def test_a_region_name_too_long_for_the_header_is_refused(tmp_path):
             entry["region"] = "r" * 41
     with pytest.raises(ep.ExceptionBlockError, match="40"):
         ep.render_exception_charts(env, tmp_path / "c", tmp_path / "t")
+
+
+
+# --- code-review-004 ---------------------------------------------------------------------------------------
+
+
+def test_a_flag_that_disagrees_with_its_dot_is_refused_not_drawn():
+    # the caption says the misses are the dots above the line, circled in red; a flag must agree with its dot
+    env = _envelope()
+    trial = env["verdict"]["trials"]["per_task"][0]
+    entry = env["verdict"]["exceptions"]["per_task"][0]
+    trial["is_exception"] = [not f for f in trial["is_exception"]]
+    entry["observed"] = sum(trial["is_exception"])
+    entry["band"] = ep._band_of(entry["observed"], entry["bands"])
+    with pytest.raises(ep.ExceptionBlockError, match="disagrees with its dot"):
+        ep.chart1_panels(env["verdict"]["exceptions"], env["verdict"]["trials"])
+
+
+def test_a_distance_in_another_unit_is_refused():
+    env = _envelope()
+    env["verdict"]["trials"]["per_task"][0]["distance_unit"] = "world units"
+    with pytest.raises(ep.ExceptionBlockError, match="stated sizes"):
+        ep.chart1_panels(env["verdict"]["exceptions"], env["verdict"]["trials"])
+
+
+def test_an_observed_count_that_disagrees_with_the_flags_is_refused_even_in_the_same_band():
+    # code-review-004: the existing case changed the band too, so this check was never the one that fired
+    distances = [3.0] * 20 + [0.5] * 180  # 20 misses: green [12, 29]
+    exceptions, trials = _n200_blocks(distances)
+    exceptions["per_task"][0]["observed"] = 21  # still green
+    with pytest.raises(ep.ExceptionBlockError, match="observed = 21"):
+        ep.chart1_panels(exceptions, trials)
+
+
+
+@pytest.mark.parametrize("name", [".hidden", "trailing.", ".", "..", "a" * 41])
+def test_a_name_with_a_dot_at_either_end_or_too_long_is_refused(name):
+    from wmj.reporting.envelope import file_part
+
+    with pytest.raises(ValueError, match="cannot be part of a file name"):
+        file_part("model name", name)
+    assert file_part("model name", "v1.0-direct") == "v1.0-direct" and file_part("model name", "a") == "a"

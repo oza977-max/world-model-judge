@@ -17,6 +17,7 @@ import json
 import pytest
 
 from tests.unit.reporting._verdict_blocks import (
+    FINGERPRINT,
     META,
     run_envelopes,
     set_crps,
@@ -41,7 +42,7 @@ def plain_run(tmp_path_factory):
 def _write(tmp_path, envelopes=None):
     from wmj.reporting.writer import write_run
 
-    return write_run(envelopes if envelopes is not None else run_envelopes(), BASELINES, tmp_path / "out", MARGIN)
+    return write_run(envelopes if envelopes is not None else run_envelopes(), BASELINES, tmp_path / "out", MARGIN, FINGERPRINT)
 
 
 def test_tc_rp6_01_each_verdict_is_a_schema_valid_file_beside_its_charts(plain_run):
@@ -62,7 +63,8 @@ def test_the_manifest_is_the_runs_four_meta_fields_plus_package_versions(plain_r
     from importlib.metadata import version
 
     manifest = json.loads((plain_run / "run-manifest.json").read_text(encoding="utf-8"))
-    assert manifest == {**META, "package_versions": {"numpy": version("numpy"), "matplotlib": version("matplotlib")}}
+    assert manifest == {**META, "package_versions": {"numpy": version("numpy"), "matplotlib": version("matplotlib")},
+                        "runtime_fingerprint": FINGERPRINT}  # owner decision 2026-10-26: the fingerprint lives here
 
 
 def test_tc_rp_card_01_the_model_card_is_near_the_top_of_the_page_verbatim(plain_run):
@@ -174,7 +176,7 @@ def test_the_run_needs_envelopes_and_a_set_of_baseline_names(tmp_path):
 
     for envelopes, baselines in (([], BASELINES), (run_envelopes(), ["persistence", "linear"])):
         with pytest.raises(VerdictSchemaError):
-            write_run(envelopes, baselines, tmp_path / "out", MARGIN)
+            write_run(envelopes, baselines, tmp_path / "out", MARGIN, FINGERPRINT)
     assert list(tmp_path.iterdir()) == []
 
 
@@ -212,7 +214,7 @@ def test_two_worlds_into_an_empty_folder_each_get_their_files_and_page_section(t
                  for i, (n, s, w) in enumerate((("persistence", 2, "lv"), ("linear", 3, "lv"),
                                                 ("persistence", 2, "pendulum"), ("linear", 3, "pendulum")))]
     (tmp_path / "out").mkdir()
-    paths = write_run(envelopes, BASELINES, tmp_path / "out", MARGIN)
+    paths = write_run(envelopes, BASELINES, tmp_path / "out", MARGIN, FINGERPRINT)
     names = sorted(p.name for p in paths.verdicts)
     assert names == ["lv-linear.json", "lv-persistence.json", "pendulum-linear.json", "pendulum-persistence.json"]
     html = paths.page.read_text(encoding="utf-8")
@@ -267,7 +269,7 @@ def test_a_symlinked_or_parentless_output_folder_is_refused(tmp_path):
     with pytest.raises(OutputFolderError, match="plain folder"):
         _write(tmp_path)
     with pytest.raises(OutputFolderError, match="parent"):
-        write_run(run_envelopes(), BASELINES, tmp_path / "missing" / "deeper" / "out", MARGIN)
+        write_run(run_envelopes(), BASELINES, tmp_path / "missing" / "deeper" / "out", MARGIN, FINGERPRINT)
     assert sorted(p.name for p in tmp_path.iterdir()) == ["out", "real"] and not any((tmp_path / "real").iterdir())
 
 
@@ -276,7 +278,7 @@ def test_the_matching_margin_is_checked_before_anything_is_written(tmp_path, mar
     from wmj.reporting.writer import write_run
 
     with pytest.raises(VerdictSchemaError, match="matching margin"):
-        write_run(run_envelopes(), BASELINES, tmp_path / "out", margin)
+        write_run(run_envelopes(), BASELINES, tmp_path / "out", margin, FINGERPRINT)
     assert list(tmp_path.iterdir()) == []
 
 
@@ -318,7 +320,7 @@ def test_a_nameless_output_folder_is_refused(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     for name in (".", "sub/.."):
         with pytest.raises(OutputFolderError, match="must name a folder"):
-            write_run(run_envelopes(), BASELINES, name, MARGIN)
+            write_run(run_envelopes(), BASELINES, name, MARGIN, FINGERPRINT)
     assert list(tmp_path.iterdir()) == []
 
 
@@ -328,3 +330,94 @@ def test_names_that_differ_only_in_case_are_refused_as_one_file_name(tmp_path):
     with pytest.raises(VerdictSchemaError, match="same file names"):
         _write(tmp_path, envelopes)
     assert list(tmp_path.iterdir()) == []
+
+
+
+# --- code-review-004 ---------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "change, match",
+    [
+        (lambda r: r.pop("tolerance"), "exactly"),
+        (lambda r: r.update(extra=1), "exactly"),
+        (lambda r: r.update(action_blind=1), "valid MU-3"),
+        (lambda r: r.update(n_probes=0), "valid MU-3"),
+        (lambda r: r.update(n_responding=49), "valid MU-3"),
+        (lambda r: r.update(largest_change=float("nan")), "valid MU-3"),
+        (lambda r: r.update(tolerance=0.0), "valid MU-3"),
+        (lambda r: r.update(action_blind=True), "contradicts"),  # 48 of 48 responded, yet called blind
+        (lambda r: r.update(largest_change=1e-12), "contradicts"),  # responded, yet nothing moved past the tolerance
+    ],
+)
+def test_an_action_response_result_that_does_not_add_up_is_refused(tmp_path, change, match):
+    envelopes = run_envelopes()
+    change(envelopes[2]["action_response"])
+    with pytest.raises(VerdictSchemaError, match=match):
+        _write(tmp_path, envelopes)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_each_models_action_response_is_in_its_verdict_file_and_said_plainly_on_the_page(plain_run):
+    from wmj.reporting import page
+
+    record = json.loads((plain_run / "verdicts" / "lv-direct.json").read_text(encoding="utf-8"))
+    assert record["action_response"]["action_blind"] is False
+    html = (plain_run / "results.html").read_text(encoding="utf-8")
+    assert html.count(page.escape(page.ACTION_BASELINE)) == 2  # persistence and linear, by construction
+    assert page.escape(page.ACTION_RESPONDS.format(k=48, n=48)) in html
+    assert "Flagged" not in html  # no real model is action-blind in this run
+
+
+def test_an_action_blind_real_model_is_flagged_and_an_action_blind_fixture_is_not(tmp_path):
+    from tests.unit.reporting._verdict_blocks import action_response
+    from wmj.reporting import page
+
+    envelopes = run_envelopes()
+    by = {e["model_name"]: e for e in envelopes}
+    by["ensemble"]["action_response"] = action_response(blind=True)
+    by["fx-brittle"]["action_response"] = action_response(blind=True)
+    _write(tmp_path, envelopes)
+    html = (tmp_path / "out" / "results.html").read_text(encoding="utf-8")
+    assert html.count(page.escape(page.ACTION_FLAGGED.format(n=48))) == 1
+    assert html.count(page.escape(page.ACTION_FIXTURE)) == 1
+    ensemble = html[html.index("<h3>ensemble</h3>") + len("<h3>ensemble</h3>"):]
+    assert ensemble.index("Flagged (MU-3)") < ensemble.index("<h3")  # in ensemble's own section, before the next
+
+
+@pytest.mark.parametrize("fingerprint", [None, {}, {"cpu": object()}, ["linux"]])
+def test_the_runtime_fingerprint_is_required_and_plain(tmp_path, fingerprint):
+    from wmj.reporting.writer import write_run
+
+    with pytest.raises(VerdictSchemaError):
+        write_run(run_envelopes(), BASELINES, tmp_path / "out", MARGIN, fingerprint)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_an_interrupt_just_after_the_final_move_is_reported_as_itself(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    real = Path.replace
+
+    def moved_then_interrupted(self, target):
+        result = real(self, target)
+        if self.name.endswith(".partial"):
+            raise KeyboardInterrupt
+        return result
+
+    monkeypatch.setattr(Path, "replace", moved_then_interrupted)
+    with pytest.raises(KeyboardInterrupt):  # not a FileNotFoundError from cleaning a folder already moved
+        _write(tmp_path)
+    assert (tmp_path / "out" / "results.html").exists() and not (tmp_path / "out.partial").exists()
+
+
+def test_chart2_draws_exactly_the_named_baselines_in_grey(plain_run):
+    # code-review-004: feeding every real model in as a "baseline" passed every test
+    import re
+
+    from wmj.reporting import style
+
+    for model in ("direct", "ensemble", "fx-brittle", "persistence"):
+        svg = (plain_run / "charts" / f"lv-{model}-horizon.svg").read_text(encoding="utf-8")
+        grey = set(re.findall(r'<text[^>]*fill: ?' + style.BASELINE_COLOUR + r'[^>]*>\s*([^<]+?)\s*</text>', svg, re.IGNORECASE))
+        assert grey == BASELINES - {model}, (model, grey)

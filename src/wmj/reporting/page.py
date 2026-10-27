@@ -79,6 +79,7 @@ class ModelSection:
     horizon: Shown
     calibration: Shown
     exceptions: tuple[tuple[str, str, int, Shown], ...]  # (task, region, horizon step, chart), in verdict order
+    action: str  # the MU-3 action-response sentence for this model (`action_sentence`)
 
 
 @dataclass(frozen=True)
@@ -86,6 +87,29 @@ class WorldSection:
     world: str
     comparison: Shown
     models: tuple[ModelSection, ...]
+
+
+# MU-3 (owner decision 2026-10-26, code-review-004): what the action-response check found, in words. A baseline
+# ignores the lever by construction and a fixture may be built to; neither is ever presented as a finding.
+ACTION_RESPONDS = ("Responds to its action lever: its guess or its error bar moved in {k} of {n} probe pairs "
+                   "(MU-3 check).")
+ACTION_BASELINE = ("Ignores its action lever, by construction: it is a simple baseline that only looks at the past. "
+                   "This is expected and is not a finding.")
+ACTION_FIXTURE = ("Ignores its action lever: it is a deliberately broken test model, and the check catching it is the "
+                  "instrument working, not a finding.")
+ACTION_FLAGGED = ("Flagged (MU-3): this model's guess and error bar did not change with the action lever in any of "
+                  "{n} probe pairs, so it is not using the action it is given.")
+
+
+def action_sentence(action_blind: bool, n_probes: int, n_responding: int, *, is_fixture: bool, is_baseline: bool) -> str:
+    """The one sentence the page prints about a model's action-response check."""
+    if not action_blind:
+        return ACTION_RESPONDS.format(k=n_responding, n=n_probes)
+    if is_baseline:
+        return ACTION_BASELINE
+    if is_fixture:
+        return ACTION_FIXTURE
+    return ACTION_FLAGGED.format(n=n_probes)
 
 
 def escape(text: str) -> str:
@@ -110,6 +134,7 @@ def _model(section: ModelSection) -> list[str]:
     parts = [f"<h3{css}>{escape(name)}</h3>"]
     if section.is_fixture:
         parts.append(f'<p class="fixture">{escape(style.FIXTURE_LABEL)}</p>')
+    parts.append(f"<p>{escape(section.action)}</p>")
     parts += [_figure(section.horizon), _figure(section.calibration)]
     tasks = list(dict.fromkeys(task for task, _r, _s, _c in section.exceptions))
     for task in tasks:  # ADR-R2: a task's exception charts side by side

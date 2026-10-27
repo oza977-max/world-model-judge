@@ -4,7 +4,7 @@ In plain words: every chart starts from the same envelope the harness hands over
 it is a deliberately broken test fixture, which world, and the verdict (judge §5) — and ends by writing
 a PNG, an SVG and a caption under names built from those same words. Both steps live here once, so
 every chart refuses the same bad input the same way and names its files by the same rule
-(`{world}-{model}-{chart}…`, reporting ADR-R5). Names are 1 to 40 letters, digits, '.', '_' or '-':
+(`{world}-{model}-{chart}…`, reporting ADR-R5). Names are 1 to 40 letters, digits, '.', '_' or '-', with a '.' only inside:
 safe in a file name and short enough to fit a chart's header strip.
 """
 
@@ -16,7 +16,9 @@ from pathlib import Path
 
 from wmj.reporting import style
 
-_FILE_SAFE = re.compile(r"[A-Za-z0-9._-]{1,40}")
+# 1 to 40 characters; a "." only inside a name, never first (a hidden file) or last (it would end a caption's
+# sentence early: code-review-004)
+_FILE_SAFE = re.compile(r"[A-Za-z0-9_-]([A-Za-z0-9._-]{0,38}[A-Za-z0-9_-])?")
 
 
 @dataclass(frozen=True)
@@ -41,7 +43,8 @@ class Envelope:
 def file_part(label: str, value: object) -> str:
     """`value` if it can be part of a file name and a header strip, else ValueError."""
     if type(value) is not str or not _FILE_SAFE.fullmatch(value):
-        raise ValueError(f"{label} {value!r} cannot be part of a file name (1 to 40 letters, digits, '.', '_', '-')")
+        raise ValueError(f"{label} {value!r} cannot be part of a file name (1 to 40 letters, digits, '.', '_', '-'; "
+                         "a '.' only inside the name)")
     return value
 
 

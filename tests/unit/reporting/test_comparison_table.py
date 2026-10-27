@@ -378,6 +378,11 @@ def test_closeness_is_the_ratio_of_errors_not_their_difference():
     assert ct._closest(pairs, MARGIN) == (("c", "d"), False)
 
 
+def test_one_step_is_singular():
+    assert ct._horizon_text(ct.Horizon(1, 0.02, None)).startswith("1 step\n")
+    assert ct._horizon_text(ct.Horizon(2, 0.04, None)).startswith("2 steps\n")
+
+
 def test_a_world_time_of_exactly_one_is_singular():
     assert "1 time unit\n" in ct._horizon_text(ct.Horizon(50, 1.0, None))
     assert "2 time units\n" in ct._horizon_text(ct.Horizon(100, 2.0, None))

@@ -18,8 +18,12 @@ divergence curve (P2-C03) is attached as the reference line.
 
 It also runs the CRPS/skill path (judge ADR-J1) over real one-step
 trials — persistence against linear — and hands the number back for
-the command's summary line. It writes nothing itself: the files under
-`out/` are written by `wmj.reporting` (design-review-008 C8).
+the command's summary line. It writes nothing itself: its files are
+written by `wmj.reporting`, into their own folder, `out-preview/`, never
+into `out/` (code-review-004: a preview written into a finished run's
+`out/` silently replaced one of its charts, and one written first made
+the real run refuse to start). A folder holding a run's
+`run-manifest.json` is refused.
 
 `wmj chart-preview` is internal-only (reporting ADR-R5): not part of
 the public `run`/`verify` pair, and not in the README.
@@ -54,6 +58,7 @@ DEFAULT_HORIZON = lv.HORIZON
 N_TRAIN = 8  # training trajectories for the baselines' spread fits
 H_TRAIN = 50
 CHART_STEM = "lv-persistence-horizon"
+PREVIEW_DIR = Path("out-preview")  # never `out/`, which belongs to `wmj run` and its writer
 MODEL_LABEL = "persistence"
 
 
@@ -208,9 +213,14 @@ def run_chart_preview(
     n_trials: int = DEFAULT_N_TRIALS,
     horizon: int = DEFAULT_HORIZON,
     seed: int = DEFAULT_SEED,
-    out_dir: Path = Path("out"),
+    out_dir: Path = PREVIEW_DIR,
 ) -> PreviewResult:
     """Compute the block, hand it to reporting, return where things went."""
+    if (Path(out_dir) / "run-manifest.json").exists():
+        raise PreviewArgumentError(
+            f"chart-preview: {out_dir} holds a finished run (run-manifest.json); the preview never writes into "
+            "a run's output folder — use another folder"
+        )
     seeds = SeedSource(run_seed=seed, my_name=None)
     block = build_lv_persistence_error_vs_horizon(seeds, n_starts, n_trials, horizon)
     out_dir = Path(out_dir)

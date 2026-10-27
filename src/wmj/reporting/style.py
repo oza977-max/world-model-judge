@@ -26,6 +26,10 @@ Figures are created directly from `matplotlib.figure.Figure`, never
 through `pyplot`: no global figure registry, no display backend, no
 hidden state between renders.
 
+Every chart starts from matplotlib's built-in defaults, never from a
+settings file the machine or the current folder happens to hold, and
+pins its font to the one matplotlib ships with (code-review-004).
+
 One deliberate piece of process-wide state remains: `apply_style()`
 writes into `matplotlib.rcParams`, which is global. This is safe only
 because the project has exactly one style and every `new_figure()`
@@ -97,13 +101,22 @@ _RC = {
     "grid.linewidth": 0.6,
     "axes.titleweight": "normal",
     "font.size": 9.0,
+    # the font matplotlib ships with, so every machine draws the same glyphs (code-review-004: an ambient
+    # setting chose another installed font, and every SVG and PNG changed)
+    "font.family": ["DejaVu Sans"],
     "svg.hashsalt": SVG_HASHSALT,
     "svg.fonttype": "none",  # text stays text: diff-able, grep-able SVG
 }
 
 
 def apply_style() -> None:
-    """Install the ADR-R1 style into matplotlib's rcParams (idempotent)."""
+    """Install the ADR-R1 style into matplotlib's rcParams (idempotent).
+
+    It starts from matplotlib's own built-in defaults, not from whatever settings file the machine, the user
+    or the current folder supplied (`matplotlibrc`): code-review-004 found that such a file changed the
+    charts' fonts, sizes and bytes while every test still passed. Only the settings below are ours; every
+    other setting is matplotlib's shipped default, the same on every machine."""
+    matplotlib.rcdefaults()
     matplotlib.rcParams.update(_RC)
 
 

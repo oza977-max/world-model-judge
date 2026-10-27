@@ -21,6 +21,7 @@ Project-level calibration layer for GVM review skills (`/gvm-design-review`, `/g
 | 10 | 2026-09-28 | design (dual/blind, recipe-revision quick check) | — (see per-panel) | 6 | 5 | 5 | 4 | 3 | 3² | n/a |
 | 1 | 2026-09-05 | code | — (see per-panel) | 9¹ | 7¹ | 6¹ | 6¹ | 7¹ | n/a¹ | n/a¹ |
 | 2 | 2026-10-06 | code (Phase 3; 3 combined panels A+D, B+C, E; strict) | — (see per-panel) | 7¹ | 7¹ | 8¹ | 7¹ | 6¹ | n/a¹ | n/a¹ |
+| 4 | 2026-10-27 | code (Phase 5 reporting; 3 combined panels A+D, B+C, E+security, plus 1 blind; strict) | — (see per-panel) | 8¹ | 7¹ | 7¹ | 8¹ | 6¹ | n/a¹ | n/a¹ |
 
 ² Round 10's Panel F was a runtime/re-runnability quality-attribute panel (ATAM utility tree: NF-2's whole-run-in-minutes leaf rated H,H), recorded in the F1 column for a single history.
 
@@ -353,4 +354,14 @@ Genuinely verified sound: NF-4's `--batch` mechanism (three independent executio
 **Verdict (after owner triage): Merge with caveats.** 1 Critical, 2 Important, 13 Minor, 7 Observations. Panels: three calibrated defect-class panels plus one blind panel, run lean without the slow gates; Panel F omitted (no STUBS.md). The Critical was a design-level flaw found by running a calibrated model through the exception rule: per-quantity 90% checks make an honest d-quantity model miss 1−0.9^d of the time (19% at d = 2, 34% at d = 4). Owner ruled for the joint (chi-square) 90% region; fixed and mutation-checked; backlog A39 holds the spec text to correct. Important: climatology table in raw rather than judge units (fixed, `judge_tables` now takes the scale); hedge flag used the wrong step's width (fixed). (A first draft of this row and of the report also listed the D20 disclosure and a test-gap batch as findings of this round; they came from an earlier chunk-level triage and were removed the same day.) Cheap Minors fixed; door-tightening and test-helper refactors deferred to REMEMBER §3.
 
 **Recurring pattern:** a rule right for one quantity extended to several without re-deriving it; estimate-instead-of-measure (third appearance across rounds 5, 10 and now). **Deviation:** fewer panels than the skill's full list, and the fix pass was verified by the author's mutation tests rather than a fresh independent re-review.
+
+## Code review round 4 (2026-10-27, Phase 5 — reporting)
+
+**Verdict (after owner triage): Merge with caveats.** 0 Critical, 8 Important (5 of them found by two panels independently, elevated per the skill's rule), about 12 Minor, about 15 Observations. Panels: References & Naming (A+D), Contracts & Logic (B+C), Ordering, Determinism & Security (E), plus one blind panel; Panel F omitted (no STUBS.md). Report: `code-review/code-review-004.html`.
+
+**Owner triage (2026-10-27):** fix all now (findings 1, 2, 5, 6, 7 and the Minors); the run fingerprint (A29) goes in `run-manifest.json`, handed to the writer by the harness, not into the envelope's `meta`; each model's action-response result (MU-3) becomes a sixth envelope field, written into the verdict file and shown on the page (baselines "by construction", never as a finding); a model with exactly zero error stays deferred to the design review.
+
+**Recurring pattern:** an unpinned ambient input changes the output. Round 2 (code-review-002) found CPU kernels changing weights; this round found the machine's matplotlib settings changing chart bytes and geometry. The tests ran in a clean environment, so they could not see it. Build check to promote: any byte-identity test must also run with a hostile ambient configuration. **Second pattern:** credibility-critical sentences were tested by comparison with their own constant, so a meaning flip passed. Sentences that carry the project's claims need literal tests. **Third:** cross-phase contract gaps (two owner decisions, A26 and A29, had no slot in the writer), visible only to a panel that read REMEMBER's Phase 6 notes against the code.
+
+**Anchor examples:** best: the blind panel's mutation that flipped "not a finding" and passed 254 tests. Worst-missed by four per-chunk reviews: the ambient matplotlib configuration, because every chunk review ran in the same container.
 

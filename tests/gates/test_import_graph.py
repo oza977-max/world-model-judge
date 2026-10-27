@@ -439,7 +439,7 @@ def test_tc_nf6_07_08_09_is_a_real_allowlist_not_just_a_four_item_denylist():
 # --- TC-NF6-10 (design-review-009 I3/A9): the reporting-side outward-import gate ---
 
 
-def test_tc_nf6_10_reporting_never_imports_worlds_harness_or_models():
+def test_tc_nf6_10_reporting_imports_only_its_allowlist_never_worlds_models_or_the_wider_harness():
     reporting_files = _reporting_source_files()
     assert len(reporting_files) > 0, "expected real reporting source files to exist by now"
     for path in reporting_files:
@@ -470,6 +470,7 @@ def test_tc_nf6_10_allows_the_sanctioned_reporting_imports():
         "from wmj.judge.verdict import Verdict\n",
         "from wmj.reporting import style\n",
         "import importlib.metadata\n",
+        "from wmj.harness.serialize import canonical_serialize\n",  # owner decision 2026-10-26 (A39 item 24)
     ):
         tree = ast.parse(source)
         assert _reporting_gate_violations(tree) == [], f"{source!r} was wrongly flagged"
@@ -481,5 +482,20 @@ def test_tc_nf6_10_is_a_real_allowlist_not_just_a_denylist():
     socket` inside a reporting file would sail through uncaught, and
     byte-identity cannot catch a deterministic leak through it."""
     for source in ("import os\n", "import socket\n", "import subprocess\n", "import sys\n"):
+        tree = ast.parse(source)
+        assert _reporting_gate_violations(tree) != [], f"{source!r} was not caught"
+
+
+
+def test_tc_nf6_10_only_the_serializer_module_of_the_harness_is_allowed():
+    """Owner decision 2026-10-26 (A39 item 24): exactly `wmj.harness.serialize`, not the harness package.
+    code-review-004 found that widening the entry to `wmj.harness` passed every other test."""
+    for source in (
+        "from wmj.harness import prereg\n",
+        "import wmj.harness.preview\n",
+        "import wmj.harness\n",
+        "from wmj.harness.prereg import read_matching_margin\n",
+        "from wmj.harness import serialize\n",  # the module, but through the package: still the package import
+    ):
         tree = ast.parse(source)
         assert _reporting_gate_violations(tree) != [], f"{source!r} was not caught"

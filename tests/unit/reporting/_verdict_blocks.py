@@ -49,7 +49,18 @@ def baseline_envelopes(seed_offset: int = 10) -> list[dict]:
 META = {"seed": 20260825, "platform": "linux-x86_64", "prereg_commit": "0" * 40, "thresholds_file": "prereg/thresholds.json"}
 
 
-def full_envelope(*, name="direct", is_fixture=False, seed=1, world="lv", ref="opaque-0"):
+def action_response(blind=False):
+    """An MU-3 result shaped as `harness.action_response.ActionResponseResult` gives it."""
+    if blind:
+        return {"action_blind": True, "n_probes": 48, "n_responding": 0, "largest_change": 0.0, "tolerance": 1e-9}
+    return {"action_blind": False, "n_probes": 48, "n_responding": 48, "largest_change": 0.031, "tolerance": 1e-9}
+
+
+FINGERPRINT = {"python": "3.11.0", "numpy": "2.0.0", "blas": "openblas 0.3", "platform": "linux-x86_64",
+               "cpu_features": ["AVX2"], "openblas_coretype_override": ""}
+
+
+def full_envelope(*, name="direct", is_fixture=False, seed=1, world="lv", ref="opaque-0", action_blind=False):
     """A complete envelope: every verdict group computed by the real judge and assembled through its door."""
     from wmj.judge.calibration import compute_calibration as calibration
     from wmj.judge.exceptions import compute_exceptions_and_trials
@@ -66,7 +77,8 @@ def full_envelope(*, name="direct", is_fixture=False, seed=1, world="lv", ref="o
         calibration=calibration(inp), sharpness=compute_sharpness(inp), exceptions=exceptions, trials=trials,
         climatology=compute_climatology(inp), trust_horizons=compute_trust_horizons(inp),
     )
-    return {"model_ref": ref, "model_name": name, "is_fixture": is_fixture, "verdict": verdict.to_dict(), "meta": dict(META)}
+    return {"model_ref": ref, "model_name": name, "is_fixture": is_fixture, "verdict": verdict.to_dict(), "meta": dict(META),
+            "action_response": action_response(action_blind)}
 
 
 def set_crps(env, crps, task="lv-control", region="training"):
@@ -89,12 +101,12 @@ def set_horizon(env, steps, task="lv-control", region="training", cycle=3.5):
 def run_envelopes():
     """One world's run: two baselines, two unrigged models and a fixture, every one judged by the real judge."""
     return [
-        full_envelope(name="persistence", seed=2, ref="opaque-0"),
-        full_envelope(name="linear", seed=3, ref="opaque-1"),
+        full_envelope(name="persistence", seed=2, ref="opaque-0", action_blind=True),  # baselines ignore the action
+        full_envelope(name="linear", seed=3, ref="opaque-1", action_blind=True),
         full_envelope(name="direct", seed=1, ref="opaque-2"),
         full_envelope(name="ensemble", seed=4, ref="opaque-3"),
         full_envelope(name="fx-brittle", is_fixture=True, seed=5, ref="opaque-4"),
     ]
 
 
-__all__ = ["META", "Forecasts", "baseline_envelopes", "envelope", "full_envelope", "run_envelopes", "set_crps", "set_horizon"]
+__all__ = ["FINGERPRINT", "META", "Forecasts", "action_response", "baseline_envelopes", "envelope", "full_envelope", "run_envelopes", "set_crps", "set_horizon"]

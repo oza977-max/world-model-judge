@@ -141,6 +141,16 @@ def _check_pair(entry: dict, trial: dict) -> None:
         raise ExceptionBlockError(f"{where}: is_exception has the wrong length for n_trials = {n}")
     if any(type(f) is not bool for f in flags):
         raise ExceptionBlockError(f"{where}: is_exception must hold only True or False")
+    distances, lines = trial["outcome_distance"], trial["band_hi"]
+    if any(flag != (d > line) for flag, d, line in zip(flags, distances, lines, strict=True)):
+        # code-review-004: the caption says "dots above it are the misses, circled in red", so a flag must
+        # agree with its dot; the judge decides both the same way (miss iff distance > line)
+        raise ExceptionBlockError(f"{where}: an is_exception flag disagrees with its dot and the line; the chart "
+                                  "would circle a dot inside the range, or miss one outside it")
+    unit = trial["distance_unit"]
+    if type(unit) is not str or unit.split(":")[0] != "stated-size":
+        raise ExceptionBlockError(f"{where}: distance_unit must be in the model's stated sizes, as the axis says, "
+                                  f"got {unit!r}")
     if not _is_whole(entry["observed"], 0) or entry["observed"] != sum(flags):
         raise ExceptionBlockError(f"{where}: observed = {entry['observed']!r} but is_exception flags {sum(flags)} misses")
     if _band_of(entry["observed"], entry["bands"]) != entry["band"]:

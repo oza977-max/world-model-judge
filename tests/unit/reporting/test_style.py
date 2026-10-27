@@ -198,3 +198,19 @@ def test_the_fixture_sentence_wraps_to_a_narrow_panel_and_still_counts_as_the_la
     assert style.has_fixture_mark(fig)
     wide = style.new_figure().subplots()
     assert "\n" not in style.mark_fixture(wide).get_text()  # a wide panel keeps one line
+
+
+# --- code-review-004: the sentences that carry the project's claims, pinned as literals -------------------
+
+
+def test_the_fixture_sentence_is_exactly_adr_r4s():
+    assert style.FIXTURE_LABEL == ("TEST FIXTURE — deliberately broken model; a detected fault here is the instrument "
+                                   "working, not a finding.")
+
+
+def test_the_style_starts_from_matplotlibs_defaults_with_the_bundled_font():
+    import matplotlib
+
+    matplotlib.rcParams["savefig.bbox"] = "tight"  # an ambient setting the style must not inherit
+    style.apply_style()
+    assert matplotlib.rcParams["savefig.bbox"] is None and matplotlib.rcParams["font.family"] == ["DejaVu Sans"]

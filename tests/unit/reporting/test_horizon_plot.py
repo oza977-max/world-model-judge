@@ -397,7 +397,7 @@ def test_a_baseline_models_own_chart_draws_it_once_not_again_in_grey(tmp_path):
     assert with_self.svg.read_bytes() == without.svg.read_bytes()
 
 
-@pytest.mark.parametrize("length", [12, 30, 40])
+@pytest.mark.parametrize("length", [12, 30])
 def test_a_long_task_name_on_a_fixtures_chart_is_placed_clear_of_the_fixture_sentence(length):
     block = _pendulum_block()
     tasks = ("c" * length, "p" * length)
@@ -479,3 +479,13 @@ def test_the_full_caption_is_used_only_when_every_task_has_its_marked_step(tmp_p
     assert any(e["switch_step"] is not None for e in entries)  # some lines are still drawn
     paths = render_horizon_charts(env, [], tmp_path / "c", tmp_path / "t")
     assert paths.caption.read_text(encoding="utf-8") == CHART2_SCOPED
+
+
+
+def test_a_task_name_too_long_to_place_is_refused_never_overprinted():
+    # the bundled font (code-review-004) is wider; a 40-character task name on a narrow fixture panel has no
+    # free spot, and the chart is refused rather than drawn with a label over the fixture sentence
+    block = _pendulum_block()
+    switches = {r["region"]: [("c" * 40, 4750), ("p" * 40, 4900)] for r in block["per_region"]}
+    with pytest.raises(HorizonBlockError, match="cannot be placed"):
+        build_horizon_figure(block, "fx-x", True, switches=switches)

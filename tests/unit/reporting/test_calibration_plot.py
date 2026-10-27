@@ -207,3 +207,11 @@ def test_at_full_coverage_the_diagonals_label_keeps_the_top_slot_at_its_line_end
     for ax in chart.panels:
         labels = sorted((t for t in ax.texts if t.get_text() and t.get_bbox_patch() is None), key=lambda t: -t.get_window_extent().y1)
         assert labels[0].get_text() == cp.DIAGONAL_LABEL
+
+
+
+def test_the_caption_speaks_of_the_90_percent_level():
+    from wmj.reporting.captions import chart3_caption
+
+    _, chart = _figure()
+    assert chart.caption == chart3_caption(level=90) and "said it was 90% sure" in chart.caption

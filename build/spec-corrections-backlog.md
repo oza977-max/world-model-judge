@@ -1335,8 +1335,8 @@ the region instead, same total size (200 starts × 1,000 steps = 200,000 samples
 
 24. **The writer reaches the canonical serializer through one allowlisted module (cross-cutting ADR-002 rule 4; TC-NF6-10), owner decision 2026-10-26.**
     - The conflict: the spec requires `writer.py` to write `out/verdicts/*.json` and `run-manifest.json` with the one shared serializer, but TC-NF6-10's allowlist did not let reporting import the harness, or even `json`.
-    - The resolution: exactly `wmj.harness.serialize` was added to `REPORTING_ALLOWLIST`. The rest of the harness stays forbidden.
-    - TC-NF6-10's allowlist text should name it.
+    - The resolution: exactly `wmj.harness.serialize` was added to `REPORTING_ALLOWLIST`. The rest of the harness stays forbidden (pinned by `test_tc_nf6_10_only_the_serializer_module_of_the_harness_is_allowed`).
+    - Three texts state the old closed set and should name it: TC-NF6-10, cross-cutting ADR-003 item 10, and reporting §4.
 25. **Chart 4's disagreement rule (ADR-R2 Chart 4), owner decision 2026-10-26.**
     - **Why change it:** the spec's literal rule ("rows where error-rank and any trust-horizon rank disagree") marks tied rows (several models at 0 steps) and says nothing about fixtures.
     - **Discordant pair:** two non-fixture models where `crps` puts one strictly ahead and some trust-horizon column puts the other strictly ahead. A tie on either side is not disagreement.
@@ -1356,7 +1356,7 @@ the region instead, same total size (200 starts × 1,000 steps = 200,000 samples
     - Where the spec lags: judge §4 and cross-cutting ADR-002 rule 3 still name only `ctypes` and pre-capture. TC-JU12-04's three-way consistency holds once A37 is applied to those two texts.
     - The model card shows ten limitations (A39 items 10, 11 and 16), not the spec's seven.
 28. **The writer (ADR-R5, §7):**
-    - the call is `write_run(envelopes, baseline_names, out_dir)`;
+    - the call is `write_run(envelopes, baseline_names, out_dir, matching_margin, fingerprint)` (the last two added by items 29 and 41);
     - it refuses an `out_dir` that holds files, because a run never mixes with an older one; `wmj run` (P6-C01) decides how to clear it;
     - everything is written into a sibling `out.partial/` and moved into place with one rename. A failure part-way removes the staging folder, so no partial `out/` ever exists;
     - each verdict must round-trip through the judge's `Verdict` unchanged (`VerdictSchemaError` otherwise), and `meta` must be identical across envelopes;
@@ -1404,3 +1404,31 @@ the region instead, same total size (200 starts × 1,000 steps = 200,000 samples
 5. **Owed by P6-C01:** call `write_run(...)` from `wmj run`, and move or drop `harness/skeleton.py`'s write into `out/` (sole-writer rule; it also makes `out/` non-empty, which `write_run` refuses). Both are in `REMEMBER.md`.
 
 *Where recorded:* `REMEMBER.md` §3 (Phase 5 line).
+
+### A41 — code-review-004 (Phase 5, reporting): decisions and corrections (2026-10-27)
+
+**In plain words:** the Phase 5 code review found that the charts depended on the machine's own matplotlib settings. It also found two facts the harness must record, the machine's fingerprint and whether each model responds to its action lever, that had nowhere to go. And it found some sentences and checks that no test protected. The owner decided where the two facts go; the rest are fixes the spec should catch up with.
+
+1. **The style starts from matplotlib's built-in defaults (reporting ADR-R1, §7, TC-RP7-02).** `style.apply_style` calls `matplotlib.rcdefaults()` before applying its own settings and pins `font.family` to "DejaVu Sans", the font matplotlib ships with. Before, a `matplotlibrc` in the current folder, the user's config folder or the system changed every chart's bytes, its font and even its size, while every test passed (they ran in one clean environment). A test now renders a whole run with a hostile settings file in the current folder and the config folder, and requires every SVG and PNG to be byte-identical. ADR-R1 should say the style starts from matplotlib's defaults, not just "a fixed style". One consequence: the wider font cannot place a 40-character task-name label on a three-panel fixture chart, so that chart is refused, not overprinted. Real task names are at most 11 characters.
+2. **The runtime fingerprint goes in the manifest (amends A29 item 2), owner decision 2026-10-26.** `write_run(..., fingerprint)` takes `harness.fingerprint.runtime_fingerprint()` and writes it into `run-manifest.json` as `runtime_fingerprint`, beside `package_versions`. The envelope's `meta` stays judge §5's four fields. A29 item 2 ("in its envelope's meta") and reporting §6 ("the manifest is `meta`'s four fields plus `package_versions`") should both say so.
+3. **Each model's action-response result is a sixth envelope field (MU-3; A26 items 4–5), owner decision 2026-10-26.** The envelope carries `action_response` (`action_blind`, `n_probes`, `n_responding`, `largest_change`, `tolerance`: `dataclasses.asdict` of `harness.action_response.ActionResponseResult`). The writer checks it for consistency, writes it into the verdict file, and the page prints one sentence per model:
+   - a model that responds: how many probe pairs moved;
+   - a baseline: "ignores its action lever, by construction … not a finding";
+   - an action-blind fixture: "the instrument working, not a finding";
+   - an action-blind real model: "Flagged (MU-3)".
+   Judge §5's envelope (five keys) and reporting §5 should add the field, and TC-MU3-04 should say where the flag is shown.
+4. **`wmj chart-preview` writes to `out-preview/`, never `out/`.** Its files had the same names as a real run's Chart 2, so a preview after `wmj run` silently replaced one of the run's charts, and one before made the writer refuse. It also refuses a folder holding a `run-manifest.json`. The implementation guide's P2-C05 text names `out/charts/lv-persistence-horizon.png` and should name `out-preview/`. `.gitignore` now lists `out.partial/` and `out-preview/`.
+5. **Chart 1 cross-checks what it circles.** Each `is_exception` flag must agree with its dot (`outcome_distance > band_hi`), and `distance_unit` must be in stated sizes, as the axis says; otherwise the chart is refused. The caption says "dots above it are the misses, circled in red", so a disagreeing verdict cannot be drawn. The P5-C02 pin "drawn as-is, never re-derived" is amended. The judge decides both the same way, so real verdicts are unaffected. The verdict door could make the same check.
+6. **Names:** a world, model, task or region name may contain a "." only inside it, never first (it would make a hidden file) or last (it would end a caption's sentence early).
+7. **Display choices not yet recorded (A39 item 22):**
+   - Chart 1's hedging note sits on its own second header line (§7 shows it appended to the strip);
+   - Chart 3's sharpness strip has a `task …` line, then one region per line (the spec shows one line joined by "·");
+   - Chart 1's file name is `{world}-{model}-exceptions-{task}-{region}-h{step}` (ADR-R5 shows `{chart}` only).
+8. **Deferred to the design review (owner decision 2026-10-26):** an exact zero error at step ≥ 1 is accepted by the judge but refused by Chart 2's log axis, so the whole run writes nothing. The review decides between drawing zeros as a marked floor and refusing them at the door. No real model or baseline reaches exactly zero.
+9. **For the design review (observations, not fixed):**
+   - Chart 4 shows a trust horizon equal to the task's whole horizon exactly like a measured limit; the verdict does not say it is capped.
+   - The page's methods note describes the ten-run check that P6 wires.
+   - Line-end labels over about 30 characters clip at the figure edge.
+
+*Where recorded:* `code-review/code-review-004.html`; `REMEMBER.md` §3 (P6-C01 notes).
+

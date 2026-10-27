@@ -24,6 +24,7 @@ matplotlib versions, read here at write time (reporting §6).
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from importlib.metadata import version
 from pathlib import Path
@@ -39,7 +40,10 @@ from wmj.reporting.envelope import ChartPaths, read_envelope
 from wmj.reporting.exception_plot import render_exception_charts
 from wmj.reporting.horizon_plot import render_horizon_charts
 
-ENVELOPE_KEYS = frozenset({"model_ref", "model_name", "is_fixture", "verdict", "meta"})
+# the harness's envelope (judge §5) plus `action_response`, each model's MU-3 check result (owner decision
+# 2026-10-26, code-review-004): it is written into the verdict file and printed on the page
+ENVELOPE_KEYS = frozenset({"model_ref", "model_name", "is_fixture", "verdict", "meta", "action_response"})
+ACTION_KEYS = frozenset({"action_blind", "n_probes", "n_responding", "largest_change", "tolerance"})
 META_KEYS = frozenset({"seed", "platform", "prereg_commit", "thresholds_file"})  # judge §5: exactly four
 VERDICT_FIELDS = ("world", "skill", "error_vs_horizon", "calibration", "sharpness", "exceptions", "trials",
                   "climatology", "trust_horizons", "not_tested", "limitations")
@@ -111,6 +115,20 @@ def _check_meta(index: int, meta: object) -> dict:
     return meta
 
 
+def _check_action(index: int, result: object) -> None:
+    """The MU-3 result as `harness.action_response.ActionResponseResult` gives it, consistent with itself."""
+    if type(result) is not dict or set(result) != ACTION_KEYS:
+        raise VerdictSchemaError(f"envelope {index}: action_response must have exactly {sorted(ACTION_KEYS)} (MU-3)")
+    blind, n, k, largest, tol = (result[key] for key in ("action_blind", "n_probes", "n_responding", "largest_change", "tolerance"))
+    numbers_ok = all(type(v) is float and math.isfinite(v) for v in (largest, tol)) and largest >= 0 and tol > 0
+    counts_ok = type(n) is int and type(k) is int and 1 <= n and 0 <= k <= n
+    if type(blind) is not bool or not numbers_ok or not counts_ok:
+        raise VerdictSchemaError(f"envelope {index}: action_response values are not a valid MU-3 result: {result!r}")
+    if blind != (k == 0) or (k == 0) != (largest <= tol):
+        raise VerdictSchemaError(f"envelope {index}: action_response contradicts itself (blind, responding count and "
+                                 f"largest change must agree): {result!r}")
+
+
 def check_run(envelopes: object, baseline_names: object) -> dict[str, list[dict]]:
     """Every envelope checked, grouped by world in the order given; refuses anything that would mislead."""
     if not isinstance(envelopes, list) or not envelopes:
@@ -129,6 +147,7 @@ def check_run(envelopes: object, baseline_names: object) -> dict[str, list[dict]
         except ValueError as error:
             raise VerdictSchemaError(f"envelope {index}: {error}") from error
         _check_verdict(index, env["verdict"])
+        _check_action(index, env["action_response"])
         this_meta = _check_meta(index, env["meta"])
         if meta is None:
             meta = this_meta
@@ -150,9 +169,12 @@ def check_run(envelopes: object, baseline_names: object) -> dict[str, list[dict]
     return worlds
 
 
-def manifest(envelopes: list[dict]) -> dict:
-    """The run manifest: `meta`'s four fields plus the exact numpy and matplotlib versions (reporting §6)."""
-    return {**envelopes[0]["meta"], "package_versions": {"numpy": version("numpy"), "matplotlib": version("matplotlib")}}
+def manifest(envelopes: list[dict], fingerprint: dict) -> dict:
+    """The run manifest: `meta`'s four fields, the exact numpy and matplotlib versions (reporting §6), and the
+    machine's runtime fingerprint (backlog A29; owner decision 2026-10-26: here, not in each envelope's meta).
+    On another CPU family or library build the fingerprint differs, which is what explains different bytes."""
+    versions = {"numpy": version("numpy"), "matplotlib": version("matplotlib")}
+    return {**envelopes[0]["meta"], "package_versions": versions, "runtime_fingerprint": fingerprint}
 
 
 def _write_bytes(path: Path, data: bytes) -> Path:
@@ -172,7 +194,8 @@ def _shown(stage: Path, paths: ChartPaths) -> page.Shown:
     return page.Shown(paths.png.relative_to(stage).as_posix(), paths.caption.read_text(encoding="utf-8"))
 
 
-def _write_all(stage: Path, worlds: dict[str, list[dict]], baseline_names, envelopes, margin: float) -> tuple[list, list]:
+def _write_all(stage: Path, worlds: dict[str, list[dict]], baseline_names, envelopes, margin: float,
+               fingerprint: dict) -> tuple[list, list]:
     charts_dir, captions_dir = stage / "charts", stage / "captions"
     charts, verdict_files, sections = [], [], []
     written: set[str] = set()  # case-folded, for case-insensitive file systems
@@ -207,22 +230,31 @@ def _write_all(stage: Path, worlds: dict[str, list[dict]], baseline_names, envel
                     raise OutputFolderError(f"Chart 1 {paths.png.name} does not match its verdict entry {stem}")
                 exceptions.append((entry["task"], entry["region"], entry["horizon_step"], _shown(stage, paths)))
             charts += [horizon, calibration, *exception_paths]
+            result = env["action_response"]
+            action = page.action_sentence(result["action_blind"], result["n_probes"], result["n_responding"],
+                                          is_fixture=env["is_fixture"], is_baseline=name in baseline_names)
             models.append(page.ModelSection(name, env["is_fixture"], _shown(stage, horizon), _shown(stage, calibration),
-                                            tuple(exceptions)))
+                                            tuple(exceptions), action))
         sections.append(page.WorldSection(world, _shown(stage, comparison), tuple(models)))
     verdict = envelopes[0]["verdict"]
     html = page.render_page(tuple(verdict["limitations"]), tuple(verdict["not_tested"]), tuple(sections))
     _write_bytes(stage / "results.html", html.encode("utf-8"))
-    _write_bytes(stage / "run-manifest.json", canonical_serialize(manifest(envelopes)))
+    _write_bytes(stage / "run-manifest.json", canonical_serialize(manifest(envelopes, fingerprint)))
     return charts, verdict_files
 
 
-def write_run(envelopes: list[dict], baseline_names: frozenset[str], out_dir: Path, matching_margin: float) -> RunPaths:
+def write_run(
+    envelopes: list[dict], baseline_names: frozenset[str], out_dir: Path, matching_margin: float, fingerprint: dict
+) -> RunPaths:
     """Check every envelope, write the whole `out/` folder into a staging folder, then move it into place.
 
     `matching_margin` is the pre-registered MU-5 margin (`prereg/recipe.md`): Chart 4's caption may call two
-    models "equals" only within it."""
+    models "equals" only within it. `fingerprint` is `harness.fingerprint.runtime_fingerprint()`, recorded in
+    the manifest."""
     worlds = check_run(envelopes, baseline_names)
+    if type(fingerprint) is not dict or not fingerprint:
+        raise VerdictSchemaError("the runtime fingerprint must be a non-empty record of the machine (backlog A29)")
+    _plain_data(fingerprint, "the runtime fingerprint")
     if type(matching_margin) is not float or not 0.0 < matching_margin < 1.0:
         raise VerdictSchemaError(f"the matching margin must be a number strictly between 0 and 1 (MU-5), got {matching_margin!r}")
     if Path(out_dir).name in ("", ".", ".."):  # "." or "sub/.." has no name to stage beside
@@ -237,10 +269,11 @@ def write_run(envelopes: list[dict], baseline_names: frozenset[str], out_dir: Pa
         raise OutputFolderError(f"{stage} is in the way (a previous run stopped part-way); remove it first")
     stage.mkdir()
     try:
-        charts, verdict_files = _write_all(stage, worlds, baseline_names, envelopes, matching_margin)
+        charts, verdict_files = _write_all(stage, worlds, baseline_names, envelopes, matching_margin, fingerprint)
         stage.replace(out_dir)  # one rename: `out/` appears complete or not at all
     except BaseException:
-        _remove_staging(stage)
+        if stage.exists():  # an interrupt just after the rename leaves nothing to clean, and must not be hidden
+            _remove_staging(stage)
         raise
     moved = [Path(out_dir) / p.relative_to(stage) for p in verdict_files]
     charts = [ChartPaths(*(Path(out_dir) / p.relative_to(stage) for p in (c.png, c.svg, c.caption))) for c in charts]

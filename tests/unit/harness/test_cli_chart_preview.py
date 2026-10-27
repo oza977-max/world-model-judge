@@ -29,11 +29,11 @@ READING_RULE = "only the gap above that line is the model's fault"
 
 
 def _outputs(root: Path) -> tuple[Path, Path, Path]:
-    charts = root / "out" / "charts"
+    charts = root / "out-preview" / "charts"
     return (
         charts / "lv-persistence-horizon.png",
         charts / "lv-persistence-horizon.svg",
-        root / "out" / "captions" / "lv-persistence-horizon.txt",
+        root / "out-preview" / "captions" / "lv-persistence-horizon.txt",
     )
 
 
@@ -75,3 +75,21 @@ def test_chart_preview_svg_carries_no_date(tmp_path, monkeypatch):
     assert main(FAST_ARGS) == 0
     _, svg, _ = _outputs(tmp_path)
     assert b"dc:date" not in svg.read_bytes()
+
+
+
+def test_chart_preview_never_writes_into_out_and_refuses_a_finished_run(tmp_path, monkeypatch):
+    # code-review-004: written into `out/`, the preview replaced a finished run's chart or blocked the next run
+    import pytest
+
+    from wmj.harness import preview
+
+    monkeypatch.chdir(tmp_path)
+    assert main(FAST_ARGS) == 0
+    assert not (tmp_path / "out").exists() and (tmp_path / "out-preview" / "charts").is_dir()
+    finished = tmp_path / "finished"
+    finished.mkdir()
+    (finished / "run-manifest.json").write_text("{}")
+    with pytest.raises(preview.PreviewArgumentError, match="finished run"):
+        preview.run_chart_preview(n_starts=4, n_trials=6, horizon=40, out_dir=finished)
+    assert sorted(p.name for p in finished.iterdir()) == ["run-manifest.json"]
