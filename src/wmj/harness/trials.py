@@ -149,6 +149,8 @@ def judge_thresholds(raw: dict, world_name: str, scale: np.ndarray) -> Threshold
         bands = raw["bands"]
         hedge = np.asarray(raw["sharpness_hedge_threshold"][world_name], dtype=float)
         agreement = raw["agreement_threshold"][world_name]
+        if hedge.shape != np.shape(scale):  # one entry per quantity: a shorter list must not be stretched to fit
+            raise ValueError(f"hedge threshold has {hedge.shape} entries, the world has {np.shape(scale)} quantities")
         return Thresholds(
             Bands(n=bands["n"], p=bands["p"], green=tuple(bands["green"]), amber_outer=tuple(bands["amber_outer"])),
             hedge / np.asarray(scale, dtype=float),
@@ -233,6 +235,15 @@ def _checked(name: str, mean: Any, spread: Any, shape: tuple[int, int]) -> tuple
     return mean, spread
 
 
+def _one(name: str, forecast: Any, d: int) -> tuple[np.ndarray, np.ndarray]:
+    """One `Prediction` as a checked `(1, d)` guess and error bar."""
+    try:
+        mean, spread = np.asarray(forecast.mean)[None, :], np.asarray(forecast.spread)[None, :]
+    except (AttributeError, IndexError, TypeError, ValueError) as error:
+        raise TrialsError(f"{name}: predict must return a Prediction with a guess and an error bar (models ADR-M1)") from error
+    return _checked(name, mean, spread, (1, d))
+
+
 def roll_out(
     model: Any, warmups: np.ndarray, starts: np.ndarray, kicks: np.ndarray, name: str = "the model"
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -261,12 +272,10 @@ def roll_out(
         return means, spreads
     for i in range(n):
         model.reset()
-        warm = model.predict(warmups[i].copy(), quiet[i])  # the warm-up: shown, not scored
-        _checked(name, np.asarray(warm.mean)[None, :], np.asarray(warm.spread)[None, :], (1, d))
+        _one(name, model.predict(warmups[i].copy(), quiet[i]), d)  # the warm-up: shown, not scored
         state = starts[i].copy()
         for step in range(h):
-            forecast = model.predict(state, kicks[i, step])
-            mean, spread = _checked(name, np.asarray(forecast.mean)[None, :], np.asarray(forecast.spread)[None, :], (1, d))
+            mean, spread = _one(name, model.predict(state, kicks[i, step]), d)
             means[i, step], spreads[i, step] = mean[0], spread[0]
             state = means[i, step].copy()
     return means, spreads
@@ -359,10 +368,16 @@ def run_trials(config: RunConfig, meta: dict, *, models: dict | None = None) -> 
         raise TrialsError(f"the roster lacks the reference baseline(s) {missing}: every model is scored against both (MU-2)")
     if type(meta) is not dict or set(meta) != META_KEYS:
         raise TrialsError(f"meta must be a record of exactly {sorted(META_KEYS)} (judge §5)")
-    thresholds = {name: judge_thresholds(config.thresholds, name, WORLDS[name].scale) for name in sorted(WORLDS)}
-    if any(t.bands.n != config.n_trials for t in thresholds.values()):
+    if type(meta["seed"]) is not int or meta["seed"] != config.run_seed:
         raise TrialsError(
-            f"the pre-registered bands are for n = {thresholds['lv'].bands.n} trials per region, but this run has "
+            f"meta records seed {meta['seed']!r} but the run uses {config.run_seed}: the verdict files would name a "
+            "seed that did not produce them (NF-1)"
+        )
+    thresholds = {name: judge_thresholds(config.thresholds, name, WORLDS[name].scale) for name in sorted(WORLDS)}
+    wrong = {name: t.bands.n for name, t in thresholds.items() if t.bands.n != config.n_trials}
+    if wrong:
+        raise TrialsError(
+            f"the pre-registered bands are for n = {wrong} trials per region, but this run has "
             f"{config.n_trials}: they would grade the wrong number (judge ADR-J4)"
         )
     names = sorted(table)

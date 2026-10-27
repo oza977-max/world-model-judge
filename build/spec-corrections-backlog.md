@@ -1472,4 +1472,14 @@ the region instead, same total size (200 starts × 1,000 steps = 200,000 samples
 
    The next design review must ratify this before the freeze, because it changes what every evaluation trial is.
 
+   **Two facts the review should see (review of P6-C01a, pass 2, measured at seed 11 and N = 200):**
+   - **Some starts leave their box.** The quiet step carries a few starts just out of the box their point was drawn in:
+     - predator–prey training region: 2 of 200;
+     - pendulum training region: 1 of 200;
+     - pendulum `out-large-action`: 4 of 200;
+     - predator–prey `out-high-amplitude`: 24 of 200, all still far outside the training box.
+
+     By the rule above they keep their drawn point's label. A model that checks the box itself, like `fx-brittle`, treats them as away from home. A 150-seed sweep found no state-floor failure from the warm step.
+   - **The preview and skeleton are not warm-started.** Their one-step checks still reset the linear baseline before each single guess, so there its guess equals persistence's. Those are preview figures, not verdicts.
+
 *Where recorded:* `build/prompts/P6-C01a.md`, `build/handovers/P6-C01a.md`, `REMEMBER.md` (Closed decisions).

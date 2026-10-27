@@ -158,6 +158,7 @@ def _lv_trial_inputs(n=5, h=7):
     warmups = np.column_stack([rng.uniform(2, 6, n), rng.uniform(1, 4, n)])
     starts = lv.WORLD.transition_batch(warmups, np.zeros((n, 1)))
     kicks = np.zeros((n, h, 1))
+    kicks[:, 0, 0] = 0.05  # a kick on the first step, so a warm-up wrongly given it is visible
     kicks[:, 2, 0] = 0.05
     return ctx, warmups, starts, kicks
 
@@ -402,12 +403,13 @@ def test_the_shared_trial_arrays_are_read_only(rebuilt):
             assert all(not a.flags.writeable for a in arrays.values())
 
 
+@pytest.mark.parametrize("value", [None, 1, "yes", np.bool_(True)], ids=["none", "int", "text", "numpy-bool"])
 @pytest.mark.parametrize("attribute", ["stateless", "is_baseline", "is_fixture"])
-def test_a_model_without_its_three_flags_is_refused_before_it_is_rolled_out(attribute):
+def test_a_model_without_its_three_flags_is_refused_before_it_is_rolled_out(attribute, value):
     class Unflagged(_standin.StandInModel):
         pass
 
-    setattr(Unflagged, attribute, None)
+    setattr(Unflagged, attribute, value)
     roster = {k: standin_roster()[k] for k in ("linear", "persistence")}
     roster["unflagged"] = lambda ctx, seeds, training: Unflagged(ctx)
     with pytest.raises(trials.TrialsError, match=attribute):
@@ -425,3 +427,141 @@ def test_a_pinned_baseline_that_does_not_declare_itself_one_is_refused():
 def test_meta_without_exactly_its_four_fields_is_refused_before_anything_runs(meta):
     with pytest.raises(trials.TrialsError, match="meta"):
         trials.run_trials(small_config(), meta, models=standin_roster())
+
+
+def test_a_meta_seed_that_is_not_the_run_seed_is_refused():
+    roster = {k: standin_roster()[k] for k in ("linear", "persistence")}
+    with pytest.raises(trials.TrialsError, match="seed"):
+        trials.run_trials(small_config(), {**META, "seed": META["seed"] + 1}, models=roster)
+
+
+@pytest.mark.parametrize("stateless", [True, False])
+def test_a_warm_up_answer_that_is_not_a_usable_forecast_is_refused(stateless):
+    ctx, warmups, starts, kicks = _lv_trial_inputs()
+
+    class BadWarmUp(_standin.StandInModel):
+        calls = 0
+
+        def predict_batch(self, states, actions):
+            BadWarmUp.calls += 1
+            mean, spread = super().predict_batch(states, actions)
+            return (mean * np.nan, spread) if BadWarmUp.calls == 1 else (mean, spread)
+
+    model = BadWarmUp(ctx)
+    model.stateless = stateless
+    with pytest.raises(trials.TrialsError):
+        trials.roll_out(model, warmups, starts, kicks)
+
+
+def test_a_predict_that_returns_no_forecast_is_refused_with_a_clear_error():
+    ctx, warmups, starts, kicks = _lv_trial_inputs()
+
+    class NoForecast(_standin.StandInModel):
+        stateless = False
+
+        def predict(self, state, action):
+            return (state, state)
+
+    with pytest.raises(trials.TrialsError, match="Prediction"):
+        trials.roll_out(NoForecast(ctx), warmups, starts, kicks)
+
+
+def test_the_hedge_threshold_must_have_one_entry_per_quantity():
+    raw = _standin.small_thresholds()
+    raw["sharpness_hedge_threshold"]["pendulum"] = [3.0]
+    with pytest.raises(trials.TrialsError, match="pendulum"):
+        trials.judge_thresholds(raw, "pendulum", trials.WORLDS["pendulum"].scale)
+
+
+def test_both_the_drawn_points_and_the_starts_are_the_arrays_checked_against_training(monkeypatch):
+    checked = []
+    real = trials.assert_eval_starts_disjoint
+    monkeypatch.setattr(trials, "assert_eval_starts_disjoint", lambda tr, st: checked.append(np.array(st)) or real(tr, st))
+    shared = trials.build_world_trials("lv", trials.WORLDS["lv"], small_config())
+    expected = [a for r in shared.region_names for a in (shared.warmups[r], shared.starts[r])]
+    assert len(checked) == len(expected) and all(np.array_equal(a, b) for a, b in zip(checked, expected))
+
+
+# ---- the long-horizon checks: labels, climatology, curves, tasks, against independent sources ----------------
+
+
+@pytest.fixture(scope="module")
+def long_trials():
+    config = small_config(horizon=300)
+    return config, {w: trials.build_world_trials(w, trials.WORLDS[w], config) for w in WORLDS}
+
+
+@pytest.mark.parametrize("world", WORLDS)
+def test_every_label_is_judged_at_the_drawn_point_with_that_trials_own_kicks(long_trials, world):
+    from wmj.harness.regions import label_trial
+
+    _config, built = long_trials
+    shared, spec = built[world], trials.WORLDS[world].regions()
+    for region in shared.region_names:
+        expected = tuple(
+            trials.RegionLabel(**label_trial(spec, region, shared.warmups[region][i], shared.kicks[region][i]))
+            for i in range(N_SMALL)
+        )
+        assert shared.labels[region] == expected
+    assert any(label.axis == "action" for label in shared.labels["out-large-action"])  # the action axis does fire
+
+
+def test_a_start_that_one_quiet_step_carries_out_of_the_box_is_still_labelled_by_its_drawn_point(monkeypatch):
+    world = trials.WORLDS["lv"]
+    box = world.regions().training_state_box
+    corners = np.array([[x, y] for x in box[0] for y in box[1]])
+    stepped = world.transition_batch(corners, np.zeros((4, 1)))
+    outside = ~np.all((stepped >= box[:, 0]) & (stepped <= box[:, 1]), axis=1)
+    assert outside.any()  # some corner of the training box is left by one step of the true world
+    edge = corners[np.argmax(outside)]
+    real = trials.sample_region_starts
+    monkeypatch.setattr(trials, "sample_region_starts", lambda rng, b, n: np.vstack([edge, real(rng, b, n)[1:]]))
+    shared = trials.build_world_trials("lv", world, small_config())
+    assert not np.all((shared.starts["training"][0] >= box[:, 0]) & (shared.starts["training"][0] <= box[:, 1]))
+    assert shared.labels["training"][0].axis is None  # in-region: judged at the drawn point (A43 item 6)
+
+
+@pytest.mark.parametrize("world", WORLDS)
+def test_each_regions_climatology_table_and_bins_come_from_that_region_in_raw_units(long_trials, world):
+    from wmj.harness.climatology import build_climatology_table
+    from wmj.models.base import SeedSource
+
+    config, built = long_trials
+    shared, w = built[world], trials.WORLDS[world]
+    moved = 0
+    for region in shared.region_names:
+        table = shared.tables[region]
+        assert table["reference_region"] == region
+        again = build_climatology_table(
+            world, w, SeedSource(META["seed"], None), n_starts=config.climatology_starts,
+            steps_per_start=config.climatology_steps, n_bins=config.climatology_bins,
+            min_samples=config.climatology_min_samples, region_name=region,
+        )
+        assert again == table
+        inner = np.array([b["invariant_range"][1] for b in table["bins"][:-1]])
+        raw = shared.truth[region]
+        values = np.array([[w.conserved(raw[i, t]) for t in range(raw.shape[1])] for i in range(raw.shape[0])])
+        expected = np.searchsorted(inner, values, side="right")
+        assert np.array_equal(shared.bins[region], expected)  # measured from the raw true state, every step
+        moved += int(np.sum(expected[:, 1:] != expected[:, :-1]))
+    assert moved > 0  # some trial changes bin along the way, so "every step" is actually exercised
+    assert len({str(shared.tables[r]["bins"]) for r in shared.region_names}) == len(shared.region_names)
+
+
+@pytest.mark.parametrize("world", WORLDS)
+def test_the_rest_of_the_judge_input_is_the_worlds_own_declaration(recorded, world):
+    from wmj.harness.benchmarks import build_divergence_artefact
+    from wmj.models.base import SeedSource
+
+    _result, inputs, _seen = recorded
+    w = trials.WORLDS[world]
+    raw = _standin.small_thresholds()
+    artefact = build_divergence_artefact(world, w, SeedSource(META["seed"], None), n_starts=4, horizon=H_SMALL)
+    for inp in (i for i in inputs if i.world == world):
+        assert inp.dt == w.dt
+        assert inp.thresholds.agreement_threshold == raw["agreement_threshold"][world]
+        assert inp.tasks == tuple(
+            trials.TaskSpec(t.name, t.kind, t.tolerance, min(t.horizon, H_SMALL)) for t in w.tasks()
+        )
+        for curve in inp.divergence_curves:
+            assert np.array_equal(curve.curve, np.array(artefact["regions"][curve.region_name]["median_separation"]))
