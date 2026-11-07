@@ -1442,7 +1442,7 @@ the region instead, same total size (200 starts × 1,000 steps = 200,000 samples
 
 ### A43 — P6-C01a: what the orchestration loop had to decide that the specs leave unsaid (2026-10-27)
 
-**In plain words:** building the loop that runs every model on every world needed six decisions the specs do not state outright. None edits a reviewed spec; item 6 was the owner's choice. Each is written down here for the next design review to confirm or correct.
+**In plain words:** building the loop that runs every model on every world needed seven decisions the specs do not state outright. None edits a reviewed spec; item 6 was the owner's choice. Each is written down here for the next design review to confirm or correct.
 
 1. **A rollout feeds the model its own guesses (amends cross-cutting ADR-004's `roll_out`, which says "one `predict_batch(states, actions)`" without saying which states).** Step 1 is predicted from the true start. Every later step is predicted from the model's previous guess (`mean`), with the trial's true kick for that step. The error bar recorded at step h is the one the model states for step h, from the state it was given. This is the only reading the one-step interface allows. It matches:
    - the requirements ("feeds its own guesses back into itself … small errors pile up");
@@ -1483,4 +1483,24 @@ the region instead, same total size (200 starts × 1,000 steps = 200,000 samples
      By the rule above they keep their drawn point's label. A model that checks the box itself, like `fx-brittle`, treats them as away from home. A 150-seed sweep found no state-floor failure from the warm step.
    - **The preview and skeleton are not warm-started.** Their one-step checks still reset the linear baseline before each single guess, so there its guess equals persistence's. Those are preview figures, not verdicts.
 
-*Where recorded:* `build/prompts/P6-C01a.md`, `build/handovers/P6-C01a.md`, `REMEMBER.md` (Closed decisions).
+7. **A one-step error bar is graded many steps out (open owner decision D22; the owner chose on 2026-11-07 to leave it to the next design review, before the freeze).** Item 1's rule feeds each model its own guesses. But a model states its error bar for one step only, so over a long rollout its real error grows while the stated bar does not.
+
+   Measured on the pendulum: `fx-honest-rough` round a perfect core, 36 trials, training region, share of quantities inside the stated 90% range:
+
+   | Step | Inside the stated 90% range |
+   |---|---|
+   | 1 | 93% |
+   | 10 | 49% |
+   | 100 (the control task's graded step) | 10% |
+   | 200 | 5% |
+
+   Consequences:
+   - TC-MU3-02 ("rougher but honest → calibration passes") cannot pass as written.
+   - Unless their errors stay tiny, `direct` and `ensemble` will both look badly overconfident at the task horizon, which would blunt the calibration headline. This is related to D20 (which step calibration is measured at).
+
+   Options for the review:
+   - **(a) Trajectory sampling (the leading candidate).** Roll each trial out as a small cloud of guesses sampled from each step's stated distribution, and take the cloud's spread as the error bar at step h (Chua et al. 2018). The one-step interface is unchanged; the run costs several times more.
+   - **(b) Re-anchor the honest fixture** to the graded step.
+   - **(c) Amend TC-MU3-02 and disclose** that the check asks whether a one-step error bar stays valid over the whole horizon.
+
+*Where recorded:* `build/prompts/P6-C01a.md`, `build/handovers/P6-C01a.md`, `REMEMBER.md` (Closed decisions; §2 D22).
