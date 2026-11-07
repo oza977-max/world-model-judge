@@ -281,10 +281,31 @@ def test_tc_mu6_05_b_a_new_baseline_is_judged_but_never_becomes_a_comparator():
             assert {k for k in entry if k.startswith("vs_")} == {"vs_persistence", "vs_linear"}
 
 
-def test_two_runs_of_the_loop_are_identical(recorded):
+def test_two_runs_of_the_loop_are_identical_whatever_order_the_roster_is_given_in(recorded):
     result, _inputs, _starts = recorded
-    again = trials.run_trials(small_config(), dict(META), models=standin_roster())
+    reversed_roster = dict(reversed(list(standin_roster().items())))
+    again = trials.run_trials(small_config(), dict(META), models=reversed_roster)
     assert again.envelopes == result.envelopes
+
+
+def test_every_envelope_carries_the_verdict_on_its_own_models_input(recorded):
+    result, inputs, _starts = recorded
+    assert len(inputs) == len(result.envelopes)  # one judge call per envelope, in envelope order
+    for env, inp in zip(result.envelopes, inputs):
+        assert env["verdict"] == trials.judge_one(inp)
+    by_name = {(e["verdict"]["world"], e["model_name"]): e["verdict"] for e in result.envelopes}
+    assert by_name[("lv", "persistence")] != by_name[("lv", "standin")]  # different forecasts, different verdicts
+
+
+def test_each_envelope_has_its_own_copy_of_meta(recorded):
+    result, _inputs, _starts = recorded
+    assert len({id(e["meta"]) for e in result.envelopes}) == len(result.envelopes)
+
+
+@pytest.mark.parametrize("key, value", [("prereg_commit", ""), ("platform", None), ("thresholds_file", 3), ("platform", "  ")])
+def test_meta_text_that_the_writer_would_refuse_is_refused_before_the_run(key, value):
+    with pytest.raises(trials.TrialsError, match=key):
+        trials.run_trials(small_config(), {**META, key: value}, models=standin_roster())
 
 
 # ---- the units rule (A30) and the shared arrays, checked against an independent rebuild ----------------------
@@ -413,11 +434,15 @@ def test_a_model_without_its_three_flags_is_refused_before_it_is_rolled_out(attr
     class Unflagged(_standin.StandInModel):
         pass
 
+    calls = []
+    Unflagged.predict_batch = lambda self, states, actions: calls.append(1) or _standin.StandInModel.predict_batch(self, states, actions)
+    Unflagged.predict = lambda self, state, action: calls.append(1) or _standin.StandInModel.predict(self, state, action)
     setattr(Unflagged, attribute, value)
     roster = {k: standin_roster()[k] for k in ("linear", "persistence")}
     roster["unflagged"] = lambda ctx, seeds, training: Unflagged(ctx)
     with pytest.raises(trials.TrialsError, match=attribute):
         trials.run_trials(small_config(), dict(META), models=roster)
+    assert calls == []  # refused before a single forecast was asked of it
 
 
 def test_a_pinned_baseline_that_does_not_declare_itself_one_is_refused():
@@ -651,6 +676,8 @@ def test_a_model_that_writes_into_the_state_it_is_given_cannot_change_its_record
     clean.stateless = stateless
     model = Scribbler(ctx)
     model.stateless = stateless
+    for shared in (warmups, starts, kicks):
+        shared.setflags(write=False)  # as in a real run: the shared arrays are read-only
     expected = trials.roll_out(clean, warmups, starts, kicks)
     got = trials.roll_out(model, warmups, starts, kicks)
     assert all(np.array_equal(a, b) for a, b in zip(got, expected))
@@ -665,3 +692,16 @@ def test_a_predict_batch_that_returns_no_forecast_is_refused_with_a_clear_error(
 
     with pytest.raises(trials.TrialsError, match="predict_batch"):
         trials.roll_out(Nothing(ctx), warmups, starts, kicks)
+
+
+def test_regions_come_in_the_worlds_declared_order_training_first(rebuilt):
+    for world, shared in rebuilt.items():
+        declared = ("training", *(r.region_name for r in trials.WORLDS[world].regions().out_regions))
+        assert shared.region_names == declared
+
+
+def test_the_climatology_minimum_per_bin_is_the_configured_one():
+    from wmj.harness.climatology import ClimatologyError
+
+    with pytest.raises(ClimatologyError, match="fewer than the required 1000"):
+        trials.build_world_trials("lv", trials.WORLDS["lv"], small_config(climatology_min_samples=1000))

@@ -381,6 +381,9 @@ def run_trials(config: RunConfig, meta: dict, *, models: dict | None = None) -> 
             f"meta records seed {meta['seed']!r} but the run uses {config.run_seed}: the verdict files would name a "
             "seed that did not produce them (NF-1)"
         )
+    for key in sorted(META_KEYS - {"seed"}):  # the writer refuses these too, but only after the whole run
+        if type(meta[key]) is not str or not meta[key].strip():
+            raise TrialsError(f"meta {key} must be non-empty text, got {meta[key]!r} (judge §5)")
     thresholds = {name: judge_thresholds(config.thresholds, name, WORLDS[name].scale) for name in sorted(WORLDS)}
     wrong = {name: t.bands.n for name, t in thresholds.items() if t.bands.n != config.n_trials}
     if wrong:
