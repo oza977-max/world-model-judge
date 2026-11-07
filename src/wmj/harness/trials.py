@@ -212,13 +212,13 @@ def build_world_trials(world_name: str, world: Any, config: RunConfig) -> WorldT
         labels[region] = tuple(  # the state axis is judged at the drawn point: the point the region's box was drawn for
             RegionLabel(**label_trial(spec, region, warmups[region][i], kicks[region][i])) for i in range(config.n_trials)
         )
-        curves[region] = np.asarray(divergence["regions"][region]["median_separation"], dtype=float)
+        curves[region] = np.array(divergence["regions"][region]["median_separation"], dtype=float)
         tables[region] = build_climatology_table(
             world_name, world, seeds, n_starts=config.climatology_starts, steps_per_start=config.climatology_steps,
             n_bins=config.climatology_bins, min_samples=config.climatology_min_samples, region_name=region,
         )
         bins[region] = measure_invariant_bins(world, truth[region], tables[region])
-        for shared in (warmups[region], starts[region], kicks[region], truth[region], bins[region]):
+        for shared in (warmups[region], starts[region], kicks[region], truth[region], bins[region], curves[region]):
             # every model faces these same arrays: a model that wrote into its input (a kick, a state) would
             # silently change every later model's trials, so writing into them fails instead (review of P6-C01a)
             shared.setflags(write=False)
@@ -355,11 +355,11 @@ def _flags(name: str, model: Any) -> dict[str, bool]:
     return flags
 
 
-def _run_model(factory: Any, name: str, shared: WorldTrials, run_seed: int) -> tuple[Any, dict]:
-    """A fresh instance of one model for this world, and its rollout from every region's shared starts."""
+def _run_model(factory: Any, name: str, shared: WorldTrials, run_seed: int) -> tuple[Any, dict, dict]:
+    """A fresh instance of one model for this world, its flags, and its rollout from every region's shared starts."""
     model = factory(shared.ctx, SeedSource(run_seed, name), shared.training)
-    _flags(name, model)  # checked before the long rollout, not after it
-    return model, {
+    flags = _flags(name, model)  # checked before the long rollout, not after it
+    return model, flags, {
         r: roll_out(model, shared.warmups[r], shared.starts[r], shared.kicks[r], name) for r in shared.region_names
     }
 
@@ -398,10 +398,9 @@ def run_trials(config: RunConfig, meta: dict, *, models: dict | None = None) -> 
         shared = build_world_trials(world_name, world, config)
         # the pre-pass: every input needs both baselines' forecasts, so they run first (ADR-004)
         runs = {name: _run_model(table[name], name, shared, config.run_seed) for name in BASELINES}
-        baselines = {name: runs[name][1] for name in BASELINES}
+        baselines = {name: runs[name][2] for name in BASELINES}
         for ref, name in enumerate(names):
-            model, forecast = runs[name] if name in runs else _run_model(table[name], name, shared, config.run_seed)
-            flags = _flags(name, model)
+            model, flags, forecast = runs[name] if name in runs else _run_model(table[name], name, shared, config.run_seed)
             if flags["is_baseline"]:
                 baseline_names.add(name)
             action = asdict(check_action_response(model, shared.ctx, config.run_seed, n_states=config.probe_states))

@@ -424,7 +424,7 @@ def test_a_model_that_writes_into_its_inputs_fails_instead_of_changing_later_mod
 
 def test_the_shared_trial_arrays_are_read_only(rebuilt):
     for shared in rebuilt.values():
-        for arrays in (shared.warmups, shared.starts, shared.kicks, shared.truth, shared.bins):
+        for arrays in (shared.warmups, shared.starts, shared.kicks, shared.truth, shared.bins, shared.curves):
             assert all(not a.flags.writeable for a in arrays.values())
 
 
@@ -705,3 +705,13 @@ def test_the_climatology_minimum_per_bin_is_the_configured_one():
 
     with pytest.raises(ClimatologyError, match="fewer than the required 1000"):
         trials.build_world_trials("lv", trials.WORLDS["lv"], small_config(climatology_min_samples=1000))
+
+
+@pytest.mark.parametrize("stateless", [True, False])
+def test_a_model_is_reset_before_its_rollout_on_both_paths(stateless):
+    ctx, warmups, starts, kicks = _lv_trial_inputs()
+    model = _Recorder(ctx, stateless=stateless)
+    resets = []
+    model.reset = lambda: resets.append(len(model.seen))
+    trials.roll_out(model, warmups, starts, kicks)
+    assert resets[0] == 0  # before the warm-up, so nothing remembered from a previous region or world leaks in
